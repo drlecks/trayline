@@ -31,7 +31,7 @@ export interface AuditRow {
 
 let db: Database.Database
 
-function init() {
+function init(): void {
   db = new Database(join(Paths.appData, 'audit.db'))
   db.pragma('journal_mode = WAL')
   db.exec(`

@@ -32,7 +32,7 @@ function createWindow() {
 
 app.whenReady().then(async () => {
   await fsService.bootstrap()
-  await auditDb.init()
+  auditDb.init()
   registerIpcHandlers(ipcMain)
 
   const win = createWindow()
