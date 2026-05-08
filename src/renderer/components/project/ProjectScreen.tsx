@@ -1,34 +1,33 @@
 import { useEffect, useState } from 'react'
-import { Inbox, Cpu, AlertTriangle, RefreshCw, AlertCircle } from 'lucide-react'
+import { Inbox, Cpu, AlertTriangle, RefreshCw, AlertCircle, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useProjectStore } from '@/stores/project-store'
-import type { StepMeta, WorkflowMeta } from '../../../shared/types'
+import AddTrayDialog from './AddTrayDialog'
+import TrayDetailPanel from './TrayDetailPanel'
+import type { StepMeta } from '../../../shared/types'
+import type { CardCounts } from '../../../shared/card'
 
 export default function ProjectScreen() {
   const active = useProjectStore((s) => s.active)
+  const workflow = useProjectStore((s) => s.workflow)
+  const steps = useProjectStore((s) => s.steps)
+  const selectedStepId = useProjectStore((s) => s.selectedStepId)
+  const setSelectedStepId = useProjectStore((s) => s.setSelectedStepId)
   const unconfiguredMcps = useProjectStore((s) => s.unconfiguredMcps)
   const setScreen = useProjectStore((s) => s.setScreen)
   const setRegenerateOf = useProjectStore((s) => s.setRegenerateOf)
+  const refreshSteps = useProjectStore((s) => s.refreshSteps)
 
-  const [workflows, setWorkflows] = useState<WorkflowMeta[]>([])
-  const [steps, setSteps] = useState<StepMeta[]>([])
+  const [addOpen, setAddOpen] = useState(false)
 
+  // Refresh steps whenever the active project changes
   useEffect(() => {
-    if (!active) return
-    let cancelled = false
-    ;(async () => {
-      const wf = await window.trayline.project.listWorkflows(active.name)
-      if (cancelled) return
-      setWorkflows(wf)
-      if (wf[0]) {
-        const s = await window.trayline.project.listSteps(active.name, wf[0].name)
-        if (!cancelled) setSteps(s)
-      }
-    })()
-    return () => { cancelled = true }
-  }, [active])
+    void refreshSteps()
+  }, [active, refreshSteps])
 
   if (!active) return null
+
+  const selectedStep = steps.find((s) => s.id === selectedStepId) ?? null
 
   return (
     <div className="flex flex-col w-full h-full">
@@ -49,21 +48,36 @@ export default function ProjectScreen() {
 
       <div className="flex flex-1 min-h-0">
         {/* Left rail */}
-        <aside className="w-64 shrink-0 border-r border-black/[0.06] dark:border-white/[0.06] overflow-y-auto py-4 px-3">
+        <aside className="w-64 shrink-0 border-r border-black/[0.06] dark:border-white/[0.06] overflow-y-auto py-4 px-3 flex flex-col">
           <div className="px-2 mb-4">
             <div className="text-xs font-semibold tracking-tight">{active.display_name}</div>
             <div className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5">
-              {workflows[0]?.display_name ?? 'No workflow'}
+              {workflow?.display_name ?? 'No workflow'}
             </div>
           </div>
 
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-1.5 flex-1">
             {steps.map((step) => (
-              <StepCard key={step.id} step={step} />
+              <StepCard
+                key={step.id}
+                step={step}
+                selected={step.id === selectedStepId}
+                onClick={() => setSelectedStepId(step.id)}
+              />
             ))}
+
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setAddOpen(true)}
+              className="justify-start gap-2 text-xs text-neutral-500 mt-2"
+            >
+              <Plus size={12} strokeWidth={1.75} />
+              Add step
+            </Button>
           </div>
 
-          <div className="mt-6 pt-4 border-t border-black/[0.06] dark:border-white/[0.06] px-2 flex flex-col gap-2">
+          <div className="mt-auto pt-4 border-t border-black/[0.06] dark:border-white/[0.06] px-2 flex flex-col gap-2">
             <Button
               variant="ghost"
               size="sm"
@@ -76,29 +90,62 @@ export default function ProjectScreen() {
           </div>
         </aside>
 
-        {/* Right canvas — placeholder until Phase 3 wires step detail views */}
-        <section className="flex-1 flex items-center justify-center text-sm text-neutral-400 dark:text-neutral-600">
-          Select a step on the left to see details
+        {/* Right canvas */}
+        <section className="flex-1 min-w-0 overflow-hidden">
+          {selectedStep
+            ? <TrayDetailPanel step={selectedStep} />
+            : (
+              <div className="h-full flex items-center justify-center text-sm text-neutral-400 dark:text-neutral-600">
+                Select a step on the left to see details
+              </div>
+            )}
         </section>
       </div>
+
+      <AddTrayDialog open={addOpen} onOpenChange={setAddOpen} />
     </div>
   )
 }
 
-function StepCard({ step }: { step: StepMeta }) {
+function StepCard({ step, selected, onClick }: { step: StepMeta; selected: boolean; onClick: () => void }) {
   const Icon = step.kind === 'tray'
     ? (step.id === '99-errors' ? AlertTriangle : Inbox)
     : Cpu
   const isError = step.id === '99-errors'
 
+  const [counts, setCounts] = useState<CardCounts | null>(null)
+  const active = useProjectStore((s) => s.active)
+  const workflow = useProjectStore((s) => s.workflow)
+
+  // Live count, polled when this card is mounted. Cheap (FS readdir of three
+  // small folders); refresh on a 3 s tick so newly created cards appear soon.
+  useEffect(() => {
+    if (!active || !workflow || step.kind !== 'tray') return
+    let cancelled = false
+    async function tick() {
+      const c = await window.trayline.card.counts(active!.name, workflow!.name, step.id)
+      if (!cancelled) setCounts(c)
+    }
+    void tick()
+    const id = setInterval(tick, 3000)
+    return () => { cancelled = true; clearInterval(id) }
+  }, [active, workflow, step.id, step.kind])
+
+  const total = counts ? counts.pending + counts.ready : 0
+
   return (
-    <div className={`
-      group rounded-md border px-3 py-2.5 cursor-pointer
-      ${isError
-        ? 'border-dashed border-neutral-200 dark:border-neutral-800 opacity-60 hover:opacity-100'
-        : 'border-neutral-200 dark:border-neutral-800 hover:border-neutral-300 dark:hover:border-neutral-700'}
-      bg-white dark:bg-neutral-950 transition-colors
-    `}>
+    <button
+      onClick={onClick}
+      className={`
+        group rounded-md border px-3 py-2.5 text-left
+        ${selected ? 'border-l-[3px] border-l-neutral-900 dark:border-l-neutral-100' : ''}
+        ${isError
+          ? 'border-dashed border-neutral-200 dark:border-neutral-800 opacity-70 hover:opacity-100'
+          : 'border-neutral-200 dark:border-neutral-800 hover:border-neutral-300 dark:hover:border-neutral-700'}
+        ${selected ? 'bg-neutral-50 dark:bg-neutral-900/50' : 'bg-white dark:bg-neutral-950'}
+        transition-colors
+      `}
+    >
       <div className="flex items-start gap-2">
         <div className={`
           shrink-0 w-7 h-7 rounded-md flex items-center justify-center
@@ -111,9 +158,17 @@ function StepCard({ step }: { step: StepMeta }) {
           <div className="text-xs font-medium truncate">{step.name}</div>
           <div className="text-[11px] text-neutral-500 dark:text-neutral-400 truncate">
             {step.kind === 'tray' ? 'Tray' : 'Worker'}
+            {counts && total > 0 && (
+              <span className="ml-1.5">· {total} card{total === 1 ? '' : 's'}</span>
+            )}
           </div>
         </div>
+        {counts && counts.pending > 0 && step.kind === 'tray' && !isError && (
+          <span className="shrink-0 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-400 text-[10px] font-medium">
+            {counts.pending}
+          </span>
+        )}
       </div>
-    </div>
+    </button>
   )
 }
