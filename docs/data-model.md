@@ -10,7 +10,7 @@ Everything is files. SQLite is just a fast index built from those files.
 ~/Documents/Trayline/
 │
 ├── app-data/
-│   ├── settings.json               # User prefs, theme, default CLI command
+│   ├── settings.json               # User prefs (theme, default adapter, last opened project, etc.)
 │   ├── skills-index-cache.json     # Last fetched skill catalog
 │   ├── mcps-index-cache.json       # Last fetched MCP registry
 │   ├── mcps-catalog.json           # Curated MCP list (bundled in app, copied on first launch)
@@ -182,6 +182,30 @@ Cards live in three subfolders: `pending/`, `ready/`, `archived/`.
 ```
 
 **Credentials are never in `mcp.json`.** They live in the OS keychain (keytar). `state/status.json` only stores flags (`configured: true/false`), never the secret itself.
+
+### App settings (`app-data/settings.json`)
+
+User-level preferences shared across projects. Lives at `~/Documents/Trayline/app-data/settings.json` so the whole Trayline directory is self-contained — backing it up is a single folder copy.
+
+```json
+{
+  "theme": "system",
+  "defaultCliCommand": "claude",
+  "defaultAdapterId": "claude-code",
+  "notificationsEnabled": true,
+  "lastOpenedProject": "client-onboarding"
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `theme` | `light` / `dark` / `system`. Persists across launches. |
+| `defaultCliCommand` | The CLI binary the worker engine spawns by default. |
+| `defaultAdapterId` | Which AI Terminal Adapter is active by default. |
+| `notificationsEnabled` | Whether OS notifications fire on completed/failed runs. |
+| `lastOpenedProject` | Folder id of the project the user had open when the app last closed. On launch, the renderer reads this and reopens that project automatically (if it still exists on disk). `null` means the user was on the welcome screen. |
+
+The renderer writes `lastOpenedProject` whenever the active project changes (open / switch / close). When a project is deleted, the field is cleared.
 
 ---
 

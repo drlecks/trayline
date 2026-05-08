@@ -9,6 +9,12 @@ export interface Settings {
   defaultCliCommand: string
   defaultAdapterId: string
   notificationsEnabled: boolean
+  /**
+   * Name (folder id) of the last project the user had open. Restored on next
+   * launch so the app comes back to where the user left it. null when the
+   * user is on the welcome screen.
+   */
+  lastOpenedProject: string | null
 }
 
 // ── Audit log ─────────────────────────────────────────────────────────────────

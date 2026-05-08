@@ -30,7 +30,12 @@ export const useProjectStore = create<ProjectStoreState>((set) => ({
   regenerateOf: null,
 
   setScreen: (s) => set({ screen: s }),
-  setActive: (p) => set({ active: p, screen: p ? 'project' : 'splash' }),
+  setActive: (p) => {
+    set({ active: p, screen: p ? 'project' : 'splash' })
+    // Persist so the next launch reopens the same project. Fire-and-forget
+    // — IPC errors here aren't worth interrupting the user for.
+    void window.trayline.settings.set('lastOpenedProject', p ? p.name : null)
+  },
   setUnconfiguredMcps: (ids) => set({ unconfiguredMcps: ids }),
   setRegenerateOf: (name) => set({ regenerateOf: name }),
 
