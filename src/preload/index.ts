@@ -11,6 +11,8 @@ import type {
   UsageSnapshot,
   ProjectCreateOutcome,
 } from '../shared/types'
+import type { Card, CardStatus, CardCounts } from '../shared/card'
+import type { PlanFieldDef, PlanTrayStep } from '../shared/workflow-plan'
 
 const api = {
   settings: {
@@ -52,6 +54,41 @@ const api = {
       ipcRenderer.invoke(IPC.adapters.list),
     detect: (id: string): Promise<{ installed: boolean; version: string | null }> =>
       ipcRenderer.invoke(IPC.adapters.detect, id),
+  },
+  step: {
+    addTray: (input: {
+      project: string
+      workflow: string
+      name: string
+      description?: string
+      icon?: string
+      approval_mode: 'manual' | 'auto'
+      fields?: PlanFieldDef[]
+      allow_manual_create?: boolean
+    }): Promise<PlanTrayStep & { id: string }> =>
+      ipcRenderer.invoke(IPC.step.addTray, input),
+    update: (input: {
+      project: string
+      workflow: string
+      stepId: string
+      patch: Record<string, unknown>
+    }): Promise<void> => ipcRenderer.invoke(IPC.step.update, input),
+    delete: (input: { project: string; workflow: string; stepId: string }): Promise<void> =>
+      ipcRenderer.invoke(IPC.step.delete, input),
+  },
+  card: {
+    list: (project: string, workflow: string, stepId: string, status: CardStatus): Promise<Card[]> =>
+      ipcRenderer.invoke(IPC.card.list, project, workflow, stepId, status),
+    get: (project: string, workflow: string, stepId: string, cardId: string): Promise<{ card: Card; status: CardStatus } | null> =>
+      ipcRenderer.invoke(IPC.card.get, project, workflow, stepId, cardId),
+    counts: (project: string, workflow: string, stepId: string): Promise<CardCounts> =>
+      ipcRenderer.invoke(IPC.card.counts, project, workflow, stepId),
+    create: (project: string, workflow: string, stepId: string, data: Record<string, unknown>): Promise<Card> =>
+      ipcRenderer.invoke(IPC.card.create, project, workflow, stepId, data),
+    markReady: (project: string, workflow: string, stepId: string, cardId: string): Promise<Card> =>
+      ipcRenderer.invoke(IPC.card.markReady, project, workflow, stepId, cardId),
+    archive: (project: string, workflow: string, stepId: string, cardId: string, fromStatus: CardStatus): Promise<Card> =>
+      ipcRenderer.invoke(IPC.card.archive, project, workflow, stepId, cardId, fromStatus),
   },
   platform: process.platform as NodeJS.Platform,
 }

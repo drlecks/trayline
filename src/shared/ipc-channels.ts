@@ -34,4 +34,17 @@ export const IPC = {
     list: 'adapters:list',
     detect: 'adapters:detect',
   },
+  step: {
+    addTray: 'step:addTray',
+    update: 'step:update',
+    delete: 'step:delete',
+  },
+  card: {
+    list: 'card:list',
+    get: 'card:get',
+    counts: 'card:counts',
+    create: 'card:create',
+    markReady: 'card:markReady',
+    archive: 'card:archive',
+  },
 } as const
