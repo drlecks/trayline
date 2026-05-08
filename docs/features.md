@@ -197,9 +197,10 @@ A thin strip rendered at the bottom of every screen, always visible. The right s
 - Hovering the indicators shows a tooltip with the data source (`claude-code` / `placeholder` / `unavailable`) and the timestamp of the last snapshot
 
 **Data source:**
-- The footer queries `usageService.getSnapshot()` in the main process, which delegates to the active AI Terminal Adapter
-- Pre-Phase 4: returns a stable placeholder snapshot so the UI is verifiable
-- Phase 4 onward: the Claude Code adapter (or whichever adapter is configured) reports real values from the CLI's status endpoint
+- The footer queries `usageService.getSnapshot()` in the main process.
+- **Currently:** returns `{ fiveHourPct: null, weeklyPct: null, source: 'unavailable' }` — Claude Code does not surface window state through any non-interactive entry point, so we render `—` instead of fabricating numbers.
+- **Phase 4 plan:** as the worker engine spawns Claude Code runs, accumulate the per-call token usage from the CLI's JSON envelope (`usage.input_tokens` + `output_tokens`) into rolling 5-hour and 7-day buckets. This gives a lower bound that's accurate for Trayline-spawned work; usage from the user's other Claude Code sessions remains invisible.
+- **Long-term:** if Anthropic ships a CLI flag or subcommand that prints true window state, swap that in.
 
 **Left half:** currently empty, reserved for future use (project breadcrumbs, sync status, version, etc.).
 
