@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trayline — Para los que mueven el mundo sin escribir código</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --cream: #FAF7F2;
+    --ink: #1A1612;
+    --warm-mid: #6B5B4E;
+    --accent: #C4622D;
+    --accent-light: #F0D5C5;
+    --muted: #9B8E84;
+    --line: rgba(26,22,18,0.1);
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--cream);
+    color: var(--ink);
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 300;
+    line-height: 1.7;
+    overflow-x: hidden;
+  }
+
+  /* ── HERO ── */
+  .hero {
+    min-height: 100vh;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    padding: 0 8vw;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .hero::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 60% 50% at 80% 20%, rgba(196,98,45,0.08) 0%, transparent 70%),
+      radial-gradient(ellipse 40% 60% at 10% 80%, rgba(196,98,45,0.05) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 2.5rem 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .logo {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.4rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+  }
+
+  .logo span { color: var(--accent); }
+
+  .nav-tag {
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .hero-body {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 6rem 0 4rem;
+    max-width: 780px;
+  }
+
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 2rem;
+    opacity: 0;
+    animation: fadeUp 0.8s ease forwards 0.2s;
+  }
+
+  .eyebrow::before {
+    content: '';
+    display: inline-block;
+    width: 24px;
+    height: 1px;
+    background: var(--accent);
+  }
+
+  h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(2.8rem, 6vw, 5rem);
+    font-weight: 700;
+    line-height: 1.08;
+    letter-spacing: -0.03em;
+    margin-bottom: 2rem;
+    opacity: 0;
+    animation: fadeUp 0.9s ease forwards 0.35s;
+  }
+
+  h1 em {
+    font-style: italic;
+    color: var(--accent);
+  }
+
+  .hero-lead {
+    font-size: clamp(1rem, 1.4vw, 1.2rem);
+    color: var(--warm-mid);
+    max-width: 560px;
+    line-height: 1.75;
+    opacity: 0;
+    animation: fadeUp 0.9s ease forwards 0.5s;
+  }
+
+  .hero-scroll {
+    padding: 2.5rem 0;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    font-size: 0.8rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    opacity: 0;
+    animation: fadeIn 1s ease forwards 1.2s;
+  }
+
+  .scroll-line {
+    width: 40px;
+    height: 1px;
+    background: var(--muted);
+    animation: scrollPulse 2s ease-in-out infinite 1.5s;
+  }
+
+  /* ── PROBLEM SECTION ── */
+  .section {
+    padding: 8rem 8vw;
+    border-top: 1px solid var(--line);
+  }
+
+  .section-label {
+    font-size: 0.72rem;
+    font-weight: 500;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 3rem;
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+  }
+
+  .section-label::after {
+    content: '';
+    flex: 1;
+    max-width: 80px;
+    height: 1px;
+    background: var(--line);
+  }
+
+  .problem-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+  }
+
+  .problem-item {
+    padding: 3rem;
+    border: 1px solid var(--line);
+    margin: -1px 0 0 -1px;
+    transition: background 0.3s ease;
+    cursor: default;
+  }
+
+  .problem-item:hover {
+    background: rgba(196,98,45,0.04);
+  }
+
+  .problem-emoji {
+    font-size: 2rem;
+    margin-bottom: 1.2rem;
+    display: block;
+  }
+
+  .problem-item h3 {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin-bottom: 0.8rem;
+    line-height: 1.3;
+  }
+
+  .problem-item p {
+    font-size: 0.92rem;
+    color: var(--warm-mid);
+    line-height: 1.7;
+  }
+
+  /* ── THE IDEA ── */
+  .idea-section {
+    padding: 8rem 8vw;
+    border-top: 1px solid var(--line);
+    background: var(--ink);
+    color: var(--cream);
+  }
+
+  .idea-section .section-label {
+    color: rgba(250,247,242,0.4);
+  }
+
+  .idea-section .section-label::after {
+    background: rgba(250,247,242,0.15);
+  }
+
+  .idea-headline {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(2rem, 4vw, 3.5rem);
+    font-weight: 700;
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    max-width: 700px;
+    margin-bottom: 4rem;
+  }
+
+  .idea-headline em {
+    font-style: italic;
+    color: var(--accent);
+  }
+
+  .flow-visual {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    margin: 4rem 0;
+    overflow-x: auto;
+    padding-bottom: 1rem;
+  }
+
+  .flow-step {
+    flex: 1;
+    min-width: 180px;
+    padding: 2rem 1.5rem;
+    position: relative;
+  }
+
+  .flow-step.tray {
+    background: rgba(196,98,45,0.15);
+    border: 1px solid rgba(196,98,45,0.3);
+  }
+
+  .flow-step.worker {
+    background: rgba(250,247,242,0.06);
+    border: 1px solid rgba(250,247,242,0.12);
+  }
+
+  .flow-step-type {
+    font-size: 0.65rem;
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    margin-bottom: 0.8rem;
+  }
+
+  .flow-step.tray .flow-step-type { color: var(--accent); }
+  .flow-step.worker .flow-step-type { color: rgba(250,247,242,0.5); }
+
+  .flow-step-name {
+    font-family: 'Playfair Display', serif;
+    font-size: 1rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    color: var(--cream);
+  }
+
+  .flow-step-desc {
+    font-size: 0.8rem;
+    color: rgba(250,247,242,0.55);
+    line-height: 1.55;
+  }
+
+  .flow-arrow {
+    display: flex;
+    align-items: center;
+    padding: 0 0.3rem;
+    color: rgba(250,247,242,0.2);
+    font-size: 1.2rem;
+    flex-shrink: 0;
+  }
+
+  .idea-body {
+    max-width: 640px;
+    font-size: 1.05rem;
+    color: rgba(250,247,242,0.75);
+    line-height: 1.8;
+  }
+
+  /* ── HOW ── */
+  .how-section {
+    padding: 8rem 8vw;
+    border-top: 1px solid var(--line);
+  }
+
+  .how-steps {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0;
+    margin-top: 3rem;
+    counter-reset: step;
+  }
+
+  .how-step {
+    display: grid;
+    grid-template-columns: 5rem 1fr;
+    gap: 2rem;
+    padding: 3rem 0;
+    border-bottom: 1px solid var(--line);
+    counter-increment: step;
+    align-items: start;
+  }
+
+  .step-num {
+    font-family: 'Playfair Display', serif;
+    font-size: 3.5rem;
+    font-weight: 700;
+    color: var(--accent-light);
+    line-height: 1;
+    padding-top: 0.2rem;
+  }
+
+  .how-step h3 {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.4rem;
+    font-weight: 700;
+    margin-bottom: 0.7rem;
+    line-height: 1.25;
+  }
+
+  .how-step p {
+    font-size: 0.95rem;
+    color: var(--warm-mid);
+    line-height: 1.75;
+  }
+
+  /* ── WHO ── */
+  .who-section {
+    padding: 8rem 8vw;
+    border-top: 1px solid var(--line);
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6rem;
+    align-items: center;
+  }
+
+  .who-headline {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(2rem, 3.5vw, 3rem);
+    font-weight: 700;
+    line-height: 1.18;
+    letter-spacing: -0.02em;
+    margin-bottom: 1.5rem;
+  }
+
+  .who-headline em {
+    font-style: italic;
+    color: var(--accent);
+  }
+
+  .who-body {
+    font-size: 0.95rem;
+    color: var(--warm-mid);
+    line-height: 1.8;
+  }
+
+  .profile-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .profile-card {
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 1.4rem 1.6rem;
+    display: flex;
+    align-items: center;
+    gap: 1.2rem;
+    box-shadow: 0 2px 12px rgba(26,22,18,0.04);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .profile-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 24px rgba(26,22,18,0.08);
+  }
+
+  .profile-icon {
+    font-size: 1.8rem;
+    flex-shrink: 0;
+  }
+
+  .profile-role {
+    font-weight: 500;
+    font-size: 0.95rem;
+    margin-bottom: 0.2rem;
+  }
+
+  .profile-desc {
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  /* ── CLOSING ── */
+  .close-section {
+    padding: 10rem 8vw;
+    border-top: 1px solid var(--line);
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .close-section::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse 60% 60% at 50% 50%, rgba(196,98,45,0.07) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .close-headline {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(2.2rem, 5vw, 4rem);
+    font-weight: 700;
+    line-height: 1.12;
+    letter-spacing: -0.02em;
+    max-width: 600px;
+    margin: 0 auto 2rem;
+  }
+
+  .close-headline em {
+    font-style: italic;
+    color: var(--accent);
+  }
+
+  .close-body {
+    font-size: 1.05rem;
+    color: var(--warm-mid);
+    max-width: 480px;
+    margin: 0 auto;
+    line-height: 1.75;
+  }
+
+  .tagline {
+    margin-top: 5rem;
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(1.1rem, 2vw, 1.5rem);
+    font-style: italic;
+    color: var(--muted);
+    letter-spacing: -0.01em;
+  }
+
+  /* ── FOOTER ── */
+  footer {
+    padding: 2rem 8vw;
+    border-top: 1px solid var(--line);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.78rem;
+    color: var(--muted);
+  }
+
+  /* ── ANIMATIONS ── */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(24px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+
+  @keyframes scrollPulse {
+    0%, 100% { transform: scaleX(1); opacity: 1; }
+    50%       { transform: scaleX(1.4); opacity: 0.5; }
+  }
+
+  /* ── SCROLL REVEAL ── */
+  .reveal {
+    opacity: 0;
+    transform: translateY(30px);
+    transition: opacity 0.8s ease, transform 0.8s ease;
+  }
+
+  .reveal.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .reveal-delay-1 { transition-delay: 0.1s; }
+  .reveal-delay-2 { transition-delay: 0.22s; }
+  .reveal-delay-3 { transition-delay: 0.34s; }
+  .reveal-delay-4 { transition-delay: 0.46s; }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 768px) {
+    .problem-grid { grid-template-columns: 1fr; }
+    .who-section { grid-template-columns: 1fr; gap: 3rem; }
+    .flow-visual { flex-direction: column; }
+    .flow-arrow { transform: rotate(90deg); padding: 0.3rem 0; }
+    .how-step { grid-template-columns: 3.5rem 1fr; gap: 1rem; }
+    .step-num { font-size: 2.5rem; }
+  }
+</style>
+</head>
+<body>
+
+<!-- HERO -->
+<section class="hero">
+  <nav>
+    <div class="logo">Tray<span>line</span></div>
+    <div class="nav-tag">Una idea nueva para trabajar</div>
+  </nav>
+
+  <div class="hero-body">
+    <div class="eyebrow">Para quien trabaja, no para quien programa</div>
+    <h1>Tu trabajo en orden.<br><em>Automáticamente.</em></h1>
+    <p class="hero-lead">
+      Trayline es una aplicación de escritorio que te permite construir flujos de trabajo automatizados con inteligencia artificial — sin saber programar, sin depender de un equipo técnico, sin pagar servicios en la nube.
+    </p>
+  </div>
+
+  <div class="hero-scroll">
+    <div class="scroll-line"></div>
+    Sigue leyendo
+  </div>
+</section>
+
+<!-- PROBLEM -->
+<section class="section">
+  <div class="section-label">El problema</div>
+
+  <div class="problem-grid">
+    <div class="problem-item reveal">
+      <span class="problem-emoji">📋</span>
+      <h3>Procesos repetitivos que nadie debería hacer a mano</h3>
+      <p>Revisar correos, extraer datos de documentos, clasificar solicitudes, redactar respuestas estándar. Horas de trabajo que podrían ocurrir solos.</p>
+    </div>
+    <div class="problem-item reveal reveal-delay-1">
+      <span class="problem-emoji">🧩</span>
+      <h3>Las herramientas de automatización son para ingenieros</h3>
+      <p>Zapier, Make, n8n — si no sabes qué es un webhook o una API, estás fuera. El acceso a la automatización requiere pasar por un técnico.</p>
+    </div>
+    <div class="problem-item reveal reveal-delay-2">
+      <span class="problem-emoji">☁️</span>
+      <h3>Todo vive en la nube de otra empresa</h3>
+      <p>Tus datos de negocio, tus procesos, tu historial — en servidores que no controlas, con precios que cambian, con condiciones que aceptaste sin leer.</p>
+    </div>
+    <div class="problem-item reveal reveal-delay-3">
+      <span class="problem-emoji">🤷</span>
+      <h3>La IA existe, pero no sabes cómo usarla en tu trabajo real</h3>
+      <p>ChatGPT es útil para preguntas sueltas. Pero nadie te ha dado una forma de integrarlo en los procesos de tu empresa, paso a paso, de forma confiable.</p>
+    </div>
+  </div>
+</section>
+
+<!-- THE IDEA -->
+<section class="idea-section">
+  <div class="section-label">La solución</div>
+
+  <h2 class="idea-headline reveal">
+    Imagina una línea de montaje.<br>
+    Pero para <em>información</em>,<br>no para piezas de coche.
+  </h2>
+
+  <div class="flow-visual reveal">
+    <div class="flow-step tray">
+      <div class="flow-step-type">Bandeja</div>
+      <div class="flow-step-name">📥 Solicitud entra</div>
+      <div class="flow-step-desc">Un correo, un formulario, un PDF. Llega y espera.</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step worker">
+      <div class="flow-step-type">IA trabaja</div>
+      <div class="flow-step-name">⚙️ Extrae & clasifica</div>
+      <div class="flow-step-desc">La inteligencia artificial lee el documento y estructura la información.</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step tray">
+      <div class="flow-step-type">Bandeja</div>
+      <div class="flow-step-name">👤 Tú revisas</div>
+      <div class="flow-step-desc">Solo cuando algo necesita tu ojo humano.</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step worker">
+      <div class="flow-step-type">IA trabaja</div>
+      <div class="flow-step-name">📧 Responde & envía</div>
+      <div class="flow-step-desc">La IA redacta y envía la respuesta estándar.</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step tray">
+      <div class="flow-step-type">Bandeja</div>
+      <div class="flow-step-name">✅ Hecho</div>
+      <div class="flow-step-desc">Archivo, historial completo, todo trazable.</div>
+    </div>
+  </div>
+
+  <p class="idea-body reveal">
+    En Trayline, tu proceso de trabajo se construye visualmente como una pila de pasos. Hay <strong style="color: var(--cream)">bandejas</strong> — donde la información espera — y hay <strong style="color: var(--accent)">trabajadores</strong> — donde la IA hace algo con ella. Tú decides cuándo una persona necesita revisar y cuándo el proceso avanza solo. Sin código. Sin servidores. Todo guardado en tu ordenador, en carpetas y archivos que puedes abrir y entender.
+  </p>
+</section>
+
+<!-- HOW IT WORKS -->
+<section class="how-section">
+  <div class="section-label">Cómo funciona</div>
+
+  <div class="how-steps">
+    <div class="how-step reveal">
+      <div class="step-num">01</div>
+      <div>
+        <h3>Describes lo que quieres en palabras normales</h3>
+        <p>Escribes algo como: <em>"Quiero que cuando llegue un correo de un cliente potencial, la IA lo lea, extraiga los datos, me muestre un resumen y me pida aprobación antes de responder."</em> Trayline genera el flujo por ti.</p>
+      </div>
+    </div>
+    <div class="how-step reveal reveal-delay-1">
+      <div class="step-num">02</div>
+      <div>
+        <h3>El flujo aparece montado en pantalla</h3>
+        <p>En segundos ves una pila visual de pasos: bandejas de entrada, trabajadores de IA, puntos de revisión humana. Todo configurado, listo para ajustar si quieres cambiar algo.</p>
+      </div>
+    </div>
+    <div class="how-step reveal reveal-delay-2">
+      <div class="step-num">03</div>
+      <div>
+        <h3>Lo pones a funcionar y te olvidas</h3>
+        <p>El flujo trabaja solo. Cuando algo necesita tu atención — porque tú así lo decidiste — te llega una notificación y puedes revisarlo, aprobarlo o editarlo con un clic. Todo lo demás ocurre automáticamente.</p>
+      </div>
+    </div>
+    <div class="how-step reveal reveal-delay-3">
+      <div class="step-num">04</div>
+      <div>
+        <h3>Tienes un historial completo de todo</h3>
+        <p>Cada documento procesado, cada decisión tomada, cada respuesta enviada queda registrada. Si alguien pregunta qué pasó con una solicitud, lo encuentras en segundos.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- WHO IS THIS FOR -->
+<section class="who-section">
+  <div>
+    <h2 class="who-headline reveal">Para quien<br>mueve cosas,<br>no para quien<br><em>las construye.</em></h2>
+    <p class="who-body reveal">
+      Trayline no es para programadores. Es para personas que gestionan procesos reales en empresas reales — y que hasta ahora dependían de IT para automatizar cualquier cosa. Con Trayline, el control vuelve a quien conoce el proceso de verdad.
+    </p>
+  </div>
+
+  <div class="profile-cards">
+    <div class="profile-card reveal">
+      <div class="profile-icon">👔</div>
+      <div>
+        <div class="profile-role">Asistente de dirección</div>
+        <div class="profile-desc">Gestiona solicitudes, documenta reuniones, filtra lo urgente de lo que puede esperar — sin tocar el teclado más de lo necesario.</div>
+      </div>
+    </div>
+    <div class="profile-card reveal reveal-delay-1">
+      <div class="profile-icon">📊</div>
+      <div>
+        <div class="profile-role">Responsable de operaciones</div>
+        <div class="profile-desc">Automatiza el procesamiento de facturas, contratos y reportes. El equipo revisa solo las excepciones.</div>
+      </div>
+    </div>
+    <div class="profile-card reveal reveal-delay-2">
+      <div class="profile-icon">🏢</div>
+      <div>
+        <div class="profile-role">Gestor de atención al cliente</div>
+        <div class="profile-desc">La IA clasifica y redacta. El equipo humano firma y envía. El volumen que antes requería cinco personas, ahora lo maneja uno.</div>
+      </div>
+    </div>
+    <div class="profile-card reveal reveal-delay-3">
+      <div class="profile-icon">⚖️</div>
+      <div>
+        <div class="profile-role">Despacho legal o financiero</div>
+        <div class="profile-desc">Extrae datos de documentos, organiza expedientes, prepara borradores. Con todo el historial auditado y trazable.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CLOSING -->
+<section class="close-section">
+  <h2 class="close-headline reveal">
+    Tu trabajo no cambia.<br>
+    Solo deja de<br><em>quitarte tiempo.</em>
+  </h2>
+  <p class="close-body reveal">
+    Trayline no reemplaza tu criterio. Lo amplifica. Tú sigues tomando las decisiones que importan. La IA se encarga del resto — de forma silenciosa, confiable, y en tu propio ordenador.
+  </p>
+
+  <div class="tagline reveal">"La automatización inteligente, por fin, para quien trabaja con ella."</div>
+</section>
+
+<footer>
+  <div class="logo">Tray<span>line</span></div>
+  <div>Sin código &nbsp;·&nbsp; Sin nube &nbsp;·&nbsp; Sin dependencias</div>
+</footer>
+
+<script>
+  // Intersection Observer for scroll reveals
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('visible');
+      }
+    });
+  }, { threshold: 0.12 });
+
+  document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+</script>
+</body>
+</html>
