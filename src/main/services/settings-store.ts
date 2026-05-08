@@ -1,11 +1,7 @@
 import Store from 'electron-store'
+import type { Settings } from '../../shared/types'
 
-export interface Settings {
-  theme: 'light' | 'dark' | 'system'
-  defaultCliCommand: string
-  defaultAdapterId: string
-  notificationsEnabled: boolean
-}
+export type { Settings }
 
 const defaults: Settings = {
   theme: 'system',

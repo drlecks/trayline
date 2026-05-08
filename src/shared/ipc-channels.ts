@@ -15,4 +15,17 @@ export const IPC = {
     close: 'window:close',
     isMaximized: 'window:isMaximized',
   },
+  app: {
+    bootstrapInfo: 'app:bootstrapInfo',
+  },
+  project: {
+    list: 'project:list',
+    get: 'project:get',
+    listWorkflows: 'project:listWorkflows',
+    listSteps: 'project:listSteps',
+    listSkills: 'project:listSkills',
+  },
+  usage: {
+    get: 'usage:get',
+  },
 } as const

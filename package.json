@@ -9,8 +9,14 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -p tsconfig.node.json && tsc -p tsconfig.web.json && vite build",
+    "typecheck": "tsc -p tsconfig.node.json && tsc -p tsconfig.web.json",
+    "build": "npm run typecheck && vite build",
     "preview": "vite preview",
+    "rebuild:electron": "electron-builder install-app-deps",
+    "rebuild:node": "npm rebuild better-sqlite3",
+    "postinstall": "electron-builder install-app-deps",
+    "pretest": "npm run rebuild:node",
+    "posttest": "npm run rebuild:electron",
     "test": "vitest run",
     "test:watch": "vitest",
     "dist:mac": "npm run build && electron-builder --mac",
@@ -22,7 +28,7 @@
     "@radix-ui/react-dialog": "^1.1.0",
     "@radix-ui/react-label": "^2.1.0",
     "@radix-ui/react-slot": "^1.1.0",
-    "better-sqlite3": "^9.6.0",
+    "better-sqlite3": "^12.9.0",
     "chokidar": "^3.6.0",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
@@ -33,6 +39,7 @@
     "zustand": "^5.0.0"
   },
   "devDependencies": {
+    "@electron/rebuild": "^4.0.4",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^20.17.0",
     "@types/react": "^18.3.0",
@@ -60,16 +67,43 @@
     },
     "files": [
       "dist/**/*",
-      "dist-electron/**/*"
+      "dist-electron/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "**/node_modules/better-sqlite3/**",
+      "**/node_modules/bindings/**"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/system-skills",
+        "to": "system-skills"
+      }
     ],
     "mac": {
-      "target": [{ "target": "dmg", "arch": ["universal"] }]
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        }
+      ]
     },
     "win": {
-      "target": [{ "target": "nsis" }]
+      "target": [
+        {
+          "target": "nsis"
+        }
+      ]
     },
     "linux": {
-      "target": [{ "target": "AppImage" }]
+      "target": [
+        {
+          "target": "AppImage"
+        }
+      ]
     }
   }
 }

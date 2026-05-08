@@ -1,7 +1,7 @@
 import { Moon, Sun, Monitor } from 'lucide-react'
 import { useThemeStore } from '../../stores/theme-store'
 import WindowControls from './WindowControls'
-import type { Settings } from '../../../main/services/settings-store'
+import type { Settings } from '../../../shared/types'
 
 const THEME_CYCLE: Settings['theme'][] = ['system', 'light', 'dark']
 
