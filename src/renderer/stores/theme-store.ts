@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Settings } from '../../main/services/settings-store'
+import type { Settings } from '../../shared/types'
 
 interface ThemeStore {
   theme: Settings['theme']

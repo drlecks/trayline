@@ -1,0 +1,24 @@
+{
+  "id": "{{id}}",
+  "kind": "worker",
+  "name": "{{name}}",
+  "description": "{{description}}",
+  "color": "#F7A14F",
+  "icon": "{{icon}}",
+  "skills": [],
+  "mcps": [],
+  "context_packs": [],
+  "execution": {
+    "command": "claude",
+    "args": ["--no-color"],
+    "timeout_seconds": 180,
+    "retry_attempts": 1,
+    "adapter": "claude-code"
+  },
+  "trigger": {
+    "mode": "on_ready",
+    "schedule_cron": null
+  },
+  "on_success": "advance",
+  "on_failure": "send_to_errors"
+}
