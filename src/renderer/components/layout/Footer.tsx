@@ -43,9 +43,11 @@ export default function Footer() {
       select-none
     ">
       <div className="flex items-center gap-3" title={
-        usage
-          ? `Source: ${usage.source} · Updated: ${new Date(usage.updatedAt).toLocaleTimeString()}`
-          : 'Usage data not available yet'
+        !usage
+          ? 'Loading usage…'
+          : usage.source === 'unavailable'
+            ? 'Claude Code does not expose 5h/weekly window state to other apps yet. We\'ll surface real values here once the upstream CLI provides them or once Trayline runs enough workers to estimate locally (Phase 4).'
+            : `Source: ${usage.source} · Updated: ${new Date(usage.updatedAt).toLocaleTimeString()}`
       }>
         <span>
           <span className="text-neutral-400 dark:text-neutral-500">5h</span>{' '}

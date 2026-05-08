@@ -7,6 +7,10 @@
 1. Empty state with three options: **Create new project** / **Import project (.zip)** / **Open example project**
 2. Picking "Create new" launches the **Workflow Author** flow
 
+### Subsequent launches
+
+The app reopens to the project the user had active when it last closed. The active project name is persisted to `app-data/settings.json` as `lastOpenedProject`; on launch the renderer reads that field and, if the project still exists on disk, jumps straight back into the project view. If the recorded project no longer exists (deleted, renamed), the field is cleared and the user lands on the welcome screen instead.
+
 ---
 
 ## 6.1a Workflow Author — Creating a New Project

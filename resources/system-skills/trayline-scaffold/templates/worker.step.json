@@ -10,7 +10,7 @@
   "context_packs": [],
   "execution": {
     "command": "claude",
-    "args": ["--no-color"],
+    "args": ["-p"],
     "timeout_seconds": 180,
     "retry_attempts": 1,
     "adapter": "claude-code"
