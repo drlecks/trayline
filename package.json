@@ -1,0 +1,75 @@
+{
+  "name": "trayline",
+  "version": "0.1.0",
+  "description": "Visual AI workflow automation for people who work, not people who code.",
+  "main": "dist-electron/main/index.js",
+  "author": "drlecks",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.node.json && tsc -p tsconfig.web.json && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:linux": "npm run build && electron-builder --linux",
+    "lint": "eslint src --ext .ts,.tsx"
+  },
+  "dependencies": {
+    "@radix-ui/react-dialog": "^1.1.0",
+    "@radix-ui/react-label": "^2.1.0",
+    "@radix-ui/react-slot": "^1.1.0",
+    "better-sqlite3": "^9.6.0",
+    "chokidar": "^3.6.0",
+    "class-variance-authority": "^0.7.0",
+    "clsx": "^2.1.1",
+    "electron-store": "^8.2.0",
+    "fast-glob": "^3.3.2",
+    "lucide-react": "^0.469.0",
+    "tailwind-merge": "^2.5.0",
+    "zustand": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^20.17.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "autoprefixer": "^10.4.20",
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.0",
+    "eslint": "^9.0.0",
+    "postcss": "^8.4.47",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
+    "tailwindcss": "^3.4.14",
+    "typescript": "^5.6.0",
+    "vite": "^5.4.0",
+    "vite-plugin-electron": "^0.28.0",
+    "vite-plugin-electron-renderer": "^0.14.0",
+    "vitest": "^2.1.0"
+  },
+  "build": {
+    "appId": "com.trayline.app",
+    "productName": "Trayline",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*"
+    ],
+    "mac": {
+      "target": [{ "target": "dmg", "arch": ["universal"] }]
+    },
+    "win": {
+      "target": [{ "target": "nsis" }]
+    },
+    "linux": {
+      "target": [{ "target": "AppImage" }]
+    }
+  }
+}
