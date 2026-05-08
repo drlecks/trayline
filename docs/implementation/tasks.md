@@ -25,7 +25,7 @@ Each task corresponds to a phase file in this folder. Check off tasks as they ar
 - [x] [Phase 0 — Foundations](./phase-0-foundations.md)
 - [x] [Phase 1 — Global App Skills & First-Run Bootstrap](./phase-1-bootstrap.md)
 - [x] [Phase 2 — Projects & Workflow Author](./phase-2-workflow-author.md)
-- [ ] [Phase 3 — Trays + Manual Cards](./phase-3-trays.md)
+- [x] [Phase 3 — Trays + Manual Cards](./phase-3-trays.md)
 - [ ] [Phase 4 — Workers + CLI Execution](./phase-4-workers.md)
 - [ ] [Phase 5 — Terminal Integration](./phase-5-terminal.md)
 - [ ] [Phase 6 — Skills & Context Packs](./phase-6-skills.md)
