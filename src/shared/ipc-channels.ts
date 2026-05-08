@@ -25,4 +25,7 @@ export const IPC = {
     listSteps: 'project:listSteps',
     listSkills: 'project:listSkills',
   },
+  usage: {
+    get: 'usage:get',
+  },
 } as const

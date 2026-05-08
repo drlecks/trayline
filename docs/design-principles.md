@@ -39,12 +39,15 @@
 │              │                                                  │
 │  [+ Add step]│                                                  │
 │              │                                                  │
-└──────────────┴──────────────────────────────────────────────────┘
+├──────────────┴──────────────────────────────────────────────────┤
+│                                            5h 12% · Weekly 38%  │  ← footer
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 - **Left rail** — the workflow as a vertical stack of step cards. Each card shows name, type icon, and a live status indicator (card count / running / idle / error).
 - **Right canvas** — when a step is selected, this panel shows everything about it: its cards, its config, its runs.
 - **Top bar** — project switcher, skills, MCPs, notifications.
+- **Footer** — always present, full-width strip across the bottom. Right side shows live AI usage indicators. See **Footer** section below.
 
 ---
 
@@ -59,6 +62,26 @@
 - **Selected** — accent left border (4px), slightly raised shadow
 - **Running** — animated subtle pulse on the icon
 - **Error** — red dot in corner
+
+---
+
+## Footer
+
+A persistent strip at the bottom of every screen. Height ~28 px, same background as the rest of the chrome, separated by a 1 px subtle border on top.
+
+The footer is **always present** — it does not get hidden when a project is open or when the user is deep in a workflow. The left half is reserved for future use (breadcrumbs, status text, version info). The right side currently displays live AI usage indicators:
+
+- **5h window** — percentage of the active AI agent's 5-hour rolling rate-limit window consumed.
+- **Weekly window** — percentage of the agent's weekly rate-limit window consumed.
+
+Both values update every **10 seconds** via a poll to the main process. The values turn amber once they cross 80 %. When usage data is unavailable (no agent installed, or pre-Phase 4 placeholder), each indicator shows `—`.
+
+Layout:
+```
+                                              5h 12% · Weekly 38%
+```
+
+Typography: 11 px monospace (JetBrains Mono), tabular numerals so digits don't reflow on each refresh. Hover tooltip shows the data source (`claude-code` / `placeholder` / `unavailable`) and the snapshot timestamp.
 
 ---
 
