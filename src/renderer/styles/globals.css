@@ -2,6 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer utilities {
+  /* Frameless window drag regions */
+  .app-drag    { -webkit-app-region: drag; }
+  .no-drag     { -webkit-app-region: no-drag; }
+}
+
 @layer base {
   :root {
     --bg: #FAFAF9;

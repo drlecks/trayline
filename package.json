@@ -19,11 +19,17 @@
     "lint": "eslint src --ext .ts,.tsx"
   },
   "dependencies": {
+    "@radix-ui/react-dialog": "^1.1.0",
+    "@radix-ui/react-label": "^2.1.0",
+    "@radix-ui/react-slot": "^1.1.0",
     "better-sqlite3": "^9.6.0",
     "chokidar": "^3.6.0",
+    "class-variance-authority": "^0.7.0",
+    "clsx": "^2.1.1",
     "electron-store": "^8.2.0",
     "fast-glob": "^3.3.2",
     "lucide-react": "^0.469.0",
+    "tailwind-merge": "^2.5.0",
     "zustand": "^5.0.0"
   },
   "devDependencies": {

@@ -14,7 +14,7 @@ Establish the Electron + React + TypeScript project scaffold and wire up the min
 
 - [x] Electron + Vite + React + TypeScript scaffold
 - [x] Tailwind CSS configured
-- [ ] shadcn/ui set up (button, dialog, form primitives)
+- [x] shadcn/ui set up (button, dialog, form primitives)
 - [x] Window chrome, top bar shell (placeholder tabs)
 - [x] Dark / light theme toggle (stored in electron-store)
 - [x] Settings store (`electron-store` or equivalent) — user prefs, default CLI command

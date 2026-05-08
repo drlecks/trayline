@@ -9,4 +9,10 @@ export const IPC = {
   audit: {
     query: 'audit:query',
   },
+  window: {
+    minimize: 'window:minimize',
+    maximize: 'window:maximize',
+    close: 'window:close',
+    isMaximized: 'window:isMaximized',
+  },
 } as const
