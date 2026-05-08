@@ -4,6 +4,21 @@ Each task corresponds to a phase file in this folder. Check off tasks as they ar
 
 ---
 
+## How to work on a task
+
+> Full details are in the **Git Branching Workflow** section of `CLAUDE.md`. This is the short version.
+
+**Before starting any phase:**
+1. `git checkout develop && git pull origin develop`
+2. `git checkout -b phase/<phase-id>` (e.g. `phase/phase-0-foundations`)
+3. Read the phase file, implement, commit — including any doc updates.
+4. `git push -u origin phase/<phase-id>`
+5. Ask the user to review. **Do not merge until confirmed.**
+6. On approval: `git checkout develop && git merge --no-ff phase/<phase-id>` → push → delete branch.
+7. Check off the task below and commit directly on `develop`.
+
+---
+
 ## MVP Phases
 
 - [ ] [Phase 0 — Foundations](./phase-0-foundations.md)

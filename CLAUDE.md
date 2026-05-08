@@ -94,9 +94,74 @@ If you are unsure which doc file to update, update all plausible ones — a redu
 
 ---
 
+## Git Branching Workflow
+
+### Branch structure
+
+```
+main        ← stable, protected. Never commit here directly.
+└── develop ← integration branch. All features merge here via PR.
+    └── phase/phase-0-foundations   ← one branch per phase task
+    └── phase/phase-1-bootstrap
+    └── ...
+```
+
+`main` is protected: direct pushes are blocked, force pushes are blocked. The only way code reaches `main` is via a pull request from `develop`.
+
+### Starting a new phase task
+
+**This is mandatory. Do not start implementing without following these steps.**
+
+1. Make sure you are on `develop` and it is up to date:
+   ```bash
+   git checkout develop
+   git pull origin develop
+   ```
+2. Create and switch to a new branch named after the phase:
+   ```bash
+   git checkout -b phase/<phase-id>
+   # e.g. git checkout -b phase/phase-0-foundations
+   ```
+3. Read the phase file in `docs/implementation/` and confirm the scope before writing any code.
+4. Implement all tasks for that phase on this branch — including any required doc updates (see **Keeping Docs in Sync**).
+5. Commit regularly. Each commit should be coherent and leave the branch in a working state.
+
+### Finishing a phase task
+
+1. Push the branch and ask the user to review:
+   ```bash
+   git push -u origin phase/<phase-id>
+   ```
+2. Summarise what was done and explicitly ask: *"Ready to review. Let me know if anything needs changing before I merge."*
+3. **Do not merge until the user confirms.** Address any feedback with additional commits on the same branch.
+4. Once approved, merge into `develop`:
+   ```bash
+   git checkout develop
+   git merge --no-ff phase/<phase-id> -m "Merge phase/<phase-id> into develop"
+   git push origin develop
+   ```
+5. Mark the phase as done in `docs/implementation/tasks.md` (check off the checkbox) and commit that change directly on `develop`.
+6. Delete the phase branch:
+   ```bash
+   git branch -d phase/<phase-id>
+   git push origin --delete phase/<phase-id>
+   ```
+
+### Branch naming
+
+| Work type | Branch name |
+|---|---|
+| MVP phase | `phase/phase-0-foundations` |
+| N2 phase | `phase/phase-n2-1-skills-enhanced` |
+| Hotfix on develop | `fix/<short-description>` |
+
+---
+
 ## Where to Start
 
-1. Read [`docs/implementation/tasks.md`](docs/implementation/tasks.md) to see what phase is current.
-2. Open the relevant phase file in `docs/implementation/` for detailed tasks and acceptance criteria.
-3. Consult [`docs/data-model.md`](docs/data-model.md) for any file shapes before writing to disk.
-4. Consult [`docs/design-principles.md`](docs/design-principles.md) before building any UI component.
+1. Check the current branch — if not on `develop`, run `git checkout develop && git pull origin develop`.
+2. Read [`docs/implementation/tasks.md`](docs/implementation/tasks.md) to find the next unchecked phase.
+3. Follow the **Git Branching Workflow** above to create the phase branch before touching any code.
+4. Open the relevant phase file in `docs/implementation/` for detailed tasks and acceptance criteria.
+5. Consult [`docs/data-model.md`](docs/data-model.md) for any file shapes before writing to disk.
+6. Consult [`docs/design-principles.md`](docs/design-principles.md) before building any UI component.
