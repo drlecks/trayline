@@ -23,6 +23,8 @@ function applyThemeClass(theme: 'light' | 'dark' | 'system') {
 export default function App() {
   const { theme, setTheme } = useThemeStore()
   const screen = useProjectStore((s) => s.screen)
+  const setActive = useProjectStore((s) => s.setActive)
+  const refreshProjects = useProjectStore((s) => s.refreshProjects)
 
   useEffect(() => {
     applyThemeClass(theme)
@@ -36,9 +38,31 @@ export default function App() {
     return () => mq.removeEventListener('change', handler)
   }, [theme])
 
+  // First-mount bootstrap: load saved settings, then if a last-opened project
+  // is recorded and still exists on disk, jump straight back into it.
   useEffect(() => {
-    window.trayline.settings.get().then((s) => setTheme(s.theme))
-  }, [setTheme])
+    let cancelled = false
+    ;(async () => {
+      const settings = await window.trayline.settings.get()
+      if (cancelled) return
+      setTheme(settings.theme)
+
+      if (settings.lastOpenedProject) {
+        await refreshProjects()
+        if (cancelled) return
+        const project = await window.trayline.project.get(settings.lastOpenedProject)
+        if (cancelled) return
+        if (project) {
+          setActive(project)
+        } else {
+          // Recorded project no longer exists (deleted, renamed). Forget it
+          // so the next launch goes straight to the welcome screen.
+          void window.trayline.settings.set('lastOpenedProject', null)
+        }
+      }
+    })()
+    return () => { cancelled = true }
+  }, [setTheme, setActive, refreshProjects])
 
   return (
     <div className="flex flex-col h-full">
