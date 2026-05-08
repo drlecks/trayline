@@ -25,27 +25,27 @@ export default function WelcomeSplash() {
       </p>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full mb-12">
-        <Button variant="outline" size="lg" className="h-auto py-4 flex-col gap-2 items-start text-left" onClick={() => setScreen('author')}>
-          <Sparkles size={16} strokeWidth={1.5} className="text-neutral-600 dark:text-neutral-400" />
-          <div>
-            <div className="text-sm font-medium">Create new project</div>
-            <div className="text-xs text-neutral-500 dark:text-neutral-400 font-normal mt-0.5">Describe a workflow in plain English</div>
+        <Button variant="outline" size="lg" className="h-auto min-h-[112px] py-4 px-3 flex-col gap-2 items-center text-center whitespace-normal" onClick={() => setScreen('author')}>
+          <Sparkles size={18} strokeWidth={1.5} className="text-neutral-600 dark:text-neutral-400 shrink-0" />
+          <div className="w-full">
+            <div className="text-sm font-medium leading-tight break-words">Create new project</div>
+            <div className="text-xs text-neutral-500 dark:text-neutral-400 font-normal mt-1 leading-snug break-words">Describe a workflow in plain English</div>
           </div>
         </Button>
 
-        <Button variant="outline" size="lg" className="h-auto py-4 flex-col gap-2 items-start text-left" disabled title="Coming in Phase 11">
-          <FolderOpen size={16} strokeWidth={1.5} className="text-neutral-600 dark:text-neutral-400" />
-          <div>
-            <div className="text-sm font-medium">Import project</div>
-            <div className="text-xs text-neutral-500 dark:text-neutral-400 font-normal mt-0.5">Open a .zip from a colleague</div>
+        <Button variant="outline" size="lg" className="h-auto min-h-[112px] py-4 px-3 flex-col gap-2 items-center text-center whitespace-normal" disabled title="Coming in Phase 11">
+          <FolderOpen size={18} strokeWidth={1.5} className="text-neutral-600 dark:text-neutral-400 shrink-0" />
+          <div className="w-full">
+            <div className="text-sm font-medium leading-tight break-words">Import project</div>
+            <div className="text-xs text-neutral-500 dark:text-neutral-400 font-normal mt-1 leading-snug break-words">Open a .zip from a colleague</div>
           </div>
         </Button>
 
-        <Button variant="outline" size="lg" className="h-auto py-4 flex-col gap-2 items-start text-left" disabled title="Coming in Phase 11">
-          <Package size={16} strokeWidth={1.5} className="text-neutral-600 dark:text-neutral-400" />
-          <div>
-            <div className="text-sm font-medium">Example project</div>
-            <div className="text-xs text-neutral-500 dark:text-neutral-400 font-normal mt-0.5">See what's possible</div>
+        <Button variant="outline" size="lg" className="h-auto min-h-[112px] py-4 px-3 flex-col gap-2 items-center text-center whitespace-normal" disabled title="Coming in Phase 11">
+          <Package size={18} strokeWidth={1.5} className="text-neutral-600 dark:text-neutral-400 shrink-0" />
+          <div className="w-full">
+            <div className="text-sm font-medium leading-tight break-words">Example project</div>
+            <div className="text-xs text-neutral-500 dark:text-neutral-400 font-normal mt-1 leading-snug break-words">See what's possible</div>
           </div>
         </Button>
       </div>

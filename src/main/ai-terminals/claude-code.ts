@@ -187,9 +187,11 @@ export const claudeCodeAdapter: AITerminalAdapter = {
 
     const prompt = promptParts.join('\n\n---\n\n')
 
-    // Pipe the prompt to `claude` over stdin. MCP wiring lands in Phase N2.5.
+    // Pipe the prompt to `claude -p` (non-interactive print mode). Modern
+    // Claude Code reads the prompt from stdin in this mode and prints the
+    // agent's response to stdout, then exits. MCP wiring lands in Phase N2.5.
     // `shell: true` for Windows .cmd resolution (see SPAWN_SHELL note above).
-    const child = childSpawn('claude', ['--no-color'], {
+    const child = childSpawn('claude', ['-p'], {
       cwd: opts.workingDir,
       shell: SPAWN_SHELL,
       env: { ...process.env },
