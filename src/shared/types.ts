@@ -9,6 +9,12 @@ export interface Settings {
   defaultCliCommand: string
   defaultAdapterId: string
   notificationsEnabled: boolean
+  /**
+   * Name (folder id) of the last project the user had open. Restored on next
+   * launch so the app comes back to where the user left it. null when the
+   * user is on the welcome screen.
+   */
+  lastOpenedProject: string | null
 }
 
 // ── Audit log ─────────────────────────────────────────────────────────────────
@@ -87,6 +93,26 @@ export interface UsageSnapshot {
   /** ISO timestamp of when this snapshot was produced. */
   updatedAt: string
 }
+
+// ── Project creation (Workflow Author flow) ──────────────────────────────────
+
+export interface ProjectCreateSuccess {
+  ok: true
+  project: ProjectMeta
+  /** MCP ids referenced by the new project that aren't installed/configured yet. */
+  unconfiguredMcps: string[]
+}
+
+export interface ProjectCreateError {
+  ok: false
+  stage: 'author' | 'scaffold'
+  reason: string
+  message: string
+  /** Raw agent output, when available; useful for debugging parse failures. */
+  raw?: string
+}
+
+export type ProjectCreateOutcome = ProjectCreateSuccess | ProjectCreateError
 
 export interface SkillManifest {
   id: string

@@ -2,7 +2,9 @@ import { IpcMain, nativeTheme, BrowserWindow } from 'electron'
 import { settingsStore, Settings } from '../services/settings-store'
 import { auditDb } from '../services/audit-db'
 import { projectService } from '../services/project-service'
+import { projectCreateService } from '../services/project-create-service'
 import { usageService } from '../services/usage-service'
+import { adapterRegistry } from '../ai-terminals/registry'
 import type { BootstrapInfo } from '../../shared/types'
 
 export type { BootstrapInfo }
@@ -55,7 +57,25 @@ export function registerIpcHandlers(
     projectService.listSteps(project, workflow),
   )
   ipcMain.handle('project:listSkills', () => projectService.listSkills())
+  ipcMain.handle('project:create', (_: unknown, description: string, opts?: { regenerateOf?: string }) =>
+    projectCreateService.createFromDescription(description, opts),
+  )
+  ipcMain.handle('project:delete', (_: unknown, name: string) =>
+    projectCreateService.deleteProject(name),
+  )
 
   // ── Usage / rate-limit windows ────────────────────────────────────────────
   ipcMain.handle('usage:get', () => usageService.getSnapshot())
+
+  // ── AI adapters ───────────────────────────────────────────────────────────
+  ipcMain.handle('adapters:list', () =>
+    adapterRegistry.list().map((a) => ({ id: a.id, displayName: a.displayName })),
+  )
+  ipcMain.handle('adapters:detect', async (_: unknown, id: string) => {
+    const a = adapterRegistry.get(id)
+    if (!a) return { installed: false, version: null }
+    const installed = await a.detectInstalled()
+    const version = installed ? await a.getVersion() : null
+    return { installed, version }
+  })
 }

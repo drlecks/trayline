@@ -9,6 +9,7 @@ import type {
   StepMeta,
   SkillManifest,
   UsageSnapshot,
+  ProjectCreateOutcome,
 } from '../shared/types'
 
 const api = {
@@ -39,9 +40,18 @@ const api = {
     listSteps: (project: string, workflow: string): Promise<StepMeta[]> =>
       ipcRenderer.invoke(IPC.project.listSteps, project, workflow),
     listSkills: (): Promise<SkillManifest[]> => ipcRenderer.invoke(IPC.project.listSkills),
+    create: (description: string, opts?: { regenerateOf?: string }): Promise<ProjectCreateOutcome> =>
+      ipcRenderer.invoke(IPC.project.create, description, opts),
+    delete: (name: string): Promise<void> => ipcRenderer.invoke(IPC.project.delete, name),
   },
   usage: {
     get: (): Promise<UsageSnapshot> => ipcRenderer.invoke(IPC.usage.get),
+  },
+  adapters: {
+    list: (): Promise<{ id: string; displayName: string }[]> =>
+      ipcRenderer.invoke(IPC.adapters.list),
+    detect: (id: string): Promise<{ installed: boolean; version: string | null }> =>
+      ipcRenderer.invoke(IPC.adapters.detect, id),
   },
   platform: process.platform as NodeJS.Platform,
 }

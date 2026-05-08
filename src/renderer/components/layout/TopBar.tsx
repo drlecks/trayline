@@ -1,6 +1,8 @@
-import { Moon, Sun, Monitor } from 'lucide-react'
+import { Moon, Sun, Monitor, Settings as SettingsIcon } from 'lucide-react'
 import { useThemeStore } from '../../stores/theme-store'
+import { useProjectStore } from '../../stores/project-store'
 import WindowControls from './WindowControls'
+import ProjectSwitcher from './ProjectSwitcher'
 import type { Settings } from '../../../shared/types'
 
 const THEME_CYCLE: Settings['theme'][] = ['system', 'light', 'dark']
@@ -13,6 +15,7 @@ const THEME_ICON = {
 
 export default function TopBar() {
   const { theme, setTheme } = useThemeStore()
+  const setScreen = useProjectStore((s) => s.setScreen)
 
   function cycleTheme() {
     const idx = THEME_CYCLE.indexOf(theme)
@@ -29,11 +32,13 @@ export default function TopBar() {
       bg-[var(--bg)]
       app-drag
     ">
-      {/* Logo */}
-      <div className="flex items-center gap-2 px-4 no-drag">
-        <span className="font-semibold text-sm tracking-tight select-none">
+      {/* Logo + project switcher */}
+      <div className="flex items-center gap-3 px-4">
+        <span className="font-semibold text-sm tracking-tight select-none no-drag">
           Trayline
         </span>
+        <span className="text-neutral-300 dark:text-neutral-700 select-none no-drag">·</span>
+        <ProjectSwitcher />
       </div>
 
       {/* Right controls */}
@@ -50,6 +55,18 @@ export default function TopBar() {
             "
           >
             <Icon size={15} strokeWidth={1.75} />
+          </button>
+          <button
+            onClick={() => setScreen('settings')}
+            title="Settings"
+            className="
+              p-1.5 rounded-md
+              text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-100
+              hover:bg-black/[0.05] dark:hover:bg-white/[0.05]
+              transition-colors duration-150
+            "
+          >
+            <SettingsIcon size={15} strokeWidth={1.75} />
           </button>
         </div>
 

@@ -74,7 +74,9 @@ The footer is **always present** — it does not get hidden when a project is op
 - **5h window** — percentage of the active AI agent's 5-hour rolling rate-limit window consumed.
 - **Weekly window** — percentage of the agent's weekly rate-limit window consumed.
 
-Both values update every **10 seconds** via a poll to the main process. The values turn amber once they cross 80 %. When usage data is unavailable (no agent installed, or pre-Phase 4 placeholder), each indicator shows `—`.
+Both values update every **10 seconds** via a poll to the main process. The values turn amber once they cross 80 %. When usage data is unavailable, each indicator shows `—` and the tooltip explains why.
+
+**Current status:** Claude Code does not yet expose window state to other processes (the `/usage` command only works inside the TUI, and the CLI's JSON envelope only carries per-call token counts). The footer therefore shows `—` until either (a) an upstream CLI flag lands or (b) Trayline accumulates enough per-worker token data to estimate locally — see Phase 4.
 
 Layout:
 ```
