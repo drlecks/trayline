@@ -8,10 +8,16 @@ import type {
   SpawnOptions,
 } from './adapter'
 
+// `shell: true` matters here — on Windows the `claude` CLI is typically a
+// `claude.cmd` shim installed by npm/Anthropic. Without a shell, `spawn` can't
+// resolve the .cmd extension via PATHEXT and fails with ENOENT. The same flag
+// is harmless on macOS and Linux (just adds a /bin/sh hop).
+const SPAWN_SHELL = true
+
 // Detect Claude Code via `claude --version` on PATH.
 async function runVersion(): Promise<string | null> {
   return new Promise((resolve) => {
-    const child = childSpawn('claude', ['--version'], { shell: true })
+    const child = childSpawn('claude', ['--version'], { shell: SPAWN_SHELL })
     let out = ''
     child.stdout.on('data', (b) => (out += b.toString()))
     child.on('error', () => resolve(null))
@@ -71,6 +77,9 @@ class ClaudeCodeSession implements AISession {
 
     if (opts.timeout > 0) {
       setTimeout(() => {
+        // Note: 'SIGTERM' is honored on macOS/Linux; on Windows Node ignores
+        // the signal and forcibly terminates the process. That's the correct
+        // behavior for a hard timeout, so we don't need to branch on platform.
         if (!child.killed) child.kill('SIGTERM')
       }, opts.timeout)
     }
@@ -179,9 +188,10 @@ export const claudeCodeAdapter: AITerminalAdapter = {
     const prompt = promptParts.join('\n\n---\n\n')
 
     // Pipe the prompt to `claude` over stdin. MCP wiring lands in Phase N2.5.
+    // `shell: true` for Windows .cmd resolution (see SPAWN_SHELL note above).
     const child = childSpawn('claude', ['--no-color'], {
       cwd: opts.workingDir,
-      shell: true,
+      shell: SPAWN_SHELL,
       env: { ...process.env },
     })
     child.stdin?.write(prompt)
