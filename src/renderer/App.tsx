@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useThemeStore } from './stores/theme-store'
 import TopBar from './components/layout/TopBar'
+import WelcomeSplash from './components/splash/WelcomeSplash'
 
 function applyThemeClass(theme: 'light' | 'dark' | 'system') {
   const root = document.documentElement
@@ -40,10 +41,8 @@ export default function App() {
   return (
     <div className="flex flex-col h-full">
       <TopBar />
-      <main className="flex flex-1 overflow-hidden">
-        <div className="flex-1 flex items-center justify-center text-neutral-400 text-sm">
-          No project open
-        </div>
+      <main className="flex flex-1 overflow-y-auto py-12">
+        <WelcomeSplash />
       </main>
     </div>
   )

@@ -1,7 +1,5 @@
 import { describe, it, expect, beforeAll } from 'vitest'
 import Database from 'better-sqlite3'
-import { tmpdir } from 'os'
-import { join } from 'path'
 
 // Test the audit DB logic in isolation using an in-memory SQLite db
 // (avoids needing Electron's app.getPath at test time)

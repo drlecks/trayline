@@ -11,7 +11,12 @@
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "skipLibCheck": true,
     "composite": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/renderer/*"],
+      "@main/*": ["src/main/*"]
+    }
   },
-  "include": ["src/renderer"]
+  "include": ["src/renderer", "src/shared"]
 }

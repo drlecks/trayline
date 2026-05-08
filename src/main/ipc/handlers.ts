@@ -1,8 +1,15 @@
 import { IpcMain, nativeTheme, BrowserWindow } from 'electron'
 import { settingsStore, Settings } from '../services/settings-store'
 import { auditDb } from '../services/audit-db'
+import { projectService } from '../services/project-service'
+import type { BootstrapInfo } from '../../shared/types'
 
-export function registerIpcHandlers(ipcMain: IpcMain) {
+export type { BootstrapInfo }
+
+export function registerIpcHandlers(
+  ipcMain: IpcMain,
+  getBootstrapInfo: () => BootstrapInfo,
+) {
   // ── Settings ──────────────────────────────────────────────────────────────
   ipcMain.handle('settings:get', () => settingsStore.store)
 
@@ -33,4 +40,18 @@ export function registerIpcHandlers(ipcMain: IpcMain) {
   ipcMain.handle('window:isMaximized', (e) =>
     BrowserWindow.fromWebContents(e.sender)?.isMaximized() ?? false,
   )
+
+  // ── Bootstrap / app info ──────────────────────────────────────────────────
+  ipcMain.handle('app:bootstrapInfo', () => getBootstrapInfo())
+
+  // ── Project metadata ──────────────────────────────────────────────────────
+  ipcMain.handle('project:list', () => projectService.listProjects())
+  ipcMain.handle('project:get', (_: unknown, name: string) => projectService.getProject(name))
+  ipcMain.handle('project:listWorkflows', (_: unknown, name: string) =>
+    projectService.listWorkflows(name),
+  )
+  ipcMain.handle('project:listSteps', (_: unknown, project: string, workflow: string) =>
+    projectService.listSteps(project, workflow),
+  )
+  ipcMain.handle('project:listSkills', () => projectService.listSkills())
 }
