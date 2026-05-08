@@ -1,0 +1,61 @@
+# Default: auto-detect text vs. binary, but force LF on commit for text.
+# This prevents CRLF/LF churn when contributors work on different OSes.
+* text=auto eol=lf
+
+# Source files — always LF, regardless of OS
+*.ts        text eol=lf
+*.tsx       text eol=lf
+*.js        text eol=lf
+*.jsx       text eol=lf
+*.json      text eol=lf
+*.css       text eol=lf
+*.html      text eol=lf
+*.md        text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.toml      text eol=lf
+
+# Shell scripts — must be LF or they break on Unix
+*.sh        text eol=lf
+
+# Windows-only scripts — must be CRLF to run in cmd.exe / PowerShell
+*.bat       text eol=crlf
+*.cmd       text eol=crlf
+*.ps1       text eol=crlf
+
+# Binary files — never touch line endings
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.ico       binary
+*.icns      binary
+*.woff      binary
+*.woff2     binary
+*.ttf       binary
+*.otf       binary
+*.zip       binary
+*.gz        binary
+*.tar       binary
+*.exe       binary
+*.dll       binary
+*.so        binary
+*.dylib     binary
+*.dmg       binary
+*.AppImage  binary
+*.deb       binary
+*.rpm       binary
+*.snap      binary
+*.pkg       binary
+*.node      binary
+*.db        binary
+*.sqlite    binary
+*.sqlite3   binary
+
+# better-sqlite3 prebuilt binaries (just in case)
+*.bin       binary
+
+# Lock files — keep checked in but git can decide line endings
+package-lock.json text
+yarn.lock         text
+pnpm-lock.yaml    text

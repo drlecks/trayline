@@ -5,6 +5,9 @@ import { fsService, Paths } from './services/fs-service'
 import { auditDb } from './services/audit-db'
 import { systemSkillsService } from './services/system-skills-service'
 import { registerIpcHandlers } from './ipc/handlers'
+import { dirnameFromMeta } from './util/paths'
+
+const __dirname = dirnameFromMeta(import.meta.url)
 
 interface BootstrapInfo {
   dataDir: string
@@ -32,7 +35,10 @@ function createWindow() {
     win.loadURL(process.env.VITE_DEV_SERVER_URL)
     win.webContents.openDevTools()
   } else {
-    win.loadFile(join(__dirname, '../../dist/index.html'))
+    // app.getAppPath() points to the directory containing package.json on all
+    // platforms (and to the asar root in production), so it works in dev and
+    // in packaged builds without OS-specific path math.
+    win.loadFile(join(app.getAppPath(), 'dist', 'index.html'))
   }
 
   return win
