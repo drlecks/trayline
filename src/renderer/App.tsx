@@ -1,8 +1,12 @@
 import { useEffect } from 'react'
 import { useThemeStore } from './stores/theme-store'
+import { useProjectStore } from './stores/project-store'
 import TopBar from './components/layout/TopBar'
 import Footer from './components/layout/Footer'
 import WelcomeSplash from './components/splash/WelcomeSplash'
+import WorkflowAuthorScreen from './components/author/WorkflowAuthorScreen'
+import ProjectScreen from './components/project/ProjectScreen'
+import SettingsScreen from './components/settings/SettingsScreen'
 
 function applyThemeClass(theme: 'light' | 'dark' | 'system') {
   const root = document.documentElement
@@ -11,7 +15,6 @@ function applyThemeClass(theme: 'light' | 'dark' | 'system') {
   } else if (theme === 'light') {
     root.classList.remove('dark')
   } else {
-    // system — follow OS preference
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
     root.classList.toggle('dark', prefersDark)
   }
@@ -19,13 +22,12 @@ function applyThemeClass(theme: 'light' | 'dark' | 'system') {
 
 export default function App() {
   const { theme, setTheme } = useThemeStore()
+  const screen = useProjectStore((s) => s.screen)
 
-  // Apply theme class whenever theme changes
   useEffect(() => {
     applyThemeClass(theme)
   }, [theme])
 
-  // When in system mode, re-apply whenever the OS preference changes
   useEffect(() => {
     if (theme !== 'system') return
     const mq = window.matchMedia('(prefers-color-scheme: dark)')
@@ -34,7 +36,6 @@ export default function App() {
     return () => mq.removeEventListener('change', handler)
   }, [theme])
 
-  // Load saved theme from main on first mount
   useEffect(() => {
     window.trayline.settings.get().then((s) => setTheme(s.theme))
   }, [setTheme])
@@ -42,8 +43,23 @@ export default function App() {
   return (
     <div className="flex flex-col h-full">
       <TopBar />
-      <main className="flex flex-1 overflow-y-auto py-12">
-        <WelcomeSplash />
+      <main className="flex flex-1 overflow-hidden">
+        {screen === 'splash' && (
+          <div className="flex-1 overflow-y-auto py-12 flex">
+            <WelcomeSplash />
+          </div>
+        )}
+        {screen === 'author' && (
+          <div className="flex-1 overflow-y-auto py-12 flex">
+            <WorkflowAuthorScreen />
+          </div>
+        )}
+        {screen === 'project' && <ProjectScreen />}
+        {screen === 'settings' && (
+          <div className="flex-1 overflow-y-auto">
+            <SettingsScreen />
+          </div>
+        )}
       </main>
       <Footer />
     </div>
