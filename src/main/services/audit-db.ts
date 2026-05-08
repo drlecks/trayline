@@ -1,33 +1,9 @@
 import Database from 'better-sqlite3'
 import { join } from 'path'
 import { Paths } from './fs-service'
+import type { AuditEvent, AuditRow } from '../../shared/types'
 
-export type AuditEvent =
-  | 'card_created'
-  | 'card_marked_ready'
-  | 'card_approved'
-  | 'card_rejected'
-  | 'run_started'
-  | 'run_completed'
-  | 'run_failed'
-  | 'run_aborted_mcp_not_ready'
-  | 'mcp_installed'
-  | 'mcp_uninstalled'
-  | 'mcp_configured'
-  | 'mcp_credentials_reset'
-  | 'mcp_health_check_failed'
-
-export interface AuditRow {
-  id: string
-  timestamp: string
-  project_id: string
-  workflow_id: string
-  step_id: string
-  card_id: string
-  event: AuditEvent
-  actor: 'user' | 'system'
-  details_json: string
-}
+export type { AuditEvent, AuditRow }
 
 let db: Database.Database
 

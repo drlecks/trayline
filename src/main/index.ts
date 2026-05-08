@@ -1,9 +1,17 @@
 import { app, BrowserWindow, ipcMain, nativeTheme } from 'electron'
 import { join } from 'path'
 import { settingsStore } from './services/settings-store'
-import { fsService } from './services/fs-service'
+import { fsService, Paths } from './services/fs-service'
 import { auditDb } from './services/audit-db'
+import { systemSkillsService } from './services/system-skills-service'
 import { registerIpcHandlers } from './ipc/handlers'
+
+interface BootstrapInfo {
+  dataDir: string
+  systemSkillsRestored: string[]
+}
+
+let bootstrapInfo: BootstrapInfo
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -31,11 +39,21 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
+  // 1. Lay down the global folder structure
   await fsService.bootstrap()
-  auditDb.init()
-  registerIpcHandlers(ipcMain)
 
-  const win = createWindow()
+  // 2. Open the audit DB
+  auditDb.init()
+
+  // 3. Restore any missing or corrupted system skills
+  const { restored } = await systemSkillsService.ensureInstalled()
+  bootstrapInfo = { dataDir: Paths.root, systemSkillsRestored: restored }
+
+  // 4. Register IPC handlers, including a bootstrap-info endpoint for the splash
+  registerIpcHandlers(ipcMain, () => bootstrapInfo)
+
+  // 5. Open the window
+  createWindow()
 
   // Apply saved theme on launch
   const theme = settingsStore.get('theme')

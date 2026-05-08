@@ -29,6 +29,7 @@
     "electron-store": "^8.2.0",
     "fast-glob": "^3.3.2",
     "lucide-react": "^0.469.0",
+    "node-pty": "^1.0.0",
     "tailwind-merge": "^2.5.0",
     "zustand": "^5.0.0"
   },
@@ -61,6 +62,12 @@
     "files": [
       "dist/**/*",
       "dist-electron/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/system-skills",
+        "to": "system-skills"
+      }
     ],
     "mac": {
       "target": [{ "target": "dmg", "arch": ["universal"] }]
