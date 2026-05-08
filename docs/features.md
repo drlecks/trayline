@@ -179,3 +179,28 @@ Two skills ship with the app. Restored from bundled app resources on every launc
 
 - **`trayline-author`** — takes a free-text description, returns a structured workflow plan (JSON: ordered steps, schemas, recommended skills and MCPs per worker, draft `process.md` per worker)
 - **`trayline-scaffold`** — takes a workflow plan and writes it to disk using bundled JSON/MD templates; can be overridden by power users to add custom defaults to every project
+
+---
+
+## 7.15 Persistent Footer
+
+A thin strip rendered at the bottom of every screen, always visible. The right side shows live AI usage indicators that refresh on a 10-second poll.
+
+**What it shows (right side):**
+- **5h window** — percentage of the active AI agent's 5-hour rolling rate-limit window consumed
+- **Weekly window** — percentage of the agent's weekly rate-limit window consumed
+
+**Behaviour:**
+- Polls the main process every 10 seconds via the `usage:get` IPC channel
+- Values ≥ 80 % render in amber to flag impending throttling
+- When usage data is unavailable (no agent installed, fetch failed, MVP placeholder mode), each indicator shows `—`
+- Hovering the indicators shows a tooltip with the data source (`claude-code` / `placeholder` / `unavailable`) and the timestamp of the last snapshot
+
+**Data source:**
+- The footer queries `usageService.getSnapshot()` in the main process, which delegates to the active AI Terminal Adapter
+- Pre-Phase 4: returns a stable placeholder snapshot so the UI is verifiable
+- Phase 4 onward: the Claude Code adapter (or whichever adapter is configured) reports real values from the CLI's status endpoint
+
+**Left half:** currently empty, reserved for future use (project breadcrumbs, sync status, version, etc.).
+
+See `docs/design-principles.md` → **Footer** for visual specification.

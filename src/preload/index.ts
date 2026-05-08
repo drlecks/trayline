@@ -8,6 +8,7 @@ import type {
   WorkflowMeta,
   StepMeta,
   SkillManifest,
+  UsageSnapshot,
 } from '../shared/types'
 
 const api = {
@@ -38,6 +39,9 @@ const api = {
     listSteps: (project: string, workflow: string): Promise<StepMeta[]> =>
       ipcRenderer.invoke(IPC.project.listSteps, project, workflow),
     listSkills: (): Promise<SkillManifest[]> => ipcRenderer.invoke(IPC.project.listSkills),
+  },
+  usage: {
+    get: (): Promise<UsageSnapshot> => ipcRenderer.invoke(IPC.usage.get),
   },
   platform: process.platform as NodeJS.Platform,
 }

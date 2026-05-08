@@ -74,6 +74,20 @@ export interface StepMeta {
   raw: Record<string, unknown>
 }
 
+// ── Usage / rate-limit windows ────────────────────────────────────────────────
+
+/** Snapshot of the active AI agent's rate-limit window consumption. */
+export interface UsageSnapshot {
+  /** 0–100, percentage of the 5-hour rolling window consumed. null if unknown. */
+  fiveHourPct: number | null
+  /** 0–100, percentage of the weekly window consumed. null if unknown. */
+  weeklyPct: number | null
+  /** Where the values came from. */
+  source: 'placeholder' | 'claude-code' | 'unavailable'
+  /** ISO timestamp of when this snapshot was produced. */
+  updatedAt: string
+}
+
 export interface SkillManifest {
   id: string
   name: string

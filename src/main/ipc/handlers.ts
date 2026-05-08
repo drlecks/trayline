@@ -2,6 +2,7 @@ import { IpcMain, nativeTheme, BrowserWindow } from 'electron'
 import { settingsStore, Settings } from '../services/settings-store'
 import { auditDb } from '../services/audit-db'
 import { projectService } from '../services/project-service'
+import { usageService } from '../services/usage-service'
 import type { BootstrapInfo } from '../../shared/types'
 
 export type { BootstrapInfo }
@@ -54,4 +55,7 @@ export function registerIpcHandlers(
     projectService.listSteps(project, workflow),
   )
   ipcMain.handle('project:listSkills', () => projectService.listSkills())
+
+  // ── Usage / rate-limit windows ────────────────────────────────────────────
+  ipcMain.handle('usage:get', () => usageService.getSnapshot())
 }

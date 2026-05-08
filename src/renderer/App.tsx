@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useThemeStore } from './stores/theme-store'
 import TopBar from './components/layout/TopBar'
+import Footer from './components/layout/Footer'
 import WelcomeSplash from './components/splash/WelcomeSplash'
 
 function applyThemeClass(theme: 'light' | 'dark' | 'system') {
@@ -44,6 +45,7 @@ export default function App() {
       <main className="flex flex-1 overflow-y-auto py-12">
         <WelcomeSplash />
       </main>
+      <Footer />
     </div>
   )
 }
