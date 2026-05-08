@@ -124,7 +124,8 @@ main        ← stable, protected. Never commit here directly.
    ```
 3. Read the phase file in `docs/implementation/` and confirm the scope before writing any code.
 4. Implement all tasks for that phase on this branch — including any required doc updates (see **Keeping Docs in Sync**).
-5. Commit regularly. Each commit should be coherent and leave the branch in a working state.
+5. **As each individual task inside the phase is completed, immediately check it off** in the phase file (`- [ ]` → `- [x]`) and include that change in the same commit that implements it.
+6. Commit regularly. Each commit should be coherent and leave the branch in a working state.
 
 ### Finishing a phase task
 
@@ -140,7 +141,7 @@ main        ← stable, protected. Never commit here directly.
    git merge --no-ff phase/<phase-id> -m "Merge phase/<phase-id> into develop"
    git push origin develop
    ```
-5. Mark the phase as done in `docs/implementation/tasks.md` (check off the checkbox) and commit that change directly on `develop`.
+5. Check off the phase in `docs/implementation/tasks.md` (`- [ ]` → `- [x]`) and commit that change directly on `develop`.
 6. Delete the phase branch:
    ```bash
    git branch -d phase/<phase-id>

@@ -12,16 +12,17 @@ Each task corresponds to a phase file in this folder. Check off tasks as they ar
 1. `git checkout develop && git pull origin develop`
 2. `git checkout -b phase/<phase-id>` (e.g. `phase/phase-0-foundations`)
 3. Read the phase file, implement, commit — including any doc updates.
-4. `git push -u origin phase/<phase-id>`
-5. Ask the user to review. **Do not merge until confirmed.**
-6. On approval: `git checkout develop && git merge --no-ff phase/<phase-id>` → push → delete branch.
-7. Check off the task below and commit directly on `develop`.
+4. As each individual task inside the phase is completed, check it off in the phase file (`- [ ]` → `- [x]`) and commit.
+5. `git push -u origin phase/<phase-id>`
+6. Ask the user to review. **Do not merge until confirmed.**
+7. On approval: `git checkout develop && git merge --no-ff phase/<phase-id>` → push → delete branch.
+8. Check off the phase in the list below and commit directly on `develop`.
 
 ---
 
 ## MVP Phases
 
-- [ ] [Phase 0 — Foundations](./phase-0-foundations.md)
+- [x] [Phase 0 — Foundations](./phase-0-foundations.md)
 - [ ] [Phase 1 — Global App Skills & First-Run Bootstrap](./phase-1-bootstrap.md)
 - [ ] [Phase 2 — Projects & Workflow Author](./phase-2-workflow-author.md)
 - [ ] [Phase 3 — Trays + Manual Cards](./phase-3-trays.md)
