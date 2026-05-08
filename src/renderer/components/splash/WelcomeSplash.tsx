@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Folder, Sparkles, FolderOpen, Package } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { useProjectStore } from '@/stores/project-store'
 import type { BootstrapInfo } from '../../../shared/types'
 
 export default function WelcomeSplash() {
   const [info, setInfo] = useState<BootstrapInfo | null>(null)
+  const setScreen = useProjectStore((s) => s.setScreen)
 
   useEffect(() => {
     window.trayline.app.bootstrapInfo().then(setInfo)
@@ -23,7 +25,7 @@ export default function WelcomeSplash() {
       </p>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full mb-12">
-        <Button variant="outline" size="lg" className="h-auto py-4 flex-col gap-2 items-start text-left" disabled>
+        <Button variant="outline" size="lg" className="h-auto py-4 flex-col gap-2 items-start text-left" onClick={() => setScreen('author')}>
           <Sparkles size={16} strokeWidth={1.5} className="text-neutral-600 dark:text-neutral-400" />
           <div>
             <div className="text-sm font-medium">Create new project</div>
@@ -31,7 +33,7 @@ export default function WelcomeSplash() {
           </div>
         </Button>
 
-        <Button variant="outline" size="lg" className="h-auto py-4 flex-col gap-2 items-start text-left" disabled>
+        <Button variant="outline" size="lg" className="h-auto py-4 flex-col gap-2 items-start text-left" disabled title="Coming in Phase 11">
           <FolderOpen size={16} strokeWidth={1.5} className="text-neutral-600 dark:text-neutral-400" />
           <div>
             <div className="text-sm font-medium">Import project</div>
@@ -39,7 +41,7 @@ export default function WelcomeSplash() {
           </div>
         </Button>
 
-        <Button variant="outline" size="lg" className="h-auto py-4 flex-col gap-2 items-start text-left" disabled>
+        <Button variant="outline" size="lg" className="h-auto py-4 flex-col gap-2 items-start text-left" disabled title="Coming in Phase 11">
           <Package size={16} strokeWidth={1.5} className="text-neutral-600 dark:text-neutral-400" />
           <div>
             <div className="text-sm font-medium">Example project</div>
