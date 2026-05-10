@@ -52,6 +52,7 @@ Everything lives on disk as folders and JSON files. A whole project is a zip you
 - **framer-motion** — small, tasteful animations (status pills, drawer slides)
 
 ### Backend / system
+- **Effect** — typed effect system for main-process service orchestration, dependency injection, resource cleanup, retries, and explicit domain errors
 - **node-pty** — real PTY for spawning `claude` and other CLI agents
 - **chokidar** — file system watcher (detects new cards in trays)
 - **better-sqlite3** — local indexed cache for run history and audit log
@@ -695,6 +696,17 @@ On first launch, the app needs to lay down the global folder structure and seed 
 - Audit log writes for create / mark_ready
 - Tray `state/` folder writes (counters, etc.)
 
+### Phase 3.1 — Effect Migration Foundation (5–10 working days)
+Before expanding into long-running workers, watchers, subprocess lifecycles, and crash recovery, introduce Effect as the main-process implementation style.
+
+- Install `effect` and add a small runtime/helper for running Effect programs at IPC boundaries
+- Define typed backend errors for filesystem, JSON/validation, audit DB, card movement, project/scaffold, adapter execution, timeout, cancellation, and unknown failures
+- Wrap core side-effect dependencies as Effect services/layers: file system, audit DB, settings, AI adapter registry, clock, and ID generation
+- Migrate existing high-value service paths first: card creation/movement, project metadata reads, author/project creation orchestration
+- Keep renderer and preload APIs Promise-based so the UI does not need a broad rewrite
+- Add tests alongside migrated services, especially card movement, malformed JSON handling, audit ordering, adapter failure mapping, and IPC error translation
+- Use the resulting pattern for Phase 4 worker execution, watchers, terminal logging, retries, timeouts, and cleanup
+
 ### Phase 4 — Workers + CLI Execution (2 weeks)
 - Add worker step
 - Worker config UI
@@ -766,7 +778,7 @@ On first launch, the app needs to lay down the global folder structure and seed 
 - Bug bash
 - Build pipelines for macOS, Windows, Linux
 
-**Total MVP estimate: ~11–13 weeks for one full-time developer, faster with two.**
+**Total MVP estimate: ~12–15 weeks for one full-time developer, faster with two.**
 
 ---
 
