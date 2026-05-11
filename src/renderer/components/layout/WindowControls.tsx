@@ -2,7 +2,7 @@ import { Minus, Square, X } from 'lucide-react'
 
 // Rendered only on Windows and Linux — macOS keeps native traffic lights
 export default function WindowControls() {
-  if (window.trayline.platform === 'darwin') return null
+  if (!window.trayline || window.trayline.platform === 'darwin') return null
 
   return (
     <div className="flex items-stretch no-drag">
