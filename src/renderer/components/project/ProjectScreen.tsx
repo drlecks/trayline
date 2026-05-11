@@ -3,9 +3,13 @@ import { Inbox, Cpu, AlertTriangle, RefreshCw, AlertCircle, Plus } from 'lucide-
 import { Button } from '@/components/ui/button'
 import { useProjectStore } from '@/stores/project-store'
 import AddTrayDialog from './AddTrayDialog'
+import AddWorkerDialog from './AddWorkerDialog'
+import AddStepDialog from './AddStepDialog'
 import TrayDetailPanel from './TrayDetailPanel'
+import WorkerDetailPanel from './WorkerDetailPanel'
 import type { StepMeta } from '../../../shared/types'
 import type { CardCounts } from '../../../shared/card'
+import type { WorkerRunEvent, WorkerRunStatus } from '../../../shared/worker-run'
 
 export default function ProjectScreen() {
   const active = useProjectStore((s) => s.active)
@@ -18,7 +22,9 @@ export default function ProjectScreen() {
   const setRegenerateOf = useProjectStore((s) => s.setRegenerateOf)
   const refreshSteps = useProjectStore((s) => s.refreshSteps)
 
-  const [addOpen, setAddOpen] = useState(false)
+  const [pickOpen, setPickOpen] = useState(false)
+  const [addTrayOpen, setAddTrayOpen] = useState(false)
+  const [addWorkerOpen, setAddWorkerOpen] = useState(false)
 
   // Refresh steps whenever the active project changes
   useEffect(() => {
@@ -69,7 +75,7 @@ export default function ProjectScreen() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => setAddOpen(true)}
+              onClick={() => setPickOpen(true)}
               className="justify-start gap-2 text-xs text-neutral-500 mt-2"
             >
               <Plus size={12} strokeWidth={1.75} />
@@ -93,7 +99,9 @@ export default function ProjectScreen() {
         {/* Right canvas */}
         <section className="flex-1 min-w-0 overflow-hidden">
           {selectedStep
-            ? <TrayDetailPanel step={selectedStep} />
+            ? (selectedStep.kind === 'worker'
+                ? <WorkerDetailPanel step={selectedStep} />
+                : <TrayDetailPanel step={selectedStep} />)
             : (
               <div className="h-full flex items-center justify-center text-sm text-neutral-400 dark:text-neutral-600">
                 Select a step on the left to see details
@@ -102,8 +110,44 @@ export default function ProjectScreen() {
         </section>
       </div>
 
-      <AddTrayDialog open={addOpen} onOpenChange={setAddOpen} />
+      <AddStepDialog
+        open={pickOpen}
+        onOpenChange={setPickOpen}
+        onPick={(kind) => {
+          setPickOpen(false)
+          if (kind === 'tray') setAddTrayOpen(true)
+          else setAddWorkerOpen(true)
+        }}
+      />
+      <AddTrayDialog open={addTrayOpen} onOpenChange={setAddTrayOpen} />
+      <AddWorkerDialog open={addWorkerOpen} onOpenChange={setAddWorkerOpen} />
     </div>
+  )
+}
+
+const RAIL_PILL_CLASS: Record<WorkerRunStatus, string> = {
+  pending: 'bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400',
+  running: 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300',
+  awaiting_input: 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300',
+  succeeded: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300',
+  failed: 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300',
+  interrupted: 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300',
+}
+
+const RAIL_PILL_LABEL: Record<WorkerRunStatus, string> = {
+  pending: '·',
+  running: 'Running',
+  awaiting_input: 'Waiting',
+  succeeded: 'Done',
+  failed: 'Failed',
+  interrupted: 'Stopped',
+}
+
+function RailStatusPill({ status }: { status: WorkerRunStatus }) {
+  return (
+    <span className={`text-[9px] font-medium px-1.5 py-0 rounded-full ${RAIL_PILL_CLASS[status]}`}>
+      {RAIL_PILL_LABEL[status]}
+    </span>
   )
 }
 
@@ -114,6 +158,7 @@ function StepCard({ step, selected, onClick }: { step: StepMeta; selected: boole
   const isError = step.id === '99-errors'
 
   const [counts, setCounts] = useState<CardCounts | null>(null)
+  const [workerStatus, setWorkerStatus] = useState<WorkerRunStatus | 'idle'>('idle')
   const active = useProjectStore((s) => s.active)
   const workflow = useProjectStore((s) => s.workflow)
 
@@ -129,6 +174,22 @@ function StepCard({ step, selected, onClick }: { step: StepMeta; selected: boole
     void tick()
     const id = setInterval(tick, 3000)
     return () => { cancelled = true; clearInterval(id) }
+  }, [active, workflow, step.id, step.kind])
+
+  // Worker status pill — read latest run + listen for live events.
+  useEffect(() => {
+    if (!active || !workflow || step.kind !== 'worker') return
+    let cancelled = false
+    void (async () => {
+      const runs = await window.trayline.worker.listRuns(active!.name, workflow!.name, step.id)
+      if (!cancelled) setWorkerStatus(runs[0]?.status ?? 'idle')
+    })()
+    const off = window.trayline.worker.onRunEvent((ev: WorkerRunEvent) => {
+      if (ev.stepId !== step.id) return
+      if (ev.type === 'started') setWorkerStatus('running')
+      if (ev.type === 'finished') setWorkerStatus(ev.status)
+    })
+    return () => { cancelled = true; off() }
   }, [active, workflow, step.id, step.kind])
 
   const total = counts ? counts.pending + counts.ready : 0
@@ -156,10 +217,13 @@ function StepCard({ step, selected, onClick }: { step: StepMeta; selected: boole
         </div>
         <div className="flex-1 min-w-0">
           <div className="text-xs font-medium truncate">{step.name}</div>
-          <div className="text-[11px] text-neutral-500 dark:text-neutral-400 truncate">
-            {step.kind === 'tray' ? 'Tray' : 'Worker'}
+          <div className="text-[11px] text-neutral-500 dark:text-neutral-400 truncate flex items-center gap-1.5">
+            <span>{step.kind === 'tray' ? 'Tray' : 'Worker'}</span>
             {counts && total > 0 && (
-              <span className="ml-1.5">· {total} card{total === 1 ? '' : 's'}</span>
+              <span>· {total} card{total === 1 ? '' : 's'}</span>
+            )}
+            {step.kind === 'worker' && workerStatus !== 'idle' && (
+              <RailStatusPill status={workerStatus} />
             )}
           </div>
         </div>
