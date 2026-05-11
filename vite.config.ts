@@ -21,6 +21,7 @@ const mainExternals = [
   'chokidar',
   'fsevents',
   'fast-glob',
+  'node-pty',
 ]
 
 export default defineConfig({

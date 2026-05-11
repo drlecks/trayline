@@ -12,12 +12,14 @@
 
 import { join } from 'path'
 import fs from 'fs/promises'
-import type { BrowserWindow } from 'electron'
+import { spawn as childSpawn } from 'child_process'
+import { shell, type BrowserWindow } from 'electron'
 import { fsService, Paths } from './fs-service'
 import { projectService } from './project-service'
 import { auditDb } from './audit-db'
 import { adapterRegistry } from '../ai-terminals/registry'
 import { IPC } from '../../shared/ipc-channels'
+import type { AISession } from '../ai-terminals/adapter'
 import type { Card, CardHistoryEntry } from '../../shared/card'
 import type { WorkerRunEvent, WorkerRunMeta, WorkerRunStatus } from '../../shared/worker-run'
 
@@ -212,6 +214,13 @@ function inFlightKey(i: TriggerRunInput): string {
   return `${i.project}/${i.workflow}/${i.stepId}/${i.cardId}`
 }
 
+// Map of runId → live AISession, used to forward interactive keystrokes from
+// the renderer's xterm panel into the running PTY.
+const liveSessions = new Map<string, AISession>()
+function runKey(project: string, workflow: string, stepId: string, runId: string): string {
+  return `${project}/${workflow}/${stepId}/${runId}`
+}
+
 async function triggerRun(input: TriggerRunInput): Promise<TriggerRunResult> {
   const key = inFlightKey(input)
   if (inFlight.has(key)) {
@@ -288,8 +297,10 @@ async function runInner(input: TriggerRunInput): Promise<TriggerRunResult> {
   let output: object | string | null = null
   let runError: string | undefined
 
+  const sessionKey = runKey(project, workflow, stepId, runId)
+  let session: AISession | null = null
   try {
-    const session = await adapter.spawn({
+    session = await adapter.spawn({
       processFile,
       cardData: sourceCard.data,
       skills,
@@ -297,7 +308,11 @@ async function runInner(input: TriggerRunInput): Promise<TriggerRunResult> {
       mcps: [],  // N2.5
       workingDir: runDir,
       timeout: timeoutMs,
+      onAwaitingInputChange: (awaiting) => {
+        emit({ type: 'awaiting_input', project, workflow, stepId, runId, awaiting })
+      },
     })
+    liveSessions.set(sessionKey, session)
 
     // Stream log chunks to renderer as they arrive
     void (async () => {
@@ -320,6 +335,8 @@ async function runInner(input: TriggerRunInput): Promise<TriggerRunResult> {
     output = result.output
   } catch (err) {
     runError = err instanceof Error ? err.message : String(err)
+  } finally {
+    liveSessions.delete(sessionKey)
   }
 
   const endedAt = new Date().toISOString()
@@ -543,11 +560,60 @@ async function recoverOrphanedRuns(): Promise<{ recovered: number }> {
   return { recovered }
 }
 
+// ── Interactive input + external terminal ────────────────────────────────────
+
+async function sendInput(
+  project: string, workflow: string, stepId: string, runId: string, text: string,
+): Promise<{ ok: boolean }> {
+  const session = liveSessions.get(runKey(project, workflow, stepId, runId))
+  if (!session) return { ok: false }
+  await session.sendInput(text)
+  return { ok: true }
+}
+
+/**
+ * Launch the OS terminal in the run directory. The user can then poke around
+ * the artifacts (`prompt.txt`, `output.json`, `terminal.log`) or re-run a
+ * command by hand. We never re-attach to the live PTY — that would need
+ * cross-process PTY handoff which is out of scope.
+ */
+async function openExternalTerminal(
+  project: string, workflow: string, stepId: string, runId: string,
+): Promise<{ ok: boolean; message?: string }> {
+  const dir = join(projectService.paths.stepDir(project, workflow, stepId), 'runs', runId)
+  if (!(await pathExists(dir))) {
+    return { ok: false, message: `Run directory not found: ${dir}` }
+  }
+  try {
+    if (process.platform === 'win32') {
+      // `start` is a cmd builtin, so spawn through cmd and let it pick the
+      // user's default console (Windows Terminal if installed, else conhost).
+      childSpawn('cmd.exe', ['/c', 'start', '""', '/D', dir, 'cmd.exe'], {
+        detached: true, stdio: 'ignore', windowsVerbatimArguments: true,
+      }).unref()
+    } else if (process.platform === 'darwin') {
+      childSpawn('open', ['-a', 'Terminal', dir], { detached: true, stdio: 'ignore' }).unref()
+    } else {
+      // Best-effort on Linux — try x-terminal-emulator, fall back to revealing.
+      const child = childSpawn('x-terminal-emulator', ['--working-directory', dir], {
+        detached: true, stdio: 'ignore',
+      })
+      child.on('error', () => { void shell.openPath(dir) })
+      child.unref()
+    }
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : String(err) }
+  }
+}
+
 export const workerRunner = {
   triggerRun,
   listRuns,
   getRun,
   readTerminalLog,
   recoverOrphanedRuns,
+  sendInput,
+  openExternalTerminal,
 }
 
