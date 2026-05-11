@@ -12,7 +12,8 @@ import type {
   ProjectCreateOutcome,
 } from '../shared/types'
 import type { Card, CardStatus, CardCounts } from '../shared/card'
-import type { PlanFieldDef, PlanTrayStep } from '../shared/workflow-plan'
+import type { PlanFieldDef, PlanTrayStep, PlanWorkerStep } from '../shared/workflow-plan'
+import type { WorkerRun, WorkerRunEvent } from '../shared/worker-run'
 
 const api = {
   settings: {
@@ -75,6 +76,38 @@ const api = {
     }): Promise<void> => ipcRenderer.invoke(IPC.step.update, input),
     delete: (input: { project: string; workflow: string; stepId: string }): Promise<void> =>
       ipcRenderer.invoke(IPC.step.delete, input),
+    addWorker: (input: {
+      project: string
+      workflow: string
+      name: string
+      description?: string
+      icon?: string
+      process_md?: string
+    }): Promise<PlanWorkerStep & { id: string }> =>
+      ipcRenderer.invoke(IPC.step.addWorker, input),
+    readProcess: (project: string, workflow: string, stepId: string): Promise<string> =>
+      ipcRenderer.invoke(IPC.step.readProcess, project, workflow, stepId),
+    updateProcess: (input: {
+      project: string
+      workflow: string
+      stepId: string
+      processMd: string
+    }): Promise<void> => ipcRenderer.invoke(IPC.step.updateProcess, input),
+  },
+  worker: {
+    triggerRun: (project: string, workflow: string, stepId: string, cardId: string): Promise<{ runId: string }> =>
+      ipcRenderer.invoke(IPC.worker.triggerRun, project, workflow, stepId, cardId),
+    listRuns: (project: string, workflow: string, stepId: string): Promise<WorkerRun[]> =>
+      ipcRenderer.invoke(IPC.worker.listRuns, project, workflow, stepId),
+    getRun: (project: string, workflow: string, stepId: string, runId: string): Promise<WorkerRun | null> =>
+      ipcRenderer.invoke(IPC.worker.getRun, project, workflow, stepId, runId),
+    readTerminalLog: (project: string, workflow: string, stepId: string, runId: string): Promise<string> =>
+      ipcRenderer.invoke(IPC.worker.readTerminalLog, project, workflow, stepId, runId),
+    onRunEvent: (handler: (event: WorkerRunEvent) => void): (() => void) => {
+      const listener = (_e: unknown, ev: WorkerRunEvent) => handler(ev)
+      ipcRenderer.on(IPC.worker.onRunEvent, listener)
+      return () => ipcRenderer.off(IPC.worker.onRunEvent, listener)
+    },
   },
   card: {
     list: (project: string, workflow: string, stepId: string, status: CardStatus): Promise<Card[]> =>
