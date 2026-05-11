@@ -9,6 +9,7 @@ import { stepService } from '../services/step-service'
 import { cardService } from '../services/card-service'
 import { workerRunner } from '../services/worker-runner'
 import { watcherService } from '../services/watcher-service'
+import { schedulerService } from '../services/scheduler-service'
 import type { BootstrapInfo } from '../../shared/types'
 import type { CardStatus } from '../../shared/card'
 
@@ -87,8 +88,10 @@ export function registerIpcHandlers(
   // ── Steps (trays/workers) ─────────────────────────────────────────────────
   // Wrap mutating handlers so the workflow's watchers are re-mounted after
   // structural changes (added/removed step, new worker trigger config).
-  const remount = (i: { project: string; workflow: string }) =>
-    watcherService.remountWorkflow(i.project, i.workflow)
+  const remount = async (i: { project: string; workflow: string }) => {
+    await watcherService.remountWorkflow(i.project, i.workflow)
+    await schedulerService.remountWorkflow(i.project, i.workflow)
+  }
 
   ipcMain.handle('step:addTray', async (_: unknown, input: Parameters<typeof stepService.addTray>[0]) => {
     const r = await stepService.addTray(input)
@@ -118,6 +121,9 @@ export function registerIpcHandlers(
   // ── Worker runs ───────────────────────────────────────────────────────────
   ipcMain.handle('worker:triggerRun', (_: unknown, project: string, workflow: string, stepId: string, cardId: string) =>
     workerRunner.triggerRun({ project, workflow, stepId, cardId }),
+  )
+  ipcMain.handle('worker:runNow', (_: unknown, project: string, workflow: string, stepId: string) =>
+    workerRunner.runNow(project, workflow, stepId),
   )
   ipcMain.handle('worker:listRuns', (_: unknown, project: string, workflow: string, stepId: string) =>
     workerRunner.listRuns(project, workflow, stepId),

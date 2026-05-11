@@ -7,6 +7,7 @@ import { auditDb } from './services/audit-db'
 import { systemSkillsService } from './services/system-skills-service'
 import { workerRunner, setRunEventBroadcast } from './services/worker-runner'
 import { watcherService } from './services/watcher-service'
+import { schedulerService } from './services/scheduler-service'
 import { registerIpcHandlers } from './ipc/handlers'
 import { dirnameFromMeta } from './util/paths'
 
@@ -156,6 +157,9 @@ app.whenReady().then(async () => {
     await watcherService.mountAll()
     stage('watcherService.mountAll done')
 
+    await schedulerService.mountAll()
+    stage('schedulerService.mountAll done')
+
     const theme = settingsStore.get('theme')
     if (theme === 'dark') nativeTheme.themeSource = 'dark'
     else if (theme === 'light') nativeTheme.themeSource = 'light'
@@ -180,4 +184,5 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   void watcherService.unmountAll()
+  schedulerService.stopAll()
 })

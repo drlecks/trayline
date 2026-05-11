@@ -12,18 +12,18 @@ Allow workers to run on a schedule instead of (or in addition to) being triggere
 
 ## Tasks
 
-- [ ] **`node-cron` integration** in the main process — register/deregister cron jobs as workers are configured
-- [ ] **Trigger mode UI** in Worker Config tab:
+- [x] **`node-cron` integration** in the main process — register/deregister cron jobs as workers are configured
+- [x] **Trigger mode UI** in Worker Config tab:
   - **On ready** (default) — fires when a card lands in previous tray's `ready/`
   - **Scheduled** — fires on a cron schedule, processes any cards in `ready/`
   - **Manual only** — never fires automatically
-- [ ] **Friendly cron picker UI:**
+- [x] **Friendly cron picker UI:**
   - Preset options: "Every hour", "Every day at 9am", "Every weekday at 9am", "Every 15 minutes"
   - "Custom" option reveals a cron expression input field with validation
-- [ ] **"Run now"** button in worker detail view — manually triggers the worker regardless of trigger mode
-- [ ] **Next scheduled run time** displayed in worker config when trigger is `scheduled`
-- [ ] Cron schedules persist in `step.json` → `trigger.schedule_cron`
-- [ ] Cron jobs reloaded on app launch from all `step.json` files
+- [x] **"Run now"** button in worker detail view — manually triggers the worker regardless of trigger mode
+- [x] **Next scheduled run time** displayed in worker config when trigger is `scheduled`
+- [x] Cron schedules persist in `step.json` → `trigger.schedule_cron`
+- [x] Cron jobs reloaded on app launch from all `step.json` files
 
 ---
 

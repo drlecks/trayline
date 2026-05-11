@@ -97,6 +97,8 @@ const api = {
   worker: {
     triggerRun: (project: string, workflow: string, stepId: string, cardId: string): Promise<{ runId: string }> =>
       ipcRenderer.invoke(IPC.worker.triggerRun, project, workflow, stepId, cardId),
+    runNow: (project: string, workflow: string, stepId: string): Promise<{ triggered: number }> =>
+      ipcRenderer.invoke(IPC.worker.runNow, project, workflow, stepId),
     listRuns: (project: string, workflow: string, stepId: string): Promise<WorkerRun[]> =>
       ipcRenderer.invoke(IPC.worker.listRuns, project, workflow, stepId),
     getRun: (project: string, workflow: string, stepId: string, runId: string): Promise<WorkerRun | null> =>
