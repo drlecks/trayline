@@ -48,6 +48,8 @@ export const IPC = {
     getRun: 'worker:getRun',
     readTerminalLog: 'worker:readTerminalLog',
     onRunEvent: 'worker:onRunEvent',
+    sendInput: 'worker:sendInput',
+    openExternalTerminal: 'worker:openExternalTerminal',
   },
   card: {
     list: 'card:list',

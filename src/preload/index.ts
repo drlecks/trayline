@@ -103,6 +103,10 @@ const api = {
       ipcRenderer.invoke(IPC.worker.getRun, project, workflow, stepId, runId),
     readTerminalLog: (project: string, workflow: string, stepId: string, runId: string): Promise<string> =>
       ipcRenderer.invoke(IPC.worker.readTerminalLog, project, workflow, stepId, runId),
+    sendInput: (project: string, workflow: string, stepId: string, runId: string, text: string): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke(IPC.worker.sendInput, project, workflow, stepId, runId, text),
+    openExternalTerminal: (project: string, workflow: string, stepId: string, runId: string): Promise<{ ok: boolean; message?: string }> =>
+      ipcRenderer.invoke(IPC.worker.openExternalTerminal, project, workflow, stepId, runId),
     onRunEvent: (handler: (event: WorkerRunEvent) => void): (() => void) => {
       const listener = (_e: unknown, ev: WorkerRunEvent) => handler(ev)
       ipcRenderer.on(IPC.worker.onRunEvent, listener)

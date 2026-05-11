@@ -12,17 +12,17 @@ Full embedded terminal experience for watching and interacting with worker runs.
 
 ## Tasks
 
-- [ ] **xterm.js panel** in worker detail — replays `terminal.log` for completed runs
-- [ ] **Live streaming** for active runs — connect xterm.js to the running node-pty session
-- [ ] **Interactive mode** for input-prompting workers:
+- [x] **xterm.js panel** in worker detail — replays `terminal.log` for completed runs
+- [x] **Live streaming** for active runs — connect xterm.js to the running node-pty session
+- [x] **Interactive mode** for input-prompting workers:
   - Detect when CLI process is blocked on input (parse stdout for prompts, or monitor pty state)
   - Status changes to `⚡ Awaiting input`
   - Terminal becomes interactive (user can type)
   - `awaitingInput` flag on `AISession` interface
-- [ ] **"Open in external terminal"** button — detach to the OS terminal (system shell opens with the run's working directory)
-- [ ] **Token estimate display** in run summary — if the adapter can surface this from the CLI output
-- [ ] **Show terminal ↓** toggle in run summary card (Layer 2) that reveals the xterm.js panel (Layer 3)
-- [ ] Scroll, search, and copy in the terminal panel
+- [x] **"Open in external terminal"** button — detach to the OS terminal (system shell opens with the run's working directory)
+- [x] **Token estimate display** in run summary — if the adapter can surface this from the CLI output *(display path wired; Claude `-p` mode does not emit structured usage, so the number is omitted until the adapter gains a real reading)*
+- [x] **Show terminal ↓** toggle in run summary card (Layer 2) that reveals the xterm.js panel (Layer 3)
+- [x] Scroll, search, and copy in the terminal panel
 
 ---
 
