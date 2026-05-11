@@ -52,12 +52,22 @@ Each task corresponds to a phase file in this folder. Check off tasks as they ar
 
 ---
 
+## N3 Phases (Sources & Batch Workers)
+
+- [ ] [Phase N3.1 — Source Engine](./phase-n3-1-source-engine.md)
+- [ ] [Phase N3.2 — Source Step UI](./phase-n3-2-source-ui.md)
+- [ ] [Phase N3.3 — Batch Worker Mode](./phase-n3-3-batch-worker.md)
+- [ ] [Phase N3.4 — Workflow Author Integration](./phase-n3-4-author-support.md)
+
+---
+
 ## Estimates
 
 | Block | Estimate |
 |---|---|
 | MVP (Phases 0–13) | ~11–13 weeks (1 developer) |
 | N2 (Phases N2.1–N2.8) | ~6–7 weeks (1 developer) |
-| **Total** | **~17–20 weeks** |
+| N3 (Phases N3.1–N3.4) | ~3–4 weeks (1 developer) |
+| **Total** | **~20–24 weeks** |
 
-Highest-risk areas: Phase N2.4 (OAuth in Electron has OS-specific quirks), Phase N2.5 (clean MCP integration into the adapter layer).
+Highest-risk areas: Phase N2.4 (OAuth in Electron has OS-specific quirks), Phase N2.5 (clean MCP integration into the adapter layer), Phase N3.1 (atomic dedup index under crash conditions).
