@@ -7,6 +7,8 @@ import { usageService } from '../services/usage-service'
 import { adapterRegistry } from '../ai-terminals/registry'
 import { stepService } from '../services/step-service'
 import { cardService } from '../services/card-service'
+import { workerRunner } from '../services/worker-runner'
+import { watcherService } from '../services/watcher-service'
 import type { BootstrapInfo } from '../../shared/types'
 import type { CardStatus } from '../../shared/card'
 
@@ -83,14 +85,48 @@ export function registerIpcHandlers(
   })
 
   // ── Steps (trays/workers) ─────────────────────────────────────────────────
-  ipcMain.handle('step:addTray', (_: unknown, input: Parameters<typeof stepService.addTray>[0]) =>
-    stepService.addTray(input),
+  // Wrap mutating handlers so the workflow's watchers are re-mounted after
+  // structural changes (added/removed step, new worker trigger config).
+  const remount = (i: { project: string; workflow: string }) =>
+    watcherService.remountWorkflow(i.project, i.workflow)
+
+  ipcMain.handle('step:addTray', async (_: unknown, input: Parameters<typeof stepService.addTray>[0]) => {
+    const r = await stepService.addTray(input)
+    await remount(input)
+    return r
+  })
+  ipcMain.handle('step:addWorker', async (_: unknown, input: Parameters<typeof stepService.addWorker>[0]) => {
+    const r = await stepService.addWorker(input)
+    await remount(input)
+    return r
+  })
+  ipcMain.handle('step:update', async (_: unknown, input: Parameters<typeof stepService.updateStep>[0]) => {
+    await stepService.updateStep(input)
+    await remount(input)
+  })
+  ipcMain.handle('step:delete', async (_: unknown, input: Parameters<typeof stepService.deleteStep>[0]) => {
+    await stepService.deleteStep(input)
+    await remount(input)
+  })
+  ipcMain.handle('step:readProcess', (_: unknown, project: string, workflow: string, stepId: string) =>
+    stepService.readWorkerProcess(project, workflow, stepId),
   )
-  ipcMain.handle('step:update', (_: unknown, input: Parameters<typeof stepService.updateStep>[0]) =>
-    stepService.updateStep(input),
+  ipcMain.handle('step:updateProcess', (_: unknown, input: Parameters<typeof stepService.updateWorkerProcess>[0]) =>
+    stepService.updateWorkerProcess(input),
   )
-  ipcMain.handle('step:delete', (_: unknown, input: Parameters<typeof stepService.deleteStep>[0]) =>
-    stepService.deleteStep(input),
+
+  // ── Worker runs ───────────────────────────────────────────────────────────
+  ipcMain.handle('worker:triggerRun', (_: unknown, project: string, workflow: string, stepId: string, cardId: string) =>
+    workerRunner.triggerRun({ project, workflow, stepId, cardId }),
+  )
+  ipcMain.handle('worker:listRuns', (_: unknown, project: string, workflow: string, stepId: string) =>
+    workerRunner.listRuns(project, workflow, stepId),
+  )
+  ipcMain.handle('worker:getRun', (_: unknown, project: string, workflow: string, stepId: string, runId: string) =>
+    workerRunner.getRun(project, workflow, stepId, runId),
+  )
+  ipcMain.handle('worker:readTerminalLog', (_: unknown, project: string, workflow: string, stepId: string, runId: string) =>
+    workerRunner.readTerminalLog(project, workflow, stepId, runId),
   )
 
   // ── Cards ─────────────────────────────────────────────────────────────────
