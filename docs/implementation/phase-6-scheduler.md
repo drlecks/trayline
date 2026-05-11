@@ -21,9 +21,9 @@ Allow workers to run on a schedule instead of (or in addition to) being triggere
   - Preset options: "Every hour", "Every day at 9am", "Every weekday at 9am", "Every 15 minutes"
   - "Custom" option reveals a cron expression input field with validation
 - [x] **"Run now"** button in worker detail view — manually triggers the worker regardless of trigger mode
-- [ ] **Next scheduled run time** displayed in worker config when trigger is `scheduled`
-- [ ] Cron schedules persist in `step.json` → `trigger.schedule_cron`
-- [ ] Cron jobs reloaded on app launch from all `step.json` files
+- [x] **Next scheduled run time** displayed in worker config when trigger is `scheduled`
+- [x] Cron schedules persist in `step.json` → `trigger.schedule_cron`
+- [x] Cron jobs reloaded on app launch from all `step.json` files
 
 ---
 
