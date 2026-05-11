@@ -249,24 +249,35 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
   const [command, setCommand] = useState(exec.command ?? 'claude')
   const [timeoutSec, setTimeoutSec] = useState(exec.timeout_seconds ?? 180)
   const [retries, setRetries] = useState(exec.retry_attempts ?? 1)
-  const [triggerMode, setTriggerMode] = useState<'on_ready' | 'manual'>(
-    (trigger.mode === 'manual' ? 'manual' : 'on_ready'),
+  const [triggerMode, setTriggerMode] = useState<'on_ready' | 'scheduled' | 'manual'>(
+    trigger.mode === 'scheduled' ? 'scheduled' : trigger.mode === 'manual' ? 'manual' : 'on_ready',
   )
+  const [scheduleCron, setScheduleCron] = useState<string>(trigger.schedule_cron ?? '0 * * * *')
   const [busy, setBusy] = useState(false)
 
   async function save() {
     setBusy(true)
     try {
-      await window.trayline.step.update({
+      await window.trayline!.step.update({
         project, workflow, stepId: step.id,
         patch: {
           execution: { ...exec, command, timeout_seconds: timeoutSec, retry_attempts: retries },
-          trigger: { ...trigger, mode: triggerMode },
+          trigger: {
+            ...trigger,
+            mode: triggerMode,
+            schedule_cron: triggerMode === 'scheduled' ? scheduleCron : null,
+          },
         } as Record<string, unknown>,
       })
       await refreshSteps()
     } finally { setBusy(false) }
   }
+
+  const TRIGGER_OPTIONS: { value: 'on_ready' | 'scheduled' | 'manual'; label: string; desc: string }[] = [
+    { value: 'on_ready', label: 'On ready', desc: 'Run when a card is marked ready in the previous tray.' },
+    { value: 'scheduled', label: 'Scheduled', desc: 'Run on a cron schedule, processing any waiting cards.' },
+    { value: 'manual', label: 'Manual only', desc: 'Never fires automatically — only via "Run now".' },
+  ]
 
   return (
     <div className="p-6 flex flex-col gap-4 max-w-xl">
@@ -298,35 +309,32 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
           />
         </div>
       </div>
+
       <div className="flex flex-col gap-1.5">
         <label className="text-xs text-neutral-500">Trigger mode</label>
         <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => setTriggerMode('on_ready')}
-            className={`flex-1 px-3 py-2 rounded-md border text-left text-xs ${
-              triggerMode === 'on_ready'
-                ? 'border-neutral-900 dark:border-neutral-100 bg-neutral-50 dark:bg-neutral-900'
-                : 'border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-900'
-            }`}
-          >
-            <div className="font-medium">On ready</div>
-            <div className="text-neutral-500 mt-0.5">Run when a card is marked ready in the previous tray.</div>
-          </button>
-          <button
-            type="button"
-            onClick={() => setTriggerMode('manual')}
-            className={`flex-1 px-3 py-2 rounded-md border text-left text-xs ${
-              triggerMode === 'manual'
-                ? 'border-neutral-900 dark:border-neutral-100 bg-neutral-50 dark:bg-neutral-900'
-                : 'border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-900'
-            }`}
-          >
-            <div className="font-medium">Manual</div>
-            <div className="text-neutral-500 mt-0.5">Only runs when you click "Run now".</div>
-          </button>
+          {TRIGGER_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => setTriggerMode(opt.value)}
+              className={`flex-1 px-3 py-2 rounded-md border text-left text-xs ${
+                triggerMode === opt.value
+                  ? 'border-neutral-900 dark:border-neutral-100 bg-neutral-50 dark:bg-neutral-900'
+                  : 'border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-900'
+              }`}
+            >
+              <div className="font-medium">{opt.label}</div>
+              <div className="text-neutral-500 mt-0.5">{opt.desc}</div>
+            </button>
+          ))}
         </div>
       </div>
+
+      {triggerMode === 'scheduled' && (
+        <CronPicker value={scheduleCron} onChange={setScheduleCron} />
+      )}
+
       {(raw.skills?.length ?? 0) > 0 && (
         <div className="flex flex-col gap-1.5">
           <label className="text-xs text-neutral-500">Skills</label>

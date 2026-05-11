@@ -13,7 +13,7 @@ Allow workers to run on a schedule instead of (or in addition to) being triggere
 ## Tasks
 
 - [x] **`node-cron` integration** in the main process — register/deregister cron jobs as workers are configured
-- [ ] **Trigger mode UI** in Worker Config tab:
+- [x] **Trigger mode UI** in Worker Config tab:
   - **On ready** (default) — fires when a card lands in previous tray's `ready/`
   - **Scheduled** — fires on a cron schedule, processes any cards in `ready/`
   - **Manual only** — never fires automatically
