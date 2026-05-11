@@ -475,6 +475,37 @@ async function runInner(input: TriggerRunInput): Promise<TriggerRunResult> {
   return { runId }
 }
 
+// ── Run now (manual trigger) ──────────────────────────────────────────────────
+
+/**
+ * Trigger the worker on all cards currently in the previous tray's ready/.
+ * Returns the number of runs started. Returns 0 if there are no ready cards.
+ */
+async function runNow(project: string, workflow: string, stepId: string): Promise<{ triggered: number }> {
+  const wf = await readWorkflow(project, workflow)
+  const prevStepId = findPrevStep(wf, stepId)
+  if (!prevStepId) return { triggered: 0 }
+
+  const readyDir = join(
+    projectService.paths.stepDir(project, workflow, prevStepId),
+    'cards', 'ready',
+  )
+  let files: string[] = []
+  try { files = await fs.readdir(readyDir) } catch { return { triggered: 0 } }
+
+  const cards = files.filter((f) => f.endsWith('.json') && !f.endsWith('.tmp'))
+  let triggered = 0
+  for (const f of cards) {
+    const cardId = f.replace(/\.json$/, '')
+    void triggerRun({ project, workflow, stepId, cardId }).catch((err) => {
+      // eslint-disable-next-line no-console
+      console.error(`[runNow] triggerRun failed for ${cardId}:`, err)
+    })
+    triggered++
+  }
+  return { triggered }
+}
+
 // ── Run listing / reading ─────────────────────────────────────────────────────
 
 async function listRuns(project: string, workflow: string, stepId: string): Promise<WorkerRunMeta[]> {
@@ -609,6 +640,7 @@ async function openExternalTerminal(
 
 export const workerRunner = {
   triggerRun,
+  runNow,
   listRuns,
   getRun,
   readTerminalLog,

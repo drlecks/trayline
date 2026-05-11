@@ -16,8 +16,23 @@ export default function WorkerDetailPanel({ step }: WorkerDetailPanelProps) {
   const active = useProjectStore((s) => s.active)
   const workflow = useProjectStore((s) => s.workflow)
   const [tab, setTab] = useState<Tab>('instructions')
+  const [runNowBusy, setRunNowBusy] = useState(false)
+  const [runNowFeedback, setRunNowFeedback] = useState<string | null>(null)
 
   const status = useLatestRunStatus(step.id)
+
+  async function handleRunNow() {
+    if (!active || !workflow || !window.trayline) return
+    setRunNowBusy(true)
+    setRunNowFeedback(null)
+    try {
+      const { triggered } = await window.trayline.worker.runNow(active.name, workflow.name, step.id)
+      setRunNowFeedback(triggered > 0 ? `Started ${triggered} run${triggered > 1 ? 's' : ''}` : 'No ready cards')
+    } finally {
+      setRunNowBusy(false)
+      setTimeout(() => setRunNowFeedback(null), 3000)
+    }
+  }
 
   return (
     <div className="flex flex-col w-full h-full overflow-hidden">
@@ -35,6 +50,15 @@ export default function WorkerDetailPanel({ step }: WorkerDetailPanelProps) {
               Worker
               {step.description && <> · {step.description}</>}
             </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {runNowFeedback && (
+              <span className="text-[11px] text-neutral-500">{runNowFeedback}</span>
+            )}
+            <Button size="sm" variant="outline" onClick={handleRunNow} disabled={runNowBusy}>
+              <Play size={12} strokeWidth={2} className="mr-1" />
+              {runNowBusy ? 'Starting…' : 'Run now'}
+            </Button>
           </div>
         </div>
 
