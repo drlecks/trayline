@@ -140,10 +140,48 @@ Cards live in three subfolders: `pending/`, `ready/`, `archived/`.
     "mode": "on_ready | scheduled | manual",
     "schedule_cron": null
   },
+  "batch_mode": false,
+  "batch_max": null,
   "on_success": "advance",
   "on_failure": "send_to_errors"
 }
 ```
+
+When `batch_mode` is `true`, the worker receives all cards currently in the previous step's `ready/` folder as a JSON array (up to `batch_max` items, default unlimited). It produces **one** output card. All source cards are archived after the batch run completes successfully. `batch_mode` is mutually exclusive with `trigger.mode: "on_ready"` — a batch worker must use `scheduled` or `manual` trigger.
+
+### Source `step.json`
+
+```json
+{
+  "id": "00-source",
+  "kind": "source",
+  "name": "Instagram Comments",
+  "description": "Polls for new comments every 5 minutes",
+  "icon": "rss",
+  "color": "#4CB87E",
+  "schedule_cron": "*/5 * * * *",
+  "dedup": {
+    "key": "id",
+    "max_memory": 10000,
+    "first_run": "skip_existing"
+  },
+  "execution": {
+    "command": "claude",
+    "timeout_seconds": 60,
+    "adapter": "claude-code"
+  }
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `kind` | Always `"source"` |
+| `schedule_cron` | Standard cron expression for how often the source runs |
+| `dedup.key` | The field name in each AI-returned JSON item used as the unique identifier |
+| `dedup.max_memory` | Maximum number of IDs stored in `seen-ids.json`; oldest entries pruned when exceeded |
+| `dedup.first_run` | What to do on the very first run: `skip_existing` (default — fetch but discard all, record IDs only), `process_all` (create cards for everything found), `process_last_n` (create cards for the N most recent) |
+
+A Source step is always the **first** step in a workflow. It has no preceding step to read cards from — it generates cards by polling the world.
 
 ### Skill `skill.json`
 
@@ -245,6 +283,49 @@ The renderer writes `lastOpenedProject` whenever the active project changes (ope
         └── meta.json
 ```
 
+### Source
+
+```
+00-source/
+├── step.json
+├── source.md                  # AI instructions — what to fetch and how to format output
+├── state/
+│   ├── seen-ids.json          # [{id: "...", seen_at: "ISO"}], capped at dedup.max_memory
+│   └── counters.json          # {runs_total, items_found, items_new, last_run_at}
+└── cards/
+    ├── ready/                 # New deduplicated items, consumed by the next step
+    └── archived/              # Items already processed downstream
+```
+
+`source.md` instructs the AI what to fetch and specifies the exact JSON output format. It must include the field that matches `dedup.key`. Example:
+
+```markdown
+# Instagram Comments
+
+Use the Instagram MCP to read all comments on post {{config.post_url}}.
+
+For each comment, output a JSON array item with:
+- id: the comment's unique ID (string, used for deduplication)
+- author: username (string)
+- text: comment content (string)
+- posted_at: ISO 8601 timestamp
+
+Return ONLY the JSON array. No explanations, no markdown fences.
+```
+
+#### `seen-ids.json`
+
+```json
+[
+  { "id": "comment_12345", "seen_at": "2026-05-11T09:00:00Z" },
+  { "id": "comment_12346", "seen_at": "2026-05-11T09:00:00Z" }
+]
+```
+
+- Entries are appended after each run.
+- When the array length exceeds `dedup.max_memory`, the oldest entries (by `seen_at`) are pruned.
+- The file is written atomically: written to `seen-ids.json.tmp`, then renamed. This means a crash mid-write never corrupts the dedup index.
+
 ---
 
 ## Atomic Card Movement & Crash Safety
@@ -277,3 +358,12 @@ A card never gets moved partway. The rule: **a card only changes folders when th
 **Card events:** `card_created`, `card_marked_ready`, `run_started`, `run_completed`, `run_failed`, `card_approved`, `card_rejected`
 
 **MCP events:** `mcp_installed`, `mcp_uninstalled`, `mcp_configured`, `mcp_credentials_reset`, `mcp_health_check_failed`, `run_aborted_mcp_not_ready`
+
+**Source events:** `source_run_started`, `source_run_completed`, `source_run_failed`, `source_item_new`
+
+| Event | `details_json` shape |
+|---|---|
+| `source_run_started` | `{ "schedule_cron": "*/5 * * * *" }` |
+| `source_run_completed` | `{ "items_found": 12, "items_new": 3, "duration_ms": 4210 }` |
+| `source_run_failed` | `{ "error": "AI returned invalid JSON", "duration_ms": 1100 }` |
+| `source_item_new` | `{ "item_id": "comment_12347", "card_id": "card_2026-05-11_007" }` — one row per new card created |

@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useCallback } from 'react'
+import cronParser from 'cron-parser'
 import { Cpu, Play } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useProjectStore } from '@/stores/project-store'
@@ -16,8 +17,23 @@ export default function WorkerDetailPanel({ step }: WorkerDetailPanelProps) {
   const active = useProjectStore((s) => s.active)
   const workflow = useProjectStore((s) => s.workflow)
   const [tab, setTab] = useState<Tab>('instructions')
+  const [runNowBusy, setRunNowBusy] = useState(false)
+  const [runNowFeedback, setRunNowFeedback] = useState<string | null>(null)
 
   const status = useLatestRunStatus(step.id)
+
+  async function handleRunNow() {
+    if (!active || !workflow || !window.trayline) return
+    setRunNowBusy(true)
+    setRunNowFeedback(null)
+    try {
+      const { triggered } = await window.trayline.worker.runNow(active.name, workflow.name, step.id)
+      setRunNowFeedback(triggered > 0 ? `Started ${triggered} run${triggered > 1 ? 's' : ''}` : 'No ready cards')
+    } finally {
+      setRunNowBusy(false)
+      setTimeout(() => setRunNowFeedback(null), 3000)
+    }
+  }
 
   return (
     <div className="flex flex-col w-full h-full overflow-hidden">
@@ -35,6 +51,15 @@ export default function WorkerDetailPanel({ step }: WorkerDetailPanelProps) {
               Worker
               {step.description && <> · {step.description}</>}
             </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {runNowFeedback && (
+              <span className="text-[11px] text-neutral-500">{runNowFeedback}</span>
+            )}
+            <Button size="sm" variant="outline" onClick={handleRunNow} disabled={runNowBusy}>
+              <Play size={12} strokeWidth={2} className="mr-1" />
+              {runNowBusy ? 'Starting…' : 'Run now'}
+            </Button>
           </div>
         </div>
 
@@ -249,24 +274,35 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
   const [command, setCommand] = useState(exec.command ?? 'claude')
   const [timeoutSec, setTimeoutSec] = useState(exec.timeout_seconds ?? 180)
   const [retries, setRetries] = useState(exec.retry_attempts ?? 1)
-  const [triggerMode, setTriggerMode] = useState<'on_ready' | 'manual'>(
-    (trigger.mode === 'manual' ? 'manual' : 'on_ready'),
+  const [triggerMode, setTriggerMode] = useState<'on_ready' | 'scheduled' | 'manual'>(
+    trigger.mode === 'scheduled' ? 'scheduled' : trigger.mode === 'manual' ? 'manual' : 'on_ready',
   )
+  const [scheduleCron, setScheduleCron] = useState<string>(trigger.schedule_cron ?? '0 * * * *')
   const [busy, setBusy] = useState(false)
 
   async function save() {
     setBusy(true)
     try {
-      await window.trayline.step.update({
+      await window.trayline!.step.update({
         project, workflow, stepId: step.id,
         patch: {
           execution: { ...exec, command, timeout_seconds: timeoutSec, retry_attempts: retries },
-          trigger: { ...trigger, mode: triggerMode },
+          trigger: {
+            ...trigger,
+            mode: triggerMode,
+            schedule_cron: triggerMode === 'scheduled' ? scheduleCron : null,
+          },
         } as Record<string, unknown>,
       })
       await refreshSteps()
     } finally { setBusy(false) }
   }
+
+  const TRIGGER_OPTIONS: { value: 'on_ready' | 'scheduled' | 'manual'; label: string; desc: string }[] = [
+    { value: 'on_ready', label: 'On ready', desc: 'Run when a card is marked ready in the previous tray.' },
+    { value: 'scheduled', label: 'Scheduled', desc: 'Run on a cron schedule, processing any waiting cards.' },
+    { value: 'manual', label: 'Manual only', desc: 'Never fires automatically — only via "Run now".' },
+  ]
 
   return (
     <div className="p-6 flex flex-col gap-4 max-w-xl">
@@ -298,35 +334,35 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
           />
         </div>
       </div>
+
       <div className="flex flex-col gap-1.5">
         <label className="text-xs text-neutral-500">Trigger mode</label>
         <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => setTriggerMode('on_ready')}
-            className={`flex-1 px-3 py-2 rounded-md border text-left text-xs ${
-              triggerMode === 'on_ready'
-                ? 'border-neutral-900 dark:border-neutral-100 bg-neutral-50 dark:bg-neutral-900'
-                : 'border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-900'
-            }`}
-          >
-            <div className="font-medium">On ready</div>
-            <div className="text-neutral-500 mt-0.5">Run when a card is marked ready in the previous tray.</div>
-          </button>
-          <button
-            type="button"
-            onClick={() => setTriggerMode('manual')}
-            className={`flex-1 px-3 py-2 rounded-md border text-left text-xs ${
-              triggerMode === 'manual'
-                ? 'border-neutral-900 dark:border-neutral-100 bg-neutral-50 dark:bg-neutral-900'
-                : 'border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-900'
-            }`}
-          >
-            <div className="font-medium">Manual</div>
-            <div className="text-neutral-500 mt-0.5">Only runs when you click "Run now".</div>
-          </button>
+          {TRIGGER_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => setTriggerMode(opt.value)}
+              className={`flex-1 px-3 py-2 rounded-md border text-left text-xs ${
+                triggerMode === opt.value
+                  ? 'border-neutral-900 dark:border-neutral-100 bg-neutral-50 dark:bg-neutral-900'
+                  : 'border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-900'
+              }`}
+            >
+              <div className="font-medium">{opt.label}</div>
+              <div className="text-neutral-500 mt-0.5">{opt.desc}</div>
+            </button>
+          ))}
         </div>
       </div>
+
+      {triggerMode === 'scheduled' && (
+        <>
+          <CronPicker value={scheduleCron} onChange={setScheduleCron} />
+          <NextRunTime expr={scheduleCron} />
+        </>
+      )}
+
       {(raw.skills?.length ?? 0) > 0 && (
         <div className="flex flex-col gap-1.5">
           <label className="text-xs text-neutral-500">Skills</label>
@@ -340,6 +376,159 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
       <div className="flex justify-end">
         <Button size="sm" onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save'}</Button>
       </div>
+    </div>
+  )
+}
+
+// ─── Next scheduled run time ─────────────────────────────────────────────────
+
+function getNextRunDate(expr: string): Date | null {
+  try {
+    const interval = cronParser.parseExpression(expr)
+    return interval.next().toDate()
+  } catch {
+    return null
+  }
+}
+
+function formatRelative(date: Date): string {
+  const diff = date.getTime() - Date.now()
+  if (diff < 0) return 'now'
+  const seconds = Math.floor(diff / 1000)
+  if (seconds < 60) return `in ${seconds}s`
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `in ${minutes}m`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `in ${hours}h ${minutes % 60}m`
+  const days = Math.floor(hours / 24)
+  return `in ${days}d ${hours % 24}h`
+}
+
+function NextRunTime({ expr }: { expr: string }) {
+  const computeNext = useCallback(() => getNextRunDate(expr), [expr])
+  const [next, setNext] = useState<Date | null>(computeNext)
+
+  // Recompute once a minute so the display stays fresh
+  useEffect(() => {
+    setNext(computeNext())
+    const id = setInterval(() => setNext(computeNext()), 60_000)
+    return () => clearInterval(id)
+  }, [computeNext])
+
+  if (!next) return null
+
+  return (
+    <div className="flex items-center gap-1.5 text-[11px] text-neutral-500 dark:text-neutral-400">
+      <span>Next run:</span>
+      <span className="font-medium text-neutral-700 dark:text-neutral-300">
+        {next.toLocaleString()}
+      </span>
+      <span>({formatRelative(next)})</span>
+    </div>
+  )
+}
+
+// ─── Cron picker ─────────────────────────────────────────────────────────────
+
+const CRON_PRESETS = [
+  { label: 'Every 15 minutes', value: '*/15 * * * *' },
+  { label: 'Every hour',       value: '0 * * * *' },
+  { label: 'Every day at 9am', value: '0 9 * * *' },
+  { label: 'Every weekday at 9am', value: '0 9 * * 1-5' },
+] as const
+
+/** Validate a cron expression without importing node-cron into the renderer.
+ *  Accepts standard 5-field POSIX cron: min hour dom month dow.
+ *  Allows * /N  N  N-M  N,M in each field.  */
+function isValidCron(expr: string): boolean {
+  const parts = expr.trim().split(/\s+/)
+  if (parts.length !== 5) return false
+  const field = /^(\*|\d+(-\d+)?(,\d+(-\d+)?)*)$|^\*\/\d+$/
+  return parts.every((p) => field.test(p))
+}
+
+interface CronPickerProps {
+  value: string
+  onChange: (v: string) => void
+}
+
+function CronPicker({ value, onChange }: CronPickerProps) {
+  const preset = CRON_PRESETS.find((p) => p.value === value)
+  const [custom, setCustom] = useState(!preset)
+  const [draft, setDraft] = useState(value)
+  const valid = isValidCron(draft)
+
+  // Sync draft when parent changes value (e.g. on step switch)
+  useEffect(() => {
+    setDraft(value)
+    setCustom(!CRON_PRESETS.find((p) => p.value === value))
+  }, [value])
+
+  function pickPreset(v: string) {
+    setCustom(false)
+    setDraft(v)
+    onChange(v)
+  }
+
+  function handleCustomChange(v: string) {
+    setDraft(v)
+    if (isValidCron(v)) onChange(v)
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <label className="text-xs text-neutral-500">Schedule</label>
+      <div className="grid grid-cols-2 gap-1.5">
+        {CRON_PRESETS.map((p) => (
+          <button
+            key={p.value}
+            type="button"
+            onClick={() => pickPreset(p.value)}
+            className={`px-3 py-2 rounded-md border text-left text-xs ${
+              !custom && value === p.value
+                ? 'border-neutral-900 dark:border-neutral-100 bg-neutral-50 dark:bg-neutral-900'
+                : 'border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-900'
+            }`}
+          >
+            {p.label}
+            <span className="block text-[10px] text-neutral-400 font-mono mt-0.5">{p.value}</span>
+          </button>
+        ))}
+        <button
+          type="button"
+          onClick={() => setCustom(true)}
+          className={`px-3 py-2 rounded-md border text-left text-xs ${
+            custom
+              ? 'border-neutral-900 dark:border-neutral-100 bg-neutral-50 dark:bg-neutral-900'
+              : 'border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-900'
+          }`}
+        >
+          Custom expression
+          <span className="block text-[10px] text-neutral-400 font-mono mt-0.5">cron syntax</span>
+        </button>
+      </div>
+      {custom && (
+        <div className="flex flex-col gap-1">
+          <input
+            value={draft}
+            onChange={(e) => handleCustomChange(e.target.value)}
+            placeholder="*/30 9-17 * * 1-5"
+            className={`rounded-md border px-3 py-1.5 text-xs font-mono ${
+              valid
+                ? 'border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950'
+                : 'border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-950/30'
+            }`}
+          />
+          {!valid && (
+            <p className="text-[11px] text-red-600 dark:text-red-400">
+              Invalid cron expression — use 5 fields: minute hour day month weekday
+            </p>
+          )}
+          {valid && (
+            <p className="text-[11px] text-neutral-400 font-mono">{draft}</p>
+          )}
+        </div>
+      )}
     </div>
   )
 }
