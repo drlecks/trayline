@@ -44,6 +44,7 @@ export const IPC = {
   },
   worker: {
     triggerRun: 'worker:triggerRun',
+    runNow: 'worker:runNow',
     listRuns: 'worker:listRuns',
     getRun: 'worker:getRun',
     readTerminalLog: 'worker:readTerminalLog',

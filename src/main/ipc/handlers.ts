@@ -122,6 +122,9 @@ export function registerIpcHandlers(
   ipcMain.handle('worker:triggerRun', (_: unknown, project: string, workflow: string, stepId: string, cardId: string) =>
     workerRunner.triggerRun({ project, workflow, stepId, cardId }),
   )
+  ipcMain.handle('worker:runNow', (_: unknown, project: string, workflow: string, stepId: string) =>
+    workerRunner.runNow(project, workflow, stepId),
+  )
   ipcMain.handle('worker:listRuns', (_: unknown, project: string, workflow: string, stepId: string) =>
     workerRunner.listRuns(project, workflow, stepId),
   )
