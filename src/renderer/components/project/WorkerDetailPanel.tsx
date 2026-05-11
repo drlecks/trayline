@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useCallback } from 'react'
+import cronParser from 'cron-parser'
 import { Cpu, Play } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useProjectStore } from '@/stores/project-store'
@@ -356,7 +357,10 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
       </div>
 
       {triggerMode === 'scheduled' && (
-        <CronPicker value={scheduleCron} onChange={setScheduleCron} />
+        <>
+          <CronPicker value={scheduleCron} onChange={setScheduleCron} />
+          <NextRunTime expr={scheduleCron} />
+        </>
       )}
 
       {(raw.skills?.length ?? 0) > 0 && (
@@ -372,6 +376,54 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
       <div className="flex justify-end">
         <Button size="sm" onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save'}</Button>
       </div>
+    </div>
+  )
+}
+
+// ─── Next scheduled run time ─────────────────────────────────────────────────
+
+function getNextRunDate(expr: string): Date | null {
+  try {
+    const interval = cronParser.parseExpression(expr)
+    return interval.next().toDate()
+  } catch {
+    return null
+  }
+}
+
+function formatRelative(date: Date): string {
+  const diff = date.getTime() - Date.now()
+  if (diff < 0) return 'now'
+  const seconds = Math.floor(diff / 1000)
+  if (seconds < 60) return `in ${seconds}s`
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `in ${minutes}m`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `in ${hours}h ${minutes % 60}m`
+  const days = Math.floor(hours / 24)
+  return `in ${days}d ${hours % 24}h`
+}
+
+function NextRunTime({ expr }: { expr: string }) {
+  const computeNext = useCallback(() => getNextRunDate(expr), [expr])
+  const [next, setNext] = useState<Date | null>(computeNext)
+
+  // Recompute once a minute so the display stays fresh
+  useEffect(() => {
+    setNext(computeNext())
+    const id = setInterval(() => setNext(computeNext()), 60_000)
+    return () => clearInterval(id)
+  }, [computeNext])
+
+  if (!next) return null
+
+  return (
+    <div className="flex items-center gap-1.5 text-[11px] text-neutral-500 dark:text-neutral-400">
+      <span>Next run:</span>
+      <span className="font-medium text-neutral-700 dark:text-neutral-300">
+        {next.toLocaleString()}
+      </span>
+      <span>({formatRelative(next)})</span>
     </div>
   )
 }
