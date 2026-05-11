@@ -26,7 +26,6 @@ Each task corresponds to a phase file in this folder. Check off tasks as they ar
 - [x] [Phase 1 — Global App Skills & First-Run Bootstrap](./phase-1-bootstrap.md)
 - [x] [Phase 2 — Projects & Workflow Author](./phase-2-workflow-author.md)
 - [x] [Phase 3 — Trays + Manual Cards](./phase-3-trays.md)
-- [ ] [Phase 3.1 — Effect Migration Foundation](./phase-3.1-effect-migration.md)
 - [ ] [Phase 4 — Workers + CLI Execution](./phase-4-workers.md)
 - [ ] [Phase 5 — Terminal Integration](./phase-5-terminal.md)
 - [ ] [Phase 6 — Skills & Context Packs](./phase-6-skills.md)
@@ -57,8 +56,8 @@ Each task corresponds to a phase file in this folder. Check off tasks as they ar
 
 | Block | Estimate |
 |---|---|
-| MVP (Phases 0–13, including Phase 3.1) | ~12–15 weeks (1 developer) |
+| MVP (Phases 0–13) | ~11–13 weeks (1 developer) |
 | N2 (Phases N2.1–N2.8) | ~6–7 weeks (1 developer) |
-| **Total** | **~18–22 weeks** |
+| **Total** | **~17–20 weeks** |
 
-Highest-risk areas: Phase 3.1 (migration discipline without breaking existing behavior), Phase 4 (worker execution and crash recovery), Phase N2.4 (OAuth in Electron has OS-specific quirks), Phase N2.5 (clean MCP integration into the adapter layer).
+Highest-risk areas: Phase N2.4 (OAuth in Electron has OS-specific quirks), Phase N2.5 (clean MCP integration into the adapter layer).

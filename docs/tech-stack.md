@@ -25,7 +25,6 @@
 
 ## Backend / System (Main Process)
 
-- **Effect** — typed effect system for main-process service orchestration, dependency injection, resource cleanup, retries, and explicit domain errors
 - **node-pty** — real PTY for spawning `claude` and other CLI agents
 - **chokidar** — file system watcher (detects new cards in trays)
 - **better-sqlite3** — local indexed cache for run history and audit log
@@ -33,22 +32,6 @@
 - **node-cron** — scheduler for workers that poll on an interval
 - **fast-glob** — folder scanning
 - **keytar** — OS keychain access for MCP credentials (Keychain on macOS, Credential Manager on Windows, libsecret on Linux)
-
----
-
-## Effect Usage Guidelines
-
-Trayline uses **Effect** first in the Electron main process, where most high-risk side effects live: file system writes, SQLite mutations, subprocess execution, watchers, scheduler jobs, import/export, and AI adapter calls.
-
-- Use `Effect` for new main-process service methods that touch files, SQLite, subprocesses, timers, watchers, network, or OS resources.
-- Model recoverable failures as typed domain errors instead of throwing generic `Error` values.
-- Keep domain transformations pure where practical, and wrap side effects at the boundary.
-- Prefer Effect services/layers for dependencies such as file system access, audit log access, AI adapters, clocks, IDs, settings, and path resolution.
-- IPC handlers are the bridge back to Electron: run Effect programs at the handler boundary and convert typed failures into stable renderer-facing error shapes.
-- Renderer code can keep React, Zustand, and `Promise`-based IPC calls unless a screen has enough async orchestration to justify a small Effect wrapper.
-- Existing Promise-based code can remain until it is touched for feature work, but new Phase 4+ backend code should follow the Effect style.
-
-The migration is intentionally incremental. The goal is better reliability and testability around side effects, not a whole-app rewrite.
 
 ---
 
