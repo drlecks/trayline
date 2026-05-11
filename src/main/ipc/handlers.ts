@@ -128,6 +128,12 @@ export function registerIpcHandlers(
   ipcMain.handle('worker:readTerminalLog', (_: unknown, project: string, workflow: string, stepId: string, runId: string) =>
     workerRunner.readTerminalLog(project, workflow, stepId, runId),
   )
+  ipcMain.handle('worker:sendInput', (_: unknown, project: string, workflow: string, stepId: string, runId: string, text: string) =>
+    workerRunner.sendInput(project, workflow, stepId, runId, text),
+  )
+  ipcMain.handle('worker:openExternalTerminal', (_: unknown, project: string, workflow: string, stepId: string, runId: string) =>
+    workerRunner.openExternalTerminal(project, workflow, stepId, runId),
+  )
 
   // ── Cards ─────────────────────────────────────────────────────────────────
   ipcMain.handle('card:list', (_: unknown, project: string, workflow: string, stepId: string, status: CardStatus) =>

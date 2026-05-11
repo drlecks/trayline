@@ -33,6 +33,11 @@ export interface SpawnOptions {
   workingDir: string
   /** Hard timeout in milliseconds. */
   timeout: number
+  /**
+   * Notifies when the session flips between awaiting user input and not.
+   * Adapters that never block on input (e.g. mock) may ignore this.
+   */
+  onAwaitingInputChange?: (awaiting: boolean) => void
 }
 
 export interface AISessionResult {
