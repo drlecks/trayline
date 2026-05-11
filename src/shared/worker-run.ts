@@ -35,4 +35,5 @@ export type WorkerRun = WorkerRunMeta
 export type WorkerRunEvent =
   | { type: 'started'; project: string; workflow: string; stepId: string; runId: string; cardId: string }
   | { type: 'log'; project: string; workflow: string; stepId: string; runId: string; chunk: string }
+  | { type: 'awaiting_input'; project: string; workflow: string; stepId: string; runId: string; awaiting: boolean }
   | { type: 'finished'; project: string; workflow: string; stepId: string; runId: string; status: WorkerRunStatus; error?: string }

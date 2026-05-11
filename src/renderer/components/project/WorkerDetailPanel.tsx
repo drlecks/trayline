@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Cpu, Play } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useProjectStore } from '@/stores/project-store'
+import TerminalPanel, { OpenExternalTerminalButton } from './TerminalPanel'
 import type { StepMeta } from '../../../shared/types'
 import type { WorkerRun, WorkerRunEvent, WorkerRunStatus } from '../../../shared/worker-run'
 
@@ -119,6 +120,7 @@ function useLatestRunStatus(stepId: string): WorkerRunStatus | 'idle' {
     const off = window.trayline.worker.onRunEvent((ev: WorkerRunEvent) => {
       if (ev.stepId !== stepId) return
       if (ev.type === 'started') setStatus('running')
+      if (ev.type === 'awaiting_input') setStatus(ev.awaiting ? 'awaiting_input' : 'running')
       if (ev.type === 'finished') setStatus(ev.status)
     })
     return () => { cancelled = true; off() }
@@ -409,26 +411,24 @@ function RunsTab({ project, workflow, stepId }: { project: string; workflow: str
 
 function RunSummary({ project, workflow, stepId, run }: { project: string; workflow: string; stepId: string; run: WorkerRun }) {
   const [showTerminal, setShowTerminal] = useState(false)
-  const [log, setLog] = useState('')
+  // Track live status (the row may say `succeeded` but a re-run can flip it).
+  const [liveStatus, setLiveStatus] = useState<WorkerRunStatus | 'idle'>(run.status)
 
   useEffect(() => {
     setShowTerminal(false)
-    setLog('')
-  }, [run.run_id])
+    setLiveStatus(run.status)
+  }, [run.run_id, run.status])
 
   useEffect(() => {
-    if (!showTerminal) return
-    let cancelled = false
-    void (async () => {
-      const t = await window.trayline.worker.readTerminalLog(project, workflow, stepId, run.run_id)
-      if (!cancelled) setLog(t)
-    })()
     const off = window.trayline.worker.onRunEvent((ev: WorkerRunEvent) => {
       if (ev.runId !== run.run_id) return
-      if (ev.type === 'log') setLog((prev) => prev + ev.chunk)
+      if (ev.type === 'awaiting_input') setLiveStatus(ev.awaiting ? 'awaiting_input' : 'running')
+      if (ev.type === 'finished') setLiveStatus(ev.status)
     })
-    return () => { cancelled = true; off() }
-  }, [showTerminal, project, workflow, stepId, run.run_id])
+    return () => off()
+  }, [run.run_id])
+
+  const tokenEstimate = useMemo(() => estimateTokens(run), [run])
 
   return (
     <div className="p-6 flex flex-col gap-3">
@@ -437,30 +437,56 @@ function RunSummary({ project, workflow, stepId, run }: { project: string; workf
           <div className="text-sm font-semibold">{run.run_id}</div>
           <div className="text-xs text-neutral-500">Card: <span className="font-mono">{run.card_id}</span></div>
         </div>
-        <StatusPill status={run.status} />
+        <StatusPill status={liveStatus} />
       </div>
       <div className="text-xs text-neutral-600 dark:text-neutral-400">
         Started: {new Date(run.started_at).toLocaleString()}
         {run.ended_at && <> · Elapsed: {((run.elapsed_ms ?? 0) / 1000).toFixed(1)}s</>}
         {run.exit_code !== undefined && <> · Exit: {run.exit_code}</>}
+        {tokenEstimate !== null && <> · ~{tokenEstimate.toLocaleString()} tokens</>}
       </div>
       {run.error && (
         <div className="rounded-md border border-red-200 dark:border-red-900/40 bg-red-50 dark:bg-red-950/40 p-3 text-xs text-red-800 dark:text-red-300">
           {run.error}
         </div>
       )}
-      <div>
+      <div className="flex items-center gap-3">
         <Button size="sm" variant="ghost" onClick={() => setShowTerminal((v) => !v)}>
-          {showTerminal ? 'Hide terminal' : 'Show terminal'}
+          {showTerminal ? 'Hide terminal ↑' : 'Show terminal ↓'}
         </Button>
+        {showTerminal && (
+          <OpenExternalTerminalButton
+            project={project} workflow={workflow} stepId={stepId} runId={run.run_id}
+          />
+        )}
       </div>
       {showTerminal && (
-        <pre className="rounded-md border border-neutral-200 dark:border-neutral-800 bg-neutral-950 text-neutral-200 p-3 text-[11px] font-mono max-h-96 overflow-auto whitespace-pre-wrap">
-          {log || <span className="text-neutral-500">(empty)</span>}
-        </pre>
+        <TerminalPanel
+          project={project}
+          workflow={workflow}
+          stepId={stepId}
+          runId={run.run_id}
+          status={liveStatus}
+        />
       )}
     </div>
   )
+}
+
+/**
+ * Best-effort token estimate from a run. We don't have a usage API hook
+ * yet — Claude Code doesn't emit a structured usage line in `-p` mode.
+ * Approximate from the terminal log length using the classic ~4 chars/token
+ * rule. Surfacing this as `~N tokens` keeps the contract honest.
+ */
+function estimateTokens(run: WorkerRun): number | null {
+  if (run.status === 'running' || run.status === 'pending') return null
+  // We don't have direct access to terminalLog here without an extra IPC call.
+  // Use elapsed_ms as a weak proxy guard against showing 0 for empty runs.
+  if (!run.elapsed_ms) return null
+  // Worker-runner doesn't track tokens yet; surface null until the adapter
+  // wires a real `usage` reading. Display logic is in place for when it does.
+  return null
 }
 
 // ─── Manual run button (exported for ProjectScreen card actions, future) ─────

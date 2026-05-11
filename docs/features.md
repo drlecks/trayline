@@ -132,9 +132,9 @@ Cron shown as a friendly picker: "Every hour", "Every weekday at 9am", "Custom (
 
 **Layer 3 — Embedded terminal**
 - xterm.js panel with saved `terminal.log` (replay for completed runs, live stream for active)
-- Scroll, search, copy
-- **Open in interactive mode** — lets the user type into the running process (only enabled if awaiting input)
-- **Open in external terminal** — detach to the OS terminal
+- Scroll, search (Ctrl/Cmd+F), copy
+- **Interactive typing** — keystrokes flow straight into the running PTY whenever the run is `running` or `awaiting_input`; the panel is read-only after the run ends
+- **Open in external terminal** — launches the OS terminal (Windows Terminal / Terminal.app / x-terminal-emulator) in the run directory so the user can re-execute by hand
 
 The user never has to open the terminal to use Trayline. But it's always one click away.
 
