@@ -53,6 +53,8 @@
 
 ## Status Indicators on Step Cards
 
+**Source** — shows "N new · M seen" after the last run, plus a countdown to the next scheduled run ("next: 3m"). A `⚠ Failed` state with red dot appears if the last run errored. A `⏸ Paused` state appears when the schedule is suspended.
+
 **Tray** — shows count of cards in `pending` + `ready`. A small dot turns amber if anything is overdue (SLA), red if errors.
 
 **Worker** — shows `idle`, `running ⚙`, `failed ⚠`, with last run time underneath.
@@ -90,7 +92,8 @@ Typography: 11 px monospace (JetBrains Mono), tabular numerals so digits don't r
 ## Color Discipline
 
 - One accent color per project, set in project settings (default soft blue)
-- Trays = blue family / Workers = orange family / Errors = red — but desaturated, not vivid
+- Sources = green family / Trays = blue family / Workers = orange family / Errors = red — but desaturated, not vivid
+- Default source color: `#4CB87E` (muted green). Distinct from tray blue and worker orange; communicates "data coming in from the world."
 - Background: `#FAFAF9` (warm off-white) light mode / `#0F0F0F` dark mode
 - Minimum 24px around content blocks
 
@@ -108,6 +111,7 @@ Typography: 11 px monospace (JetBrains Mono), tabular numerals so digits don't r
 ## Iconography (lucide-react)
 
 Consistent set per concept:
+- `rss` — sources (the "data coming in from the world" metaphor)
 - `inbox` — trays
 - `cpu` — workers
 - `alert-triangle` — errors

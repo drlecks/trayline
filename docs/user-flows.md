@@ -147,3 +147,47 @@ Clicking an example fills the textbox so the user can edit before submitting.
 5. Wizard steps: `info`, `api_key`, `text_field`, `select`, `oauth` (opens browser, captures callback), `test_connection`
 6. Credentials stored in OS keychain via keytar — never in plain files
 7. If a worker has an MCP marked but not Ready, the rail card shows a ⚠ triangle with tooltip before the user can run it
+
+---
+
+## 6.12 Adding a Source Step
+
+1. Click **+ Add step** at the bottom of the left rail
+2. Small modal shows three options: **Tray**, **Worker**, **Source**
+3. Inline form:
+   - **Name** (e.g. "Instagram Comments")
+   - **Schedule** — friendly picker ("Every 5 minutes", "Every hour", "Custom") + cron expression preview
+   - **Dedup key** — the field name in each item the AI returns that uniquely identifies it (e.g. `id`)
+4. Clicking **Create** scaffolds the Source step folder with a blank `source.md`, default `step.json`, and empty `state/` directory
+5. The Source step is placed at the top of the workflow rail (Source is always the first step)
+6. The **Source** tab opens automatically so the user can write their `source.md`
+7. A prompt hint appears in the editor: *"Write instructions for what the AI should fetch. End with: Return ONLY the JSON array. No explanations, no markdown fences."*
+8. User clicks **Run now** to test before relying on the schedule — the terminal panel shows the raw AI output and the dedup results
+
+---
+
+## 6.13 A Source Step Runs
+
+Triggered automatically by the cron scheduler, or manually via **Run now**:
+
+1. **Scheduler fires** — node-cron matches the `schedule_cron` expression and triggers the source runner
+2. **Load dedup state** — source runner reads `state/seen-ids.json` into memory; if the file is absent (first run), the set is empty
+3. **Spawn AI adapter** — source runner spawns the configured adapter (e.g. `claude-code`) with `source.md` as the process instructions, no card input
+4. **AI returns JSON array** — the adapter exits; the runner parses the output as a JSON array; if the output is not valid JSON or is not an array, the run is marked `source_run_failed` and the error is written to the audit log
+5. **Dedup loop** — for each item in the array:
+   - Extract `item[dedup.key]`
+   - If the key is already in `seen-ids`, skip
+   - If the key is new: write a card JSON file to `cards/ready/`, append `{ id, seen_at }` to the in-memory seen set, emit a `source_item_new` audit event
+6. **Persist dedup index** — write the updated seen set to `state/seen-ids.json.tmp`, then rename to `state/seen-ids.json` (atomic); prune oldest entries if length exceeds `max_memory`
+7. **Update counters** — write `state/counters.json` with updated `runs_total`, `items_found`, `items_new`, `last_run_at`
+8. **Emit completion event** — IPC event fires to the renderer; the left rail card updates to show "N new · M seen"
+9. **Next step picks up cards** — the step after the Source (typically a Tray or Worker) has a chokidar watcher on `cards/ready/`; new files trigger normal card handling
+
+**On first run (`first_run: skip_existing`):**
+- All items are added to the seen index but no cards are created
+- The left rail shows "0 new · N seen (first run — existing items skipped)"
+- On subsequent runs, only items with IDs not in the index become cards
+
+**On crash mid-run:**
+- If the app crashes after AI output but before `seen-ids.json` is written, the `seen-ids.json.tmp` file is the signal — on next launch, if `.tmp` exists, the runner discards it and replays using the last good `seen-ids.json`
+- Cards already written to `ready/` in a crashed run may be duplicates on the next run; this is acceptable (at-least-once delivery) and noted in the audit log

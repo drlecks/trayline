@@ -205,3 +205,122 @@ A thin strip rendered at the bottom of every screen, always visible. The right s
 **Left half:** currently empty, reserved for future use (project breadcrumbs, sync status, version, etc.).
 
 See `docs/design-principles.md` → **Footer** for visual specification.
+
+---
+
+## 7.16 Source Step
+
+### Left Rail Card
+
+The Source step card in the left rail displays:
+
+```
+┌────────────┐
+│ ⌁ Comments │   ← name, rss icon
+│ 5 new · 23 seen │   ← after last run
+│ next: 3m   │   ← countdown to next scheduled run
+└────────────┘
+```
+
+Status states on the left rail card:
+
+| State | Display |
+|---|---|
+| Idle (scheduled) | countdown to next run: `next: 3m` |
+| Running | `⚙ Fetching...` — animated, accent color |
+| Done | `5 new · 23 seen` — green accent, fades to normal after 30s |
+| Failed | `⚠ Failed` — red triangle; last error shown in detail panel |
+| Never run | `Not run yet` — gray |
+
+### Source Detail Panel (Right Canvas)
+
+Two tabs: **Source** and **Config**.
+
+**Source tab** — full-screen markdown editor for `source.md`. Same editor as the Worker instructions editor (side preview, token estimate, variable autocomplete). The user writes what the AI should fetch and the exact JSON output format it must return.
+
+**Config tab:**
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│  Name          [Instagram Comments              ]            │
+│  Description   [Polls for new comments every 5 min]          │
+│                                                              │
+│  Schedule      [Every 5 minutes            ▼] [Custom...]   │
+│                cron: */5 * * * *                             │
+│                                                              │
+│  Dedup key     [id                          ]               │
+│  Max memory    [10000                       ]               │
+│                                                              │
+│  First run     ○ Skip existing (default)                     │
+│                ○ Process all                                 │
+│                ○ Process last N  [N: ___]                    │
+│                                                              │
+│  Adapter       [claude-code ▼]   Timeout [60s]              │
+│                                                              │
+│  [Run now]   [Pause schedule]                               │
+└──────────────────────────────────────────────────────────────┘
+```
+
+**Schedule picker** shows friendly labels ("Every 5 minutes", "Every hour", "Every day at 9am", "Custom") and renders the resulting cron expression below the picker so users can verify it.
+
+**First run** mode only applies the very first time the source runs (when `seen-ids.json` is empty or absent). After the first run it has no effect.
+
+**Run now** fires the source immediately, outside the cron schedule. Useful for testing `source.md` before relying on the schedule.
+
+**Pause schedule** suspends the cron without deleting the step. The left rail card shows `⏸ Paused`.
+
+### Run History
+
+A **Runs** sub-tab (inside the Config tab, or a third top-level tab) shows a table of past source runs:
+
+| Column | Content |
+|---|---|
+| Time | ISO timestamp |
+| Duration | ms or seconds |
+| Items found | Total items the AI returned |
+| Items new | Cards created this run |
+| Status | ✓ / ⚠ |
+
+Clicking a row shows the raw AI output, the list of new IDs found, and any error detail.
+
+---
+
+## 7.17 Batch Worker Mode
+
+Workers have an optional **Batch mode** toggle in their Config tab. When enabled:
+
+- The worker receives **all** cards currently in the previous step's `ready/` folder as a JSON array (up to `batch_max` items).
+- It produces **one** output card.
+- All input cards are archived after the batch run completes successfully.
+- The trigger must be `scheduled` or `manual` — batch workers do not fire on individual card arrivals.
+
+### Config Tab (Batch toggle)
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│  Batch mode    [●  On]                                        │
+│  Max cards     [50    ]   (leave blank for no limit)          │
+└──────────────────────────────────────────────────────────────┘
+```
+
+When batch mode is on, the left rail card shows a stacked-cards icon to distinguish it visually from a single-card worker.
+
+### Typical use case
+
+A Source step polls Hackernews every 30 minutes and creates one card per new story. A Batch Worker runs once a day on a schedule, picks up all accumulated story cards, and produces a single digest email card. The digest worker's `process.md` receives the full array and summarises everything into one output.
+
+### Input format
+
+The batch worker's AI receives a JSON object:
+
+```json
+{
+  "cards": [
+    { "id": "card_001", "data": { ... } },
+    { "id": "card_002", "data": { ... } }
+  ],
+  "count": 2
+}
+```
+
+The `process.md` instructs the AI how to synthesise the array into one output.
