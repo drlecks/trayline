@@ -4,6 +4,6 @@ import type { TraylineAPI } from '../preload/index'
 
 declare global {
   interface Window {
-    trayline: TraylineAPI
+    trayline?: TraylineAPI
   }
 }
