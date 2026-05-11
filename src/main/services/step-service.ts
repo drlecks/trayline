@@ -5,7 +5,7 @@ import { join } from 'path'
 import fs from 'fs/promises'
 import { fsService } from './fs-service'
 import { projectService } from './project-service'
-import type { PlanFieldDef, PlanTrayStep } from '../../shared/workflow-plan'
+import type { PlanFieldDef, PlanTrayStep, PlanWorkerStep } from '../../shared/workflow-plan'
 
 interface AddTrayInput {
   project: string
@@ -112,6 +112,111 @@ async function insertStepIntoWorkflow(project: string, workflow: string, newId: 
   await fsService.writeJsonAtomic(wfPath, { ...wf, step_ids: next })
 }
 
+interface AddWorkerInput {
+  project: string
+  workflow: string
+  name: string
+  description?: string
+  icon?: string
+  process_md?: string
+}
+
+const DEFAULT_PROCESS_MD = `# Worker Instructions
+
+You are processing a card in the workflow.
+
+## Input
+
+The card you are processing is provided as JSON:
+
+\`\`\`
+{{card.data}}
+\`\`\`
+
+## What to do
+
+(Replace this section with specific instructions for what this worker should do.)
+
+## Output
+
+Reply with a single JSON object describing the result. Do not include any prose.
+
+\`\`\`json
+{
+  "summary": "<one-line summary>",
+  "fields": {
+    "<field_id>": "<value>"
+  }
+}
+\`\`\`
+`
+
+async function addWorker(input: AddWorkerInput): Promise<PlanWorkerStep & { id: string }> {
+  const prefix = await nextStepPrefix(input.project, input.workflow)
+  const id = `${prefix}-${slugify(input.name) || 'worker'}`
+  const stepDir = projectService.paths.stepDir(input.project, input.workflow, id)
+
+  if (await pathExists(stepDir)) {
+    throw new Error(`Step already exists: ${id}`)
+  }
+
+  await fs.mkdir(stepDir, { recursive: true })
+  await fs.mkdir(join(stepDir, 'state'), { recursive: true })
+  await fs.mkdir(join(stepDir, 'runs'), { recursive: true })
+
+  const stepJson = {
+    id,
+    kind: 'worker' as const,
+    name: input.name,
+    description: input.description ?? '',
+    color: '#F7A14F',
+    icon: input.icon ?? 'cpu',
+    skills: [] as string[],
+    mcps: [] as string[],
+    context_packs: [] as string[],
+    execution: {
+      command: 'claude',
+      args: ['-p'],
+      timeout_seconds: 180,
+      retry_attempts: 1,
+      adapter: 'claude-code',
+    },
+    trigger: {
+      mode: 'on_ready' as const,
+      schedule_cron: null as string | null,
+    },
+    on_success: 'advance' as const,
+    on_failure: 'send_to_errors' as const,
+  }
+
+  await fsService.writeJsonAtomic(join(stepDir, 'step.json'), stepJson)
+  await fs.writeFile(
+    join(stepDir, 'process.md'),
+    input.process_md && input.process_md.trim().length > 0 ? input.process_md : DEFAULT_PROCESS_MD,
+    'utf-8',
+  )
+  await fsService.writeJsonAtomic(join(stepDir, 'state', 'counters.json'), {
+    runs_total: 0,
+    successful: 0,
+    failed: 0,
+  })
+  await fs.writeFile(join(stepDir, 'state', 'memory.md'), '', 'utf-8')
+
+  await insertStepIntoWorkflow(input.project, input.workflow, id)
+
+  return {
+    kind: 'worker',
+    id,
+    name: input.name,
+    description: input.description,
+    icon: input.icon ?? 'cpu',
+    skills: [],
+    mcps: [],
+    context_packs: [],
+    process_md: input.process_md ?? DEFAULT_PROCESS_MD,
+  }
+}
+
 interface UpdateStepConfigInput {
   project: string
   workflow: string
@@ -160,4 +265,36 @@ async function deleteStep(input: DeleteStepInput): Promise<void> {
   })
 }
 
-export const stepService = { addTray, updateStep, deleteStep }
+interface UpdateWorkerProcessInput {
+  project: string
+  workflow: string
+  stepId: string
+  processMd: string
+}
+
+async function updateWorkerProcess(input: UpdateWorkerProcessInput): Promise<void> {
+  const path = join(
+    projectService.paths.stepDir(input.project, input.workflow, input.stepId),
+    'process.md',
+  )
+  await fs.writeFile(path, input.processMd, 'utf-8')
+}
+
+async function readWorkerProcess(
+  project: string,
+  workflow: string,
+  stepId: string,
+): Promise<string> {
+  const path = join(projectService.paths.stepDir(project, workflow, stepId), 'process.md')
+  if (!(await pathExists(path))) return ''
+  return fs.readFile(path, 'utf-8')
+}
+
+export const stepService = {
+  addTray,
+  addWorker,
+  updateStep,
+  updateWorkerProcess,
+  readWorkerProcess,
+  deleteStep,
+}

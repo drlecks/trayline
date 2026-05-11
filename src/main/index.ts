@@ -5,6 +5,8 @@ import { settingsStore } from './services/settings-store'
 import { fsService, Paths } from './services/fs-service'
 import { auditDb } from './services/audit-db'
 import { systemSkillsService } from './services/system-skills-service'
+import { workerRunner, setRunEventBroadcast } from './services/worker-runner'
+import { watcherService } from './services/watcher-service'
 import { registerIpcHandlers } from './ipc/handlers'
 import { dirnameFromMeta } from './util/paths'
 
@@ -139,12 +141,20 @@ app.whenReady().then(async () => {
     const { restored } = await systemSkillsService.ensureInstalled()
     stage(`systemSkillsService.ensureInstalled done (restored=${restored.join(',') || 'none'})`)
 
+    const { recovered } = await workerRunner.recoverOrphanedRuns()
+    stage(`workerRunner.recoverOrphanedRuns done (recovered=${recovered})`)
+
+    setRunEventBroadcast(() => BrowserWindow.getAllWindows())
+
     bootstrapInfo = { dataDir: Paths.root, systemSkillsRestored: restored }
     registerIpcHandlers(ipcMain, () => bootstrapInfo)
     stage('registerIpcHandlers done')
 
     createWindow()
     stage('createWindow returned')
+
+    await watcherService.mountAll()
+    stage('watcherService.mountAll done')
 
     const theme = settingsStore.get('theme')
     if (theme === 'dark') nativeTheme.themeSource = 'dark'
@@ -166,4 +176,8 @@ app.whenReady().then(async () => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
+})
+
+app.on('before-quit', () => {
+  void watcherService.unmountAll()
 })

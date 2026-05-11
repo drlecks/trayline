@@ -36,8 +36,18 @@ export const IPC = {
   },
   step: {
     addTray: 'step:addTray',
+    addWorker: 'step:addWorker',
     update: 'step:update',
     delete: 'step:delete',
+    readProcess: 'step:readProcess',
+    updateProcess: 'step:updateProcess',
+  },
+  worker: {
+    triggerRun: 'worker:triggerRun',
+    listRuns: 'worker:listRuns',
+    getRun: 'worker:getRun',
+    readTerminalLog: 'worker:readTerminalLog',
+    onRunEvent: 'worker:onRunEvent',
   },
   card: {
     list: 'card:list',
