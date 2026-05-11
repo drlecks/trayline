@@ -28,7 +28,7 @@ Each task corresponds to a phase file in this folder. Check off tasks as they ar
 - [x] [Phase 3 — Trays + Manual Cards](./phase-3-trays.md)
 - [x] [Phase 4 — Workers + CLI Execution](./phase-4-workers.md)
 - [x] [Phase 5 — Terminal Integration](./phase-5-terminal.md)
-- [ ] [Phase 6 — Scheduler](./phase-6-scheduler.md)
+- [x] [Phase 6 — Scheduler](./phase-6-scheduler.md)
 - [ ] [Phase 7 — Skill Finder](./phase-7-skill-finder.md)
 - [ ] [Phase 8 — Human Review Polish](./phase-8-human-review.md)
 - [ ] [Phase 9 — Run History & Audit Log UI](./phase-9-audit-log.md)
