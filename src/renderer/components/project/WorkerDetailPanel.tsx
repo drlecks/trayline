@@ -352,6 +352,111 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
   )
 }
 
+// ─── Cron picker ─────────────────────────────────────────────────────────────
+
+const CRON_PRESETS = [
+  { label: 'Every 15 minutes', value: '*/15 * * * *' },
+  { label: 'Every hour',       value: '0 * * * *' },
+  { label: 'Every day at 9am', value: '0 9 * * *' },
+  { label: 'Every weekday at 9am', value: '0 9 * * 1-5' },
+] as const
+
+/** Validate a cron expression without importing node-cron into the renderer.
+ *  Accepts standard 5-field POSIX cron: min hour dom month dow.
+ *  Allows * /N  N  N-M  N,M in each field.  */
+function isValidCron(expr: string): boolean {
+  const parts = expr.trim().split(/\s+/)
+  if (parts.length !== 5) return false
+  const field = /^(\*|\d+(-\d+)?(,\d+(-\d+)?)*)$|^\*\/\d+$/
+  return parts.every((p) => field.test(p))
+}
+
+interface CronPickerProps {
+  value: string
+  onChange: (v: string) => void
+}
+
+function CronPicker({ value, onChange }: CronPickerProps) {
+  const preset = CRON_PRESETS.find((p) => p.value === value)
+  const [custom, setCustom] = useState(!preset)
+  const [draft, setDraft] = useState(value)
+  const valid = isValidCron(draft)
+
+  // Sync draft when parent changes value (e.g. on step switch)
+  useEffect(() => {
+    setDraft(value)
+    setCustom(!CRON_PRESETS.find((p) => p.value === value))
+  }, [value])
+
+  function pickPreset(v: string) {
+    setCustom(false)
+    setDraft(v)
+    onChange(v)
+  }
+
+  function handleCustomChange(v: string) {
+    setDraft(v)
+    if (isValidCron(v)) onChange(v)
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <label className="text-xs text-neutral-500">Schedule</label>
+      <div className="grid grid-cols-2 gap-1.5">
+        {CRON_PRESETS.map((p) => (
+          <button
+            key={p.value}
+            type="button"
+            onClick={() => pickPreset(p.value)}
+            className={`px-3 py-2 rounded-md border text-left text-xs ${
+              !custom && value === p.value
+                ? 'border-neutral-900 dark:border-neutral-100 bg-neutral-50 dark:bg-neutral-900'
+                : 'border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-900'
+            }`}
+          >
+            {p.label}
+            <span className="block text-[10px] text-neutral-400 font-mono mt-0.5">{p.value}</span>
+          </button>
+        ))}
+        <button
+          type="button"
+          onClick={() => setCustom(true)}
+          className={`px-3 py-2 rounded-md border text-left text-xs ${
+            custom
+              ? 'border-neutral-900 dark:border-neutral-100 bg-neutral-50 dark:bg-neutral-900'
+              : 'border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-900'
+          }`}
+        >
+          Custom expression
+          <span className="block text-[10px] text-neutral-400 font-mono mt-0.5">cron syntax</span>
+        </button>
+      </div>
+      {custom && (
+        <div className="flex flex-col gap-1">
+          <input
+            value={draft}
+            onChange={(e) => handleCustomChange(e.target.value)}
+            placeholder="*/30 9-17 * * 1-5"
+            className={`rounded-md border px-3 py-1.5 text-xs font-mono ${
+              valid
+                ? 'border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950'
+                : 'border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-950/30'
+            }`}
+          />
+          {!valid && (
+            <p className="text-[11px] text-red-600 dark:text-red-400">
+              Invalid cron expression — use 5 fields: minute hour day month weekday
+            </p>
+          )}
+          {valid && (
+            <p className="text-[11px] text-neutral-400 font-mono">{draft}</p>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Runs tab ─────────────────────────────────────────────────────────────────
 
 function RunsTab({ project, workflow, stepId }: { project: string; workflow: string; stepId: string }) {

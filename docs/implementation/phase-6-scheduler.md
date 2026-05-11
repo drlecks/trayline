@@ -17,7 +17,7 @@ Allow workers to run on a schedule instead of (or in addition to) being triggere
   - **On ready** (default) — fires when a card lands in previous tray's `ready/`
   - **Scheduled** — fires on a cron schedule, processes any cards in `ready/`
   - **Manual only** — never fires automatically
-- [ ] **Friendly cron picker UI:**
+- [x] **Friendly cron picker UI:**
   - Preset options: "Every hour", "Every day at 9am", "Every weekday at 9am", "Every 15 minutes"
   - "Custom" option reveals a cron expression input field with validation
 - [ ] **"Run now"** button in worker detail view — manually triggers the worker regardless of trigger mode
