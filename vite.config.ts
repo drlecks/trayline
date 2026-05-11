@@ -22,6 +22,8 @@ const mainExternals = [
   'fsevents',
   'fast-glob',
   'node-pty',
+  'node-cron',
+  'cron-parser',
 ]
 
 export default defineConfig({
