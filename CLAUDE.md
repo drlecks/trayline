@@ -76,6 +76,37 @@ Skills are instructions only (markdown + JSON). Reject any skill install that co
 
 ---
 
+## Testing Policy
+
+The test suite runs with `npm test` (Vitest). Tests live **co-located** with the code they cover (`foo.ts` ↔ `foo.test.ts`) — this is the project convention; do not introduce a separate `__tests__/` folder.
+
+### When tests are required
+
+A new commit **must** include tests when it adds or significantly changes any of the following:
+
+- **Main-process services** under `src/main/services/` — anything with non-trivial logic (file moves, schema validation, scheduling, watching, install/uninstall, audit-log emission).
+- **Adapters** under `src/main/ai-terminals/` — both the interface contract and any new adapter implementation.
+- **Shared utilities** under `src/shared/` that encode rules (id parsing, status transitions, schema validation) — anything other than plain type aliases.
+- **Anything that touches data integrity** — atomic card movement, counters, the audit log, scaffold/import/export — even when the change feels small. These are the surfaces where regressions silently corrupt user data.
+- **Bug fixes for any of the above** — the test must reproduce the bug first (red), then the fix turns it green. No "fix without regression test" for data-path bugs.
+
+### When tests are optional
+
+- Thin pass-through services (e.g. `fs-service`, `settings-store`) that just wrap a single library call.
+- IPC handler glue in `src/main/ipc/handlers.ts` — covered indirectly by the service-level tests it delegates to.
+- React components and stores in `src/renderer/` — UI is verified manually per the project's design rules. (We may revisit this with component tests later.)
+
+### Conventions
+
+- One `*.test.ts` file per module being tested.
+- `vitest.setup.ts` already mocks `electron` and points the services at a fresh tmp directory per test run — use that infrastructure, don't reach for `~/Documents/Trayline` directly.
+- Mock external systems (`node-cron`, `chokidar`, `fetch`) with `vi.mock` / `vi.stubGlobal` rather than waiting on real timers / network.
+- Each test must be independent — wipe `Paths.projects` (or the relevant subtree) in `beforeEach`. Don't rely on file state leaking between tests.
+
+If a PR touches a service in the "required" list above without adding or updating tests, reviewers should reject it until tests are added.
+
+---
+
 ## Keeping Docs in Sync
 
 **Any change to code, features, or design must be accompanied by an update to the relevant `docs/` file(s) in the same commit.** Docs are the source of truth for intent; the code is the implementation of that intent. They must never diverge.
@@ -89,6 +120,7 @@ Concretely:
 - Changed the adapter interface or the worker execution protocol → update `docs/tech-stack.md`
 - Completed a phase task or changed its scope → update the relevant `docs/implementation/phase-*.md` file and check it off in `docs/implementation/tasks.md`
 - Changed something that touches the app's core concept or vocabulary → update `docs/app-description.md`
+- Added a service or significantly changed an existing one → add or update its co-located `*.test.ts` (see **Testing Policy** above)
 
 If you are unsure which doc file to update, update all plausible ones — a redundant update costs nothing; a stale doc costs confusion and bugs.
 
