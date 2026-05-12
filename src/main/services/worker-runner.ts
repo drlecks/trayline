@@ -357,6 +357,22 @@ async function runInner(input: TriggerRunInput): Promise<TriggerRunResult> {
     runError = err instanceof Error ? err.message : String(err)
   } finally {
     liveSessions.delete(sessionKey)
+    // Phase 7 — always clear the adapter's transcript history before returning
+    // the adapter to the pool. Treat failure as non-fatal: record an audit row
+    // and continue so a flaky clear can't mask the actual run outcome.
+    try {
+      await adapter.clearContext()
+    } catch (clearErr) {
+      auditDb.insert({
+        project_id: project, workflow_id: workflow, step_id: stepId, card_id: cardId,
+        event: 'ai_terminal_clear_failed', actor: 'system',
+        details_json: JSON.stringify({
+          run_id: runId,
+          adapter: adapterId,
+          error: clearErr instanceof Error ? clearErr.message : String(clearErr),
+        }),
+      })
+    }
   }
 
   const endedAt = new Date().toISOString()
@@ -500,6 +516,11 @@ async function runInner(input: TriggerRunInput): Promise<TriggerRunResult> {
     status: succeeded ? 'succeeded' : 'failed',
     error: runError,
   })
+  // Tell the renderer to refresh footer usage values now that this run has
+  // completed (the adapter may have moved within its rolling window).
+  for (const win of broadcastTarget()) {
+    if (!win.isDestroyed()) win.webContents.send(IPC.adapters.onUsageUpdate)
+  }
 
   return { runId }
 }

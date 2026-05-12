@@ -33,6 +33,10 @@ export const IPC = {
   adapters: {
     list: 'adapters:list',
     detect: 'adapters:detect',
+    listModels: 'adapters:listModels',
+    listEfforts: 'adapters:listEfforts',
+    getUsage: 'adapters:getUsage',
+    onUsageUpdate: 'adapters:onUsageUpdate',
   },
   step: {
     addTray: 'step:addTray',

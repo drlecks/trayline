@@ -8,6 +8,8 @@ const defaults: Settings = {
   theme: 'system',
   defaultCliCommand: 'claude',
   defaultAdapterId: 'claude-code',
+  defaultModelByAdapter: {},
+  defaultEffortByAdapter: {},
   notificationsEnabled: true,
   lastOpenedProject: null,
 }

@@ -7,6 +7,9 @@ import type {
   AISession,
   AISessionResult,
   SpawnOptions,
+  ModelInfo,
+  EffortInfo,
+  AdapterUsageSnapshot,
 } from './adapter'
 
 // Strip ANSI escape sequences before trying to parse output as JSON. The PTY
@@ -256,9 +259,20 @@ function extractTrailingJson(s: string): string | null {
   return trimmed.slice(start, end + 1)
 }
 
+// Claude Code's published models. We keep this list curated here because the
+// CLI's `claude --help` output does not expose a machine-readable model list,
+// and shelling out to `claude models` is interactive. When new models ship,
+// add them here.
+const CLAUDE_MODELS: ModelInfo[] = [
+  { id: 'claude-opus-4-7',     label: 'Claude Opus 4.7',     description: 'Most capable; best for complex multi-step reasoning.' },
+  { id: 'claude-sonnet-4-6',   label: 'Claude Sonnet 4.6',   description: 'Balanced quality and speed for most workers.' },
+  { id: 'claude-haiku-4-5',    label: 'Claude Haiku 4.5',    description: 'Fastest and cheapest; good for high-volume light tasks.' },
+]
+
 export const claudeCodeAdapter: AITerminalAdapter = {
   id: 'claude-code',
   displayName: 'Claude Code',
+  installUrl: 'https://docs.claude.com/en/docs/claude-code/quickstart',
 
   async detectInstalled() {
     return (await detectInstalled()) !== null
@@ -266,6 +280,32 @@ export const claudeCodeAdapter: AITerminalAdapter = {
 
   async getVersion() {
     return detectInstalled()
+  },
+
+  async listModels(): Promise<ModelInfo[]> {
+    return CLAUDE_MODELS
+  },
+
+  // Claude Code does not expose a `--effort` flag to the headless `-p` mode;
+  // reasoning depth is influenced by prompt wording rather than a discrete
+  // tier. Return [] so the Settings UI knows to hide the effort dropdown.
+  async listEfforts(_modelId: string): Promise<EffortInfo[]> {
+    return []
+  },
+
+  // Claude Code does not surface 5h / weekly rolling-window state through any
+  // non-interactive entry point — `/usage` is TUI-only. See usage-service.ts
+  // for the full reasoning; return null until upstream provides it.
+  async getUsage(): Promise<AdapterUsageSnapshot | null> {
+    return null
+  },
+
+  // `claude -p` print mode is a one-shot invocation that does not persist
+  // transcript state across calls, so each run already starts with empty
+  // history. We model clearContext as a documented no-op rather than spawning
+  // a no-op shell call.
+  async clearContext(): Promise<void> {
+    // intentionally empty
   },
 
   async spawn(opts: SpawnOptions): Promise<AISession> {
