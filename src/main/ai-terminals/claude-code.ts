@@ -233,15 +233,27 @@ function renderProcessTemplate(body: string, cardData: object): string {
   return dotted.replace(/\{\{\s*card\.data\s*\}\}/g, JSON.stringify(data, null, 2))
 }
 
-/** Pull the last JSON value out of a text blob, if one is present at the tail. */
+/**
+ * Pull a JSON value out of a text blob even when it's wrapped in markdown
+ * code fences or sandwiched between prose. Returns the slice between the
+ * first `{`/`[` and the matching last `}`/`]`, so trailing ```` ``` ```` /
+ * commentary / banner text doesn't break JSON.parse downstream.
+ */
 function extractTrailingJson(s: string): string | null {
   const trimmed = s.trim()
   if (!trimmed) return null
-  const lastOpen = Math.max(trimmed.lastIndexOf('{'), trimmed.lastIndexOf('['))
-  if (lastOpen < 0) return null
-  const candidate = trimmed.slice(lastOpen)
-  if (!/^[{\[]/.test(candidate)) return null
-  return candidate
+  const firstObj = trimmed.indexOf('{')
+  const firstArr = trimmed.indexOf('[')
+  let start: number
+  if (firstObj === -1) start = firstArr
+  else if (firstArr === -1) start = firstObj
+  else start = Math.min(firstObj, firstArr)
+  if (start < 0) return null
+  const openChar = trimmed[start]
+  const closeChar = openChar === '{' ? '}' : ']'
+  const end = trimmed.lastIndexOf(closeChar)
+  if (end <= start) return null
+  return trimmed.slice(start, end + 1)
 }
 
 export const claudeCodeAdapter: AITerminalAdapter = {
