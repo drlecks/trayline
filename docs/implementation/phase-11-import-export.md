@@ -23,7 +23,7 @@ Let users share projects as zip files and import projects from others.
     }
     ```
   - Credentials and MCP state **never** included
-  - **Export without runs** option — excludes all `runs/` folders
+  - **Export without data** option selected by default — excludes all `runs/` folders and cards from all steps.
 - [ ] **Import flow:**
   - File menu → **Import project** → file picker for `.zip`
   - Extracts to `~/Documents/Trayline/projects/[id]/` using `unzipper`

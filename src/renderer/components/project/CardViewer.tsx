@@ -1,7 +1,45 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Check, Archive, FileText } from 'lucide-react'
+import { ArrowLeft, Check, Archive, FileText, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { Card, CardStatus, CardEvent } from '../../../shared/card'
+
+// Map a history event to a tone so the timeline visually echoes the project's
+// global color system (red = error, amber = warning, green = success, neutral
+// for routine state changes). Mirrors the palette in docs/design-principles.md.
+type EventTone = 'error' | 'warning' | 'success' | 'neutral'
+
+function eventTone(event: CardEvent): EventTone {
+  switch (event) {
+    case 'run_failed':
+      return 'error'
+    case 'sent_back':
+      return 'warning'
+    case 'run_completed':
+    case 'marked_ready':
+      return 'success'
+    default:
+      return 'neutral'
+  }
+}
+
+const TONE_STYLES: Record<EventTone, { dot: string; text: string }> = {
+  error: {
+    dot: 'bg-red-500 dark:bg-red-400',
+    text: 'text-red-700 dark:text-red-400',
+  },
+  warning: {
+    dot: 'bg-amber-500 dark:bg-amber-400',
+    text: 'text-amber-700 dark:text-amber-400',
+  },
+  success: {
+    dot: 'bg-green-500 dark:bg-green-400',
+    text: 'text-green-700 dark:text-green-400',
+  },
+  neutral: {
+    dot: 'bg-neutral-400 dark:bg-neutral-600',
+    text: 'text-neutral-700 dark:text-neutral-300',
+  },
+}
 
 interface CardViewerProps {
   project: string
@@ -49,11 +87,24 @@ export default function CardViewer({ project, workflow, stepId, cardId, onBack }
     }
   }
 
+  async function handleRetry() {
+    if (!data) return
+    setActing(true); setError(null)
+    try {
+      await window.trayline.card.retry(project, workflow, cardId)
+      onBack()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+      setActing(false)
+    }
+  }
+
   if (!data) {
     return <div className="px-6 py-8 text-xs text-neutral-400">Loading card…</div>
   }
 
   const { card, status } = data
+  const isErrorTray = stepId === '99-errors'
 
   return (
     <div className="px-6 py-4 max-w-3xl">
@@ -106,27 +157,30 @@ export default function CardViewer({ project, workflow, stepId, cardId, onBack }
       {/* History */}
       <Section title="History">
         <ol className="flex flex-col gap-3">
-          {card.history.map((h, i) => (
-            <li key={i} className="flex items-start gap-3">
-              <div className="flex flex-col items-center pt-1">
-                <div className="w-2 h-2 rounded-full bg-neutral-400 dark:bg-neutral-600" />
-                {i < card.history.length - 1 && (
-                  <div className="w-px h-6 bg-neutral-200 dark:bg-neutral-800 mt-1" />
-                )}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-xs">
-                  <span className="font-medium">{eventLabel(h.event)}</span>
-                  <span className="text-neutral-500 dark:text-neutral-400"> · {h.step}</span>
-                  {h.by && <span className="text-neutral-500 dark:text-neutral-400"> · by {h.by}</span>}
+          {card.history.map((h, i) => {
+            const tone = TONE_STYLES[eventTone(h.event)]
+            return (
+              <li key={i} className="flex items-start gap-3">
+                <div className="flex flex-col items-center pt-1">
+                  <div className={`w-2 h-2 rounded-full ${tone.dot}`} />
+                  {i < card.history.length - 1 && (
+                    <div className="w-px h-6 bg-neutral-200 dark:bg-neutral-800 mt-1" />
+                  )}
                 </div>
-                <div className="text-[11px] text-neutral-500 dark:text-neutral-400 font-mono">
-                  {new Date(h.at).toLocaleString()}
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs">
+                    <span className={`font-medium ${tone.text}`}>{eventLabel(h.event)}</span>
+                    <span className="text-neutral-500 dark:text-neutral-400"> · {h.step}</span>
+                    {h.by && <span className="text-neutral-500 dark:text-neutral-400"> · by {h.by}</span>}
+                  </div>
+                  <div className="text-[11px] text-neutral-500 dark:text-neutral-400 font-mono">
+                    {new Date(h.at).toLocaleString()}
+                  </div>
+                  {h.note && <div className={`text-xs mt-1 ${tone.text}`}>{h.note}</div>}
                 </div>
-                {h.note && <div className="text-xs text-neutral-600 dark:text-neutral-400 mt-1">{h.note}</div>}
-              </div>
-            </li>
-          ))}
+              </li>
+            )
+          })}
         </ol>
       </Section>
 
@@ -136,15 +190,25 @@ export default function CardViewer({ project, workflow, stepId, cardId, onBack }
 
       {/* Action bar */}
       <div className="flex items-center justify-end gap-2 sticky bottom-0 pt-4 mt-4 -mx-6 px-6 bg-[var(--bg)] border-t border-black/[0.06] dark:border-white/[0.06]">
-        {status === 'pending' && (
-          <Button size="sm" variant="ghost" onClick={handleArchive} disabled={acting}>
-            <Archive size={13} strokeWidth={1.75} /> Archive
-          </Button>
+        {isErrorTray && status === 'pending' && (
+          <>
+            <Button size="sm" variant="ghost" onClick={handleArchive} disabled={acting}>
+              <Archive size={13} strokeWidth={1.75} /> Archive
+            </Button>
+            <Button size="sm" onClick={handleRetry} disabled={acting}>
+              <RotateCcw size={13} strokeWidth={1.75} /> {acting ? 'Working…' : 'Retry'}
+            </Button>
+          </>
         )}
-        {status === 'pending' && (
-          <Button size="sm" onClick={handleMarkReady} disabled={acting}>
-            <Check size={13} strokeWidth={1.75} /> {acting ? 'Working…' : 'Mark ready'}
-          </Button>
+        {!isErrorTray && status === 'pending' && (
+          <>
+            <Button size="sm" variant="ghost" onClick={handleArchive} disabled={acting}>
+              <Archive size={13} strokeWidth={1.75} /> Archive
+            </Button>
+            <Button size="sm" onClick={handleMarkReady} disabled={acting}>
+              <Check size={13} strokeWidth={1.75} /> {acting ? 'Working…' : 'Mark ready'}
+            </Button>
+          </>
         )}
         {status === 'ready' && (
           <Button size="sm" variant="ghost" onClick={handleArchive} disabled={acting}>

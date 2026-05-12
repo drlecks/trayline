@@ -128,6 +128,8 @@ const api = {
       ipcRenderer.invoke(IPC.card.markReady, project, workflow, stepId, cardId),
     archive: (project: string, workflow: string, stepId: string, cardId: string, fromStatus: CardStatus): Promise<Card> =>
       ipcRenderer.invoke(IPC.card.archive, project, workflow, stepId, cardId, fromStatus),
+    retry: (project: string, workflow: string, cardId: string): Promise<{ card: Card; targetStepId: string }> =>
+      ipcRenderer.invoke(IPC.card.retry, project, workflow, cardId),
   },
   platform: process.platform as NodeJS.Platform,
 }

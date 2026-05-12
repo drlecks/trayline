@@ -251,6 +251,84 @@ async function archiveCard(
   })
 }
 
+/**
+ * Retry a card sitting in the error tray (`99-errors/pending`). The card is
+ * moved back into the tray that feeds the worker that failed last, so the
+ * watcher will re-trigger the run automatically.
+ *
+ * The destination tray is resolved by reading the workflow and locating the
+ * step preceding the worker referenced by the most recent `run_failed`
+ * history entry. If that information is missing we fall back to the step
+ * immediately before `99-errors/` in `step_ids`.
+ */
+async function retryFromErrors(
+  project: string,
+  workflow: string,
+  cardId: string,
+): Promise<{ card: Card; targetStepId: string }> {
+  const errorStepId = '99-errors'
+  const fromPath = join(statusDir(project, workflow, errorStepId, 'pending'), `${cardId}.json`)
+  if (!(await pathExists(fromPath))) {
+    throw new Error(`Card not found in error tray: ${cardId}`)
+  }
+
+  const wf = await fsService.readJson<{ step_ids: string[] }>(
+    join(projectService.paths.workflowDir(project, workflow), 'workflow.json'),
+  )
+
+  const card = await fsService.readJson<Card>(fromPath)
+
+  // Find the failed worker step from history, then its preceding tray.
+  let targetStepId: string | null = null
+  for (let i = card.history.length - 1; i >= 0; i--) {
+    const h = card.history[i]
+    if (h.event === 'run_failed' && h.step) {
+      const idx = wf.step_ids.indexOf(h.step)
+      if (idx > 0) {
+        targetStepId = wf.step_ids[idx - 1]
+        break
+      }
+    }
+  }
+  // Fallback: step immediately before 99-errors in the workflow.
+  if (!targetStepId) {
+    const idx = wf.step_ids.indexOf(errorStepId)
+    if (idx > 0) targetStepId = wf.step_ids[idx - 1]
+  }
+  if (!targetStepId) {
+    throw new Error('Could not determine which tray to retry this card from')
+  }
+
+  const at = new Date().toISOString()
+  const history: CardHistoryEntry = {
+    at, step: targetStepId, event: 'sent_back', by: 'user',
+    note: 'Retried from error tray',
+  }
+  const updated: Card = {
+    ...card,
+    history: [...card.history, history],
+  }
+
+  const targetDir = statusDir(project, workflow, targetStepId, 'ready')
+  await fs.mkdir(targetDir, { recursive: true })
+  const targetPath = join(targetDir, `${cardId}.json`)
+
+  auditDb.insert({
+    project_id: project,
+    workflow_id: workflow,
+    step_id: targetStepId,
+    card_id: cardId,
+    event: 'card_retried',
+    actor: 'user',
+    details_json: JSON.stringify({ from: errorStepId, to: targetStepId }),
+  })
+
+  await fsService.writeJsonAtomic(targetPath, updated)
+  await fs.unlink(fromPath)
+
+  return { card: updated, targetStepId }
+}
+
 export const cardService = {
   listCards,
   getCard,
@@ -259,4 +337,5 @@ export const cardService = {
   createCard,
   markReady,
   archiveCard,
+  retryFromErrors,
 }

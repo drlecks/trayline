@@ -184,4 +184,7 @@ export function registerIpcHandlers(
   ipcMain.handle('card:archive', (_: unknown, project: string, workflow: string, stepId: string, cardId: string, fromStatus: CardStatus) =>
     cardService.archiveCard(project, workflow, stepId, cardId, fromStatus),
   )
+  ipcMain.handle('card:retry', (_: unknown, project: string, workflow: string, cardId: string) =>
+    cardService.retryFromErrors(project, workflow, cardId),
+  )
 }

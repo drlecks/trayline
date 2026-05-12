@@ -59,5 +59,6 @@ export const IPC = {
     create: 'card:create',
     markReady: 'card:markReady',
     archive: 'card:archive',
+    retry: 'card:retry',
   },
 } as const
