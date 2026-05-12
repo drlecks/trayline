@@ -46,19 +46,27 @@ export default defineConfig({
         vite: {
           build: {
             outDir: 'dist-electron/preload',
-            // Electron's preload sandbox loads scripts as CommonJS regardless
-            // of the parent package.json's `"type": "module"`. Force CJS output
-            // via lib mode so the bundle uses `require('electron')` instead of
-            // ESM `import` statements.
-            lib: {
-              entry: 'src/preload/index.ts',
-              formats: ['cjs'],
-              fileName: () => 'index.cjs',
-            },
             rollupOptions: {
               external: ['electron'],
             },
           },
+          // Electron's preload sandbox loads scripts as CommonJS, but
+          // vite-plugin-electron defaults `lib.formats` to `['es']` because
+          // package.json has `"type": "module"`, and vite's mergeConfig
+          // concatenates arrays instead of replacing them — so a plain
+          // `lib.formats: ['cjs']` override ends up as `['es', 'cjs']` and
+          // ESM wins. This inline plugin replaces the format after merge.
+          plugins: [
+            {
+              name: 'trayline:preload-force-cjs',
+              config(c) {
+                if (c.build?.lib && typeof c.build.lib === 'object') {
+                  c.build.lib.formats = ['cjs']
+                  c.build.lib.fileName = () => 'index.cjs'
+                }
+              },
+            },
+          ],
         },
         onstart(options) {
           options.reload()

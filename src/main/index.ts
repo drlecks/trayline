@@ -66,12 +66,21 @@ interface BootstrapInfo {
 
 let bootstrapInfo: BootstrapInfo
 
+function resolveAppIcon(): string {
+  // Packaged: icon-fill-128.png is copied via extraResources to process.resourcesPath.
+  // Dev: read straight from the project's resources/ folder (cwd = project root under `vite`).
+  const packaged = join(process.resourcesPath, 'icon-fill-128.png')
+  if (app.isPackaged) return packaged
+  return join(process.cwd(), 'resources', 'icon-fill-128.png')
+}
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1280,
     height: 800,
     minWidth: 900,
     minHeight: 600,
+    icon: resolveAppIcon(),
     show: false, // shown after ready-to-show to avoid white flash
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#0F0F0F' : '#FAFAF9',
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
