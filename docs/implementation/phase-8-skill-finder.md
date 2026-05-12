@@ -1,4 +1,4 @@
-# Phase 7 — Skill Finder
+# Phase 8 — Skill Finder
 
 **Estimate:** 3 days
 

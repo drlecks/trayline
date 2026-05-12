@@ -29,13 +29,14 @@ Each task corresponds to a phase file in this folder. Check off tasks as they ar
 - [x] [Phase 4 — Workers + CLI Execution](./phase-4-workers.md)
 - [x] [Phase 5 — Terminal Integration](./phase-5-terminal.md)
 - [x] [Phase 6 — Scheduler](./phase-6-scheduler.md)
-- [ ] [Phase 7 — Skill Finder](./phase-7-skill-finder.md)
-- [ ] [Phase 8 — Human Review Polish](./phase-8-human-review.md)
-- [ ] [Phase 9 — Run History & Audit Log UI](./phase-9-audit-log.md)
-- [ ] [Phase 10 — Skills & Context Packs](./phase-10-skills.md)
-- [ ] [Phase 11 — Import / Export](./phase-11-import-export.md)
-- [ ] [Phase 12 — Errors & Retry](./phase-12-errors.md)
-- [ ] [Phase 13 — Polish & Beta](./phase-13-polish.md)
+- [ ] [Phase 7 — Terminal Configuration](./phase-7-terminal-configuration.md)
+- [ ] [Phase 8 — Skill Finder](./phase-8-skill-finder.md)
+- [ ] [Phase 9 — Human Review Polish](./phase-9-human-review.md)
+- [ ] [Phase 10 — Run History & Audit Log UI](./phase-10-audit-log.md)
+- [ ] [Phase 11 — Skills & Context Packs](./phase-11-skills.md)
+- [ ] [Phase 12 — Import / Export](./phase-12-import-export.md)
+- [ ] [Phase 13 — Errors & Retry](./phase-13-errors.md)
+- [ ] [Phase 14 — Polish & Beta](./phase-14-polish.md)
 
 ---
 
@@ -65,7 +66,7 @@ Each task corresponds to a phase file in this folder. Check off tasks as they ar
 
 | Block | Estimate |
 |---|---|
-| MVP (Phases 0–13) | ~11–13 weeks (1 developer) |
+| MVP (Phases 0–14) | ~12–14 weeks (1 developer) |
 | N2 (Phases N2.1–N2.8) | ~6–7 weeks (1 developer) |
 | N3 (Phases N3.1–N3.4) | ~3–4 weeks (1 developer) |
 | **Total** | **~20–24 weeks** |
