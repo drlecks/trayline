@@ -10,6 +10,7 @@ import { cardService } from '../services/card-service'
 import { workerRunner } from '../services/worker-runner'
 import { watcherService } from '../services/watcher-service'
 import { schedulerService } from '../services/scheduler-service'
+import { skillService } from '../services/skill-service'
 import type { BootstrapInfo, ProviderInstallSuggestion, ProviderReadyResult } from '../../shared/types'
 import type { CardStatus } from '../../shared/card'
 
@@ -230,6 +231,22 @@ export function registerIpcHandlers(
   )
   ipcMain.handle('worker:openExternalTerminal', (_: unknown, project: string, workflow: string, stepId: string, runId: string) =>
     workerRunner.openExternalTerminal(project, workflow, stepId, runId),
+  )
+
+  // ── Skill Finder ──────────────────────────────────────────────────────────
+  ipcMain.handle('skills:fetchCatalog', (_: unknown, opts?: { forceRefresh?: boolean }) =>
+    skillService.fetchCatalog(opts),
+  )
+  ipcMain.handle('skills:listInstalled', () => skillService.listInstalled())
+  ipcMain.handle('skills:install', (_: unknown, skillId: string) =>
+    skillService.installFromCatalog(skillId),
+  )
+  ipcMain.handle('skills:installFromUrl', (_: unknown, url: string) =>
+    skillService.installFromUrl(url),
+  )
+  ipcMain.handle('skills:update', (_: unknown, skillId: string) => skillService.update(skillId))
+  ipcMain.handle('skills:uninstall', (_: unknown, skillId: string) =>
+    skillService.uninstall(skillId),
   )
 
   // ── Cards ─────────────────────────────────────────────────────────────────

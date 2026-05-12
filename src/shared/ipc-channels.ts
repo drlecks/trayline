@@ -58,6 +58,14 @@ export const IPC = {
     sendInput: 'worker:sendInput',
     openExternalTerminal: 'worker:openExternalTerminal',
   },
+  skills: {
+    fetchCatalog: 'skills:fetchCatalog',
+    listInstalled: 'skills:listInstalled',
+    install: 'skills:install',
+    installFromUrl: 'skills:installFromUrl',
+    update: 'skills:update',
+    uninstall: 'skills:uninstall',
+  },
   card: {
     list: 'card:list',
     get: 'card:get',
