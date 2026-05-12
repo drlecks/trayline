@@ -29,7 +29,7 @@ Each task corresponds to a phase file in this folder. Check off tasks as they ar
 - [x] [Phase 4 — Workers + CLI Execution](./phase-4-workers.md)
 - [x] [Phase 5 — Terminal Integration](./phase-5-terminal.md)
 - [x] [Phase 6 — Scheduler](./phase-6-scheduler.md)
-- [ ] [Phase 7 — Terminal Configuration](./phase-7-terminal-configuration.md)
+- [x] [Phase 7 — Terminal Configuration](./phase-7-terminal-configuration.md)
 - [ ] [Phase 8 — Skill Finder](./phase-8-skill-finder.md)
 - [ ] [Phase 9 — Human Review Polish](./phase-9-human-review.md)
 - [ ] [Phase 10 — Run History & Audit Log UI](./phase-10-audit-log.md)
