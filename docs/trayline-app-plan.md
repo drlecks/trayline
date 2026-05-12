@@ -716,13 +716,8 @@ On first launch, the app needs to lay down the global folder structure and seed 
 - "Open in external terminal" button
 - Token estimate display
 
-### Phase 6 — Skills & Context Packs (1 week)
-- Global skills folder (already created in Phase 1, now with UI)
-- Skill picker in worker config
-- Skill `skill.md` injected into prompts
-- Context pack editor (simple file list + markdown editor)
-- Context pack picker in worker config
-- Variable resolution in `process.md` (`{{card.data}}`, `{{context.brand-voice}}`)
+### Phase 6 — Scheduller
+- Allow workers to run on a schedule instead of (or in addition to) being triggered by ready cards.
 
 ### Phase 7 — Terminal Configuration (3 days)
 - Settings screen with AI provider / model / effort pickers (each dropdown refreshes from the adapter when the prior selection changes)
