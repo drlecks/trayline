@@ -11,6 +11,7 @@ import type {
   UsageSnapshot,
   AdapterUsageSnapshot,
   ProjectCreateOutcome,
+  ProviderReadyResult,
 } from '../shared/types'
 import type { Card, CardStatus, CardCounts } from '../shared/card'
 import type { PlanFieldDef, PlanTrayStep, PlanWorkerStep } from '../shared/workflow-plan'
@@ -57,8 +58,10 @@ const api = {
     get: (): Promise<UsageSnapshot> => ipcRenderer.invoke(IPC.usage.get),
   },
   adapters: {
-    list: (): Promise<{ id: string; displayName: string; installUrl: string | null }[]> =>
+    list: (): Promise<{ id: string; displayName: string; kind: 'production' | 'mock'; installUrl: string | null }[]> =>
       ipcRenderer.invoke(IPC.adapters.list),
+    checkProviderReady: (): Promise<ProviderReadyResult> =>
+      ipcRenderer.invoke(IPC.adapters.checkProviderReady),
     detect: (id: string): Promise<{ installed: boolean; version: string | null }> =>
       ipcRenderer.invoke(IPC.adapters.detect, id),
     listModels: (id: string): Promise<{ id: string; label: string; description?: string }[]> =>

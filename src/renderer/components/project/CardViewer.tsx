@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ArrowLeft, Check, Archive, FileText, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { useProviderGuard } from '@/stores/provider-guard-store'
 import type { Card, CardStatus, CardEvent } from '../../../shared/card'
 
 // Map a history event to a tone so the timeline visually echoes the project's
@@ -91,6 +92,8 @@ export default function CardViewer({ project, workflow, stepId, cardId, onBack }
     if (!data) return
     setActing(true); setError(null)
     try {
+      const ok = await useProviderGuard.getState().ensureReady()
+      if (!ok) { setActing(false); return }
       await window.trayline.card.retry(project, workflow, cardId)
       onBack()
     } catch (e) {

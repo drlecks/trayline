@@ -272,6 +272,7 @@ const CLAUDE_MODELS: ModelInfo[] = [
 export const claudeCodeAdapter: AITerminalAdapter = {
   id: 'claude-code',
   displayName: 'Claude Code',
+  kind: 'production',
   installUrl: 'https://docs.claude.com/en/docs/claude-code/quickstart',
 
   async detectInstalled() {

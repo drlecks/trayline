@@ -90,6 +90,13 @@ export interface AITerminalAdapter {
   id: string
   /** Human-readable name shown in settings. */
   displayName: string
+  /**
+   * `production` adapters are real CLI agents that workers can actually run
+   * against. `mock` adapters return scripted fixtures for tests and dev. The
+   * app refuses to start a worker run when no production adapter is installed
+   * — see the renderer's provider-guard and worker-runner's pre-flight check.
+   */
+  kind: 'production' | 'mock'
   /** Optional URL with install instructions, surfaced when `detectInstalled()` is false. */
   installUrl?: string
   /** Returns true if the underlying CLI is available on the host system. */

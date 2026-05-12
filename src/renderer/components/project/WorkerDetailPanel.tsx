@@ -4,6 +4,7 @@ import { Cpu, Play } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CopyButton } from '@/components/ui/copy-button'
 import { useProjectStore } from '@/stores/project-store'
+import { useProviderGuard } from '@/stores/provider-guard-store'
 import TerminalPanel, { OpenExternalTerminalButton } from './TerminalPanel'
 import type { StepMeta } from '../../../shared/types'
 import type { WorkerRun, WorkerRunEvent, WorkerRunStatus } from '../../../shared/worker-run'
@@ -28,6 +29,8 @@ export default function WorkerDetailPanel({ step }: WorkerDetailPanelProps) {
     setRunNowBusy(true)
     setRunNowFeedback(null)
     try {
+      const ok = await useProviderGuard.getState().ensureReady()
+      if (!ok) return
       const { triggered } = await window.trayline.worker.runNow(active.name, workflow.name, step.id)
       setRunNowFeedback(triggered > 0 ? `Started ${triggered} run${triggered > 1 ? 's' : ''}` : 'No ready cards')
     } finally {
@@ -694,6 +697,8 @@ export function ManualRunButton({ project, workflow, stepId, cardId, onTriggered
       onClick={async () => {
         setBusy(true)
         try {
+          const ok = await useProviderGuard.getState().ensureReady()
+          if (!ok) return
           await window.trayline.worker.triggerRun(project, workflow, stepId, cardId)
           onTriggered?.()
         } finally { setBusy(false) }

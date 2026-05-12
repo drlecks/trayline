@@ -7,6 +7,7 @@ import WelcomeSplash from './components/splash/WelcomeSplash'
 import WorkflowAuthorScreen from './components/author/WorkflowAuthorScreen'
 import ProjectScreen from './components/project/ProjectScreen'
 import SettingsScreen from './components/settings/SettingsScreen'
+import ProviderNotInstalledModal from './components/layout/ProviderNotInstalledModal'
 
 function applyThemeClass(theme: 'light' | 'dark' | 'system') {
   const root = document.documentElement
@@ -86,6 +87,7 @@ export default function App() {
         )}
       </main>
       <Footer />
+      <ProviderNotInstalledModal />
     </div>
   )
 }
