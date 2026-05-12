@@ -12,7 +12,6 @@ Wire up the skills system and context packs so they are read by workers at run t
 
 ## Tasks
 
-- [ ] **Global skills folder** — already created in Phase 1; now add UI (Skills screen in top bar)
 - [ ] **Skill picker** in worker config (Skills, MCPs & Context tab) — checklist of installed skills
 - [ ] **Skill `skill.md` injection** — at run time, the adapter concatenates selected skills' `skill.md` contents into the prompt
 - [ ] **Context pack editor** — simple file list in project sidebar + markdown editor for `context/` files
