@@ -381,6 +381,8 @@ Success replies must **not** include `trayline_error`. The contract is exclusive
 
 **MCP events:** `mcp_installed`, `mcp_uninstalled`, `mcp_configured`, `mcp_credentials_reset`, `mcp_health_check_failed`, `run_aborted_mcp_not_ready`
 
+**AI terminal events:** `ai_terminal_clear_failed` — written when the post-run `adapter.clearContext()` call throws. Non-fatal: the run's own outcome (`run_completed` / `run_failed`) is recorded separately and remains authoritative. The `details_json` carries `{ run_id, adapter, error }`.
+
 **Source events:** `source_run_started`, `source_run_completed`, `source_run_failed`, `source_item_new`
 
 | Event | `details_json` shape |

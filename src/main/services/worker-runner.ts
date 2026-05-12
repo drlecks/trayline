@@ -309,6 +309,16 @@ async function runInner(input: TriggerRunInput): Promise<TriggerRunResult> {
   const adapterId = worker.execution?.adapter ?? 'claude-code'
   const adapter = adapterRegistry.get(adapterId)
   if (!adapter) throw new Error(`Adapter not found: ${adapterId}`)
+  // Pre-flight: refuse to run a production worker when its CLI isn't on this
+  // machine. The renderer pops a modal for user-triggered runs, but watchers
+  // and the scheduler call straight through — without this check they'd race
+  // through to a confusing "claude: command not found" PTY failure.
+  if (adapter.kind === 'production' && !(await adapter.detectInstalled())) {
+    throw new Error(
+      `AI provider "${adapter.displayName}" is not installed on this machine. ` +
+      `Open Settings → AI Terminal and install a provider before running workers.`,
+    )
+  }
 
   const timeoutMs = (worker.execution?.timeout_seconds ?? 180) * 1000
   const processFile = join(workerDir, 'process.md')
@@ -357,6 +367,22 @@ async function runInner(input: TriggerRunInput): Promise<TriggerRunResult> {
     runError = err instanceof Error ? err.message : String(err)
   } finally {
     liveSessions.delete(sessionKey)
+    // Phase 7 — always clear the adapter's transcript history before returning
+    // the adapter to the pool. Treat failure as non-fatal: record an audit row
+    // and continue so a flaky clear can't mask the actual run outcome.
+    try {
+      await adapter.clearContext()
+    } catch (clearErr) {
+      auditDb.insert({
+        project_id: project, workflow_id: workflow, step_id: stepId, card_id: cardId,
+        event: 'ai_terminal_clear_failed', actor: 'system',
+        details_json: JSON.stringify({
+          run_id: runId,
+          adapter: adapterId,
+          error: clearErr instanceof Error ? clearErr.message : String(clearErr),
+        }),
+      })
+    }
   }
 
   const endedAt = new Date().toISOString()
@@ -500,6 +526,11 @@ async function runInner(input: TriggerRunInput): Promise<TriggerRunResult> {
     status: succeeded ? 'succeeded' : 'failed',
     error: runError,
   })
+  // Tell the renderer to refresh footer usage values now that this run has
+  // completed (the adapter may have moved within its rolling window).
+  for (const win of broadcastTarget()) {
+    if (!win.isDestroyed()) win.webContents.send(IPC.adapters.onUsageUpdate)
+  }
 
   return { runId }
 }

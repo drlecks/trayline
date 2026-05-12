@@ -64,8 +64,17 @@ The adapter interface:
 interface AITerminalAdapter {
   id: string;
   displayName: string;
+  installUrl?: string;
   detectInstalled(): Promise<boolean>;
   getVersion(): Promise<string | null>;
+  /** Models the user can pick for this provider. */
+  listModels(): Promise<ModelInfo[]>;
+  /** Effort tiers for the given model. Return [] for providers that don't expose tiers. */
+  listEfforts(modelId: string): Promise<EffortInfo[]>;
+  /** Optional rolling-window usage telemetry (e.g. Claude Code 5h / weekly). */
+  getUsage?(): Promise<AdapterUsageSnapshot | null>;
+  /** Invokes the provider's "/clear" so the next run starts with empty history. */
+  clearContext(): Promise<void>;
   spawn(opts: {
     processFile: string;
     cardData: object;
@@ -87,5 +96,15 @@ interface AISession {
   result(): Promise<AISessionResult>;
 }
 ```
+
+### Post-run clear protocol
+
+Every worker run — success **or** failure — ends with the runner invoking `adapter.clearContext()` before releasing the adapter back to the pool. This prevents transcript history from one card carrying into the next and burning tokens. Clear failures are non-fatal: the runner writes an `ai_terminal_clear_failed` audit row and the run outcome stands.
+
+### Provider / model / effort selection
+
+The Settings screen surfaces a Provider list (sourced from `adapterRegistry.list()` filtered by `detectInstalled()`), a Model dropdown (sourced from `adapter.listModels()`), and an Effort dropdown (sourced from `adapter.listEfforts(modelId)`). Selecting a provider re-issues `listModels`; selecting a model re-issues `listEfforts` because some providers tie efforts to specific models. Selections persist as `defaultAdapterId` / `defaultModelByAdapter` / `defaultEffortByAdapter` on the global Settings object. Worker `step.json` may still override these per-step — when present, the per-step fields are authoritative.
+
+The footer shows the active selection as `Provider · Model · Effort · 5h: used/limit · Weekly: used/limit`. Adapters that don't expose `getUsage()` drop the usage segments instead of rendering placeholders. Footer values refresh whenever a worker run completes (the main process broadcasts `adapters:onUsageUpdate`) and via a manual refresh in Settings.
 
 The Claude Code adapter is the only one shipping in MVP, but the architecture supports any CLI agent from day one. Adding a new adapter is a single file plus a registry entry — no engine changes.

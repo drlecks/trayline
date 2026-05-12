@@ -3,7 +3,7 @@ import fs from 'node:fs/promises'
 import { join } from 'node:path'
 import { Paths } from './fs-service'
 import { auditDb } from './audit-db'
-import { setMockScript } from '../ai-terminals/mock'
+import { setMockScript, getMockClearContextCalls, resetMockClearContextCalls } from '../ai-terminals/mock'
 import { workerRunner } from './worker-runner'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -151,6 +151,29 @@ describe('workerRunner', () => {
 
     const rows = auditDb.query({ project_id: project, event: 'run_failed' })
     expect(rows.length).toBeGreaterThan(0)
+  })
+
+  it('clears adapter context exactly once per run on success', async () => {
+    resetMockClearContextCalls()
+    const project = `clear-ok-${Date.now()}`
+    const { stepsDir } = await buildWorkflow({ name: project, trayId: '01-src', workerId: '02-worker', nextTrayId: '03-next' })
+    await seedReadyCard(stepsDir, '01-src', 'card_c_001')
+
+    await workerRunner.triggerRun({ project, workflow: 'wf', stepId: '02-worker', cardId: 'card_c_001' })
+
+    expect(getMockClearContextCalls()).toBe(1)
+  })
+
+  it('clears adapter context exactly once per run on failure', async () => {
+    resetMockClearContextCalls()
+    setMockScript({ output: 'nope', exitCode: 1 })
+    const project = `clear-fail-${Date.now()}`
+    const { stepsDir } = await buildWorkflow({ name: project, trayId: '01-src', workerId: '02-worker', nextTrayId: '03-next' })
+    await seedReadyCard(stepsDir, '01-src', 'card_c_002')
+
+    await workerRunner.triggerRun({ project, workflow: 'wf', stepId: '02-worker', cardId: 'card_c_002' })
+
+    expect(getMockClearContextCalls()).toBe(1)
   })
 
   it('marks orphaned running runs as interrupted', async () => {

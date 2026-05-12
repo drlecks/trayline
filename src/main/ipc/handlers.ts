@@ -10,7 +10,7 @@ import { cardService } from '../services/card-service'
 import { workerRunner } from '../services/worker-runner'
 import { watcherService } from '../services/watcher-service'
 import { schedulerService } from '../services/scheduler-service'
-import type { BootstrapInfo } from '../../shared/types'
+import type { BootstrapInfo, ProviderInstallSuggestion, ProviderReadyResult } from '../../shared/types'
 import type { CardStatus } from '../../shared/card'
 
 export type { BootstrapInfo }
@@ -28,6 +28,12 @@ export function registerIpcHandlers(
     if (key === 'theme') {
       const t = value as Settings['theme']
       nativeTheme.themeSource = t === 'system' ? 'system' : t
+    }
+
+    // Broadcast so other panes (e.g. the footer) refresh without waiting for
+    // the next worker run.
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) win.webContents.send('settings:onChange', settingsStore.store)
     }
 
     return settingsStore.store
@@ -99,7 +105,12 @@ export function registerIpcHandlers(
 
   // ── AI adapters ───────────────────────────────────────────────────────────
   ipcMain.handle('adapters:list', () =>
-    adapterRegistry.list().map((a) => ({ id: a.id, displayName: a.displayName })),
+    adapterRegistry.list().map((a) => ({
+      id: a.id,
+      displayName: a.displayName,
+      kind: a.kind,
+      installUrl: a.installUrl ?? null,
+    })),
   )
   ipcMain.handle('adapters:detect', async (_: unknown, id: string) => {
     const a = adapterRegistry.get(id)
@@ -107,6 +118,62 @@ export function registerIpcHandlers(
     const installed = await a.detectInstalled()
     const version = installed ? await a.getVersion() : null
     return { installed, version }
+  })
+  ipcMain.handle('adapters:listModels', async (_: unknown, id: string) => {
+    const a = adapterRegistry.get(id)
+    if (!a) return []
+    return a.listModels()
+  })
+  ipcMain.handle('adapters:listEfforts', async (_: unknown, id: string, modelId: string) => {
+    const a = adapterRegistry.get(id)
+    if (!a) return []
+    return a.listEfforts(modelId)
+  })
+  ipcMain.handle('adapters:getUsage', async (_: unknown, id: string) => {
+    const a = adapterRegistry.get(id)
+    if (!a || !a.getUsage) return null
+    return a.getUsage()
+  })
+
+  // Curated suggestions surfaced when no production adapter is installed.
+  // Only `claude-code` is wired up today; the others are forward-looking
+  // entries the install modal can point users at. Keep this list in sync with
+  // the adapter registry as new adapters land.
+  const PROVIDER_SUGGESTIONS: ProviderInstallSuggestion[] = [
+    {
+      id: 'claude-code',
+      displayName: 'Claude Code',
+      description: 'Anthropic\'s official CLI — the recommended default. Runs locally and works with the Claude API.',
+      installUrl: 'https://docs.claude.com/en/docs/claude-code/quickstart',
+      available: true,
+    },
+    {
+      id: 'open-code',
+      displayName: 'OpenCode',
+      description: 'Open-source CLI agent. Bring-your-own-key for any major model provider.',
+      installUrl: 'https://opencode.ai',
+      available: false,
+    },
+    {
+      id: 'pi',
+      displayName: 'Pi',
+      description: 'Inflection\'s assistant. Lighter-weight option for everyday tasks.',
+      installUrl: 'https://pi.ai',
+      available: false,
+    },
+  ]
+
+  ipcMain.handle('adapters:checkProviderReady', async (): Promise<ProviderReadyResult> => {
+    const installedIds: string[] = []
+    for (const a of adapterRegistry.list()) {
+      if (a.kind !== 'production') continue
+      if (await a.detectInstalled()) installedIds.push(a.id)
+    }
+    return {
+      ready: installedIds.length > 0,
+      installedIds,
+      suggestions: PROVIDER_SUGGESTIONS,
+    }
   })
 
   // ── Steps (trays/workers) ─────────────────────────────────────────────────
