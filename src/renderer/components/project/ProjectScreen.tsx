@@ -54,15 +54,15 @@ export default function ProjectScreen() {
 
       <div className="flex flex-1 min-h-0">
         {/* Left rail */}
-        <aside className="w-64 shrink-0 border-r border-black/[0.06] dark:border-white/[0.06] overflow-y-auto py-4 px-3 flex flex-col">
-          <div className="px-2 mb-4">
-            <div className="text-xs font-semibold tracking-tight">{active.display_name}</div>
-            <div className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5">
+        <aside className="w-72 shrink-0 border-r border-black/[0.06] dark:border-white/[0.06] overflow-y-auto py-5 px-3 flex flex-col">
+          <div className="px-2 mb-5">
+            <div className="text-sm font-semibold tracking-tight">{active.display_name}</div>
+            <div className="text-[13px] text-neutral-500 dark:text-neutral-400 mt-0.5">
               {workflow?.display_name ?? 'No workflow'}
             </div>
           </div>
 
-          <div className="flex flex-col gap-1.5 flex-1">
+          <div className="flex flex-col gap-2 flex-1">
             {steps.map((step) => (
               <StepCard
                 key={step.id}
@@ -76,9 +76,9 @@ export default function ProjectScreen() {
               variant="ghost"
               size="sm"
               onClick={() => setPickOpen(true)}
-              className="justify-start gap-2 text-xs text-neutral-500 mt-2"
+              className="justify-start gap-2 text-[13px] text-neutral-500 mt-2"
             >
-              <Plus size={12} strokeWidth={1.75} />
+              <Plus size={14} strokeWidth={1.75} />
               Add step
             </Button>
           </div>
@@ -87,10 +87,10 @@ export default function ProjectScreen() {
             <Button
               variant="ghost"
               size="sm"
-              className="justify-start gap-2 text-xs text-neutral-500"
+              className="justify-start gap-2 text-[13px] text-neutral-500"
               onClick={() => { setRegenerateOf(active.name); setScreen('author') }}
             >
-              <RefreshCw size={12} strokeWidth={1.75} />
+              <RefreshCw size={14} strokeWidth={1.75} />
               Regenerate workflow
             </Button>
           </div>
@@ -145,7 +145,7 @@ const RAIL_PILL_LABEL: Record<WorkerRunStatus, string> = {
 
 function RailStatusPill({ status }: { status: WorkerRunStatus }) {
   return (
-    <span className={`text-[9px] font-medium px-1.5 py-0 rounded-full ${RAIL_PILL_CLASS[status]}`}>
+    <span className={`text-[10px] font-medium px-1.5 py-0 rounded-full ${RAIL_PILL_CLASS[status]}`}>
       {RAIL_PILL_LABEL[status]}
     </span>
   )
@@ -171,7 +171,7 @@ function WorkerStatusBubble({ status }: { status: WorkerRunStatus | 'idle' }) {
   return (
     <span
       title={BUBBLE_TITLE[status as WorkerRunStatus]}
-      className={`shrink-0 inline-block w-[10px] h-[10px] mt-1 rounded-full ${cls}`}
+      className={`shrink-0 inline-block w-[11px] h-[11px] mt-1 rounded-full ${cls}`}
     />
   )
 }
@@ -219,45 +219,76 @@ function StepCard({ step, selected, onClick }: { step: StepMeta; selected: boole
 
   const total = counts ? counts.pending + counts.ready : 0
 
+  // Per-type color tokens. Source isn't wired yet but the palette is ready.
+  // strip = full-height colored band on the left; tint = card background wash.
+  const palette = isError
+    ? {
+        strip: 'bg-error-strip',
+        stripText: 'text-white',
+        tint: 'bg-error-light/40 dark:bg-red-950/20',
+        ring: 'ring-error/40',
+        label: 'Error tray',
+      }
+    : step.kind === 'worker'
+    ? {
+        strip: 'bg-worker-strip',
+        stripText: 'text-white',
+        tint: 'bg-worker-light/50 dark:bg-violet-950/15',
+        ring: 'ring-worker/40',
+        label: 'Worker',
+      }
+    : {
+        strip: 'bg-tray-strip',
+        stripText: 'text-white',
+        tint: 'bg-tray-light/50 dark:bg-blue-950/15',
+        ring: 'ring-tray/40',
+        label: 'Tray',
+      }
+
   return (
     <button
       onClick={onClick}
       className={`
-        group rounded-md border px-3 py-2.5 text-left
-        ${selected ? 'border-l-[3px] border-l-neutral-900 dark:border-l-neutral-100' : ''}
+        group relative overflow-hidden rounded-lg border text-left
+        transition-all duration-150
         ${isError
-          ? 'border-dashed border-neutral-200 dark:border-neutral-800 opacity-70 hover:opacity-100'
+          ? 'border-dashed border-neutral-200 dark:border-neutral-800 opacity-80 hover:opacity-100'
           : 'border-neutral-200 dark:border-neutral-800 hover:border-neutral-300 dark:hover:border-neutral-700'}
-        ${selected ? 'bg-neutral-50 dark:bg-neutral-900/50' : 'bg-white dark:bg-neutral-950'}
-        transition-colors
+        ${selected
+          ? `ring-2 ${palette.ring} shadow-sm`
+          : ''}
       `}
     >
-      <div className="flex items-start gap-2">
+      <div className={`flex items-stretch min-h-[60px] ${palette.tint}`}>
+        {/* Full-height colored strip with the type icon */}
         <div className={`
-          shrink-0 w-7 h-7 rounded-md flex items-center justify-center
-          ${step.kind === 'tray' ? 'bg-tray-light text-tray' : 'bg-worker-light text-worker'}
-          ${isError ? 'bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400' : ''}
+          shrink-0 w-11 flex items-center justify-center
+          ${palette.strip} ${palette.stripText}
         `}>
-          <Icon size={14} strokeWidth={1.75} />
+          <Icon size={18} strokeWidth={2} />
         </div>
-        <div className="flex-1 min-w-0">
-          <div className="text-xs font-medium truncate">{step.name}</div>
-          <div className="text-[11px] text-neutral-500 dark:text-neutral-400 truncate flex items-center gap-1.5">
-            <span>{step.kind === 'tray' ? 'Tray' : 'Worker'}</span>
-            {counts && total > 0 && (
-              <span>· {total} card{total === 1 ? '' : 's'}</span>
-            )}
-            {step.kind === 'worker' && workerStatus !== 'idle' && (
-              <RailStatusPill status={workerStatus} />
-            )}
+
+        {/* Content */}
+        <div className="flex-1 min-w-0 flex items-start gap-2 px-3 py-2.5 bg-white/70 dark:bg-neutral-950/60">
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-medium truncate leading-tight">{step.name}</div>
+            <div className="text-[13px] text-neutral-500 dark:text-neutral-400 truncate flex items-center gap-1.5 mt-0.5">
+              <span>{palette.label}</span>
+              {counts && total > 0 && (
+                <span>· {total} card{total === 1 ? '' : 's'}</span>
+              )}
+              {step.kind === 'worker' && workerStatus !== 'idle' && (
+                <RailStatusPill status={workerStatus} />
+              )}
+            </div>
           </div>
+          {counts && counts.pending > 0 && step.kind === 'tray' && !isError && (
+            <span className="shrink-0 inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-400 text-[11px] font-semibold">
+              {counts.pending}
+            </span>
+          )}
+          {step.kind === 'worker' && <WorkerStatusBubble status={workerStatus} />}
         </div>
-        {counts && counts.pending > 0 && step.kind === 'tray' && !isError && (
-          <span className="shrink-0 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-400 text-[10px] font-medium">
-            {counts.pending}
-          </span>
-        )}
-        {step.kind === 'worker' && <WorkerStatusBubble status={workerStatus} />}
       </div>
     </button>
   )

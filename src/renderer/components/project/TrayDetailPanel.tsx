@@ -18,30 +18,30 @@ export default function TrayDetailPanel({ step }: TrayDetailPanelProps) {
   return (
     <div className="flex flex-col w-full h-full overflow-hidden">
       {/* Header */}
-      <div className="px-6 py-4 border-b border-black/[0.06] dark:border-white/[0.06] shrink-0">
+      <div className="px-6 py-5 border-b border-black/[0.06] dark:border-white/[0.06] shrink-0">
         <div className="flex items-center gap-3">
-          <div className={`w-9 h-9 rounded-md flex items-center justify-center ${
-            isErrors ? 'bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400' : 'bg-tray-light text-tray'
+          <div className={`w-11 h-11 rounded-lg flex items-center justify-center text-white ${
+            isErrors ? 'bg-error-strip' : 'bg-tray-strip'
           }`}>
-            <Inbox size={16} strokeWidth={1.75} />
+            <Inbox size={20} strokeWidth={2} />
           </div>
           <div>
-            <h1 className="text-base font-semibold tracking-tight">{step.name}</h1>
-            <div className="text-xs text-neutral-500 dark:text-neutral-400">
-              Tray · {(step.raw.approval_mode as string) ?? 'manual'} approval
+            <h1 className="text-lg font-semibold tracking-tight">{step.name}</h1>
+            <div className="text-[13px] text-neutral-500 dark:text-neutral-400">
+              {isErrors ? 'Error tray' : 'Tray'} · {(step.raw.approval_mode as string) ?? 'manual'} approval
               {step.description && <> · {step.description}</>}
             </div>
           </div>
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 mt-4 -mb-4">
+        <div className="flex gap-1 mt-4 -mb-5">
           {(['cards', 'config', 'schema'] as Tab[]).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
               className={`
-                px-3 py-1.5 text-xs font-medium capitalize border-b-2 transition-colors
+                px-3 py-2 text-[13px] font-medium capitalize border-b-2 transition-colors
                 ${tab === t
                   ? 'border-neutral-900 dark:border-neutral-100 text-neutral-900 dark:text-neutral-100'
                   : 'border-transparent text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200'}

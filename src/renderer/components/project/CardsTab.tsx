@@ -12,11 +12,19 @@ const STATUS_TABS: { id: CardStatus; label: string }[] = [
   { id: 'ready', label: 'Ready' },
   { id: 'archived', label: 'Archived' },
 ]
+// The error tray never holds "ready" cards — they're either waiting for the
+// user to retry/archive (pending) or they've been parked permanently (archived).
+const ERROR_STATUS_TABS: { id: CardStatus; label: string }[] = [
+  { id: 'pending', label: 'Pending' },
+  { id: 'archived', label: 'Archived' },
+]
 
 export default function CardsTab({ step }: { step: StepMeta }) {
   const active = useProjectStore((s) => s.active)
   const workflow = useProjectStore((s) => s.workflow)
 
+  const isErrors = step.id === '99-errors'
+  const tabs = isErrors ? ERROR_STATUS_TABS : STATUS_TABS
   const [status, setStatus] = useState<CardStatus>('pending')
   const [cards, setCards] = useState<Card[]>([])
   const [loading, setLoading] = useState(false)
@@ -54,7 +62,7 @@ export default function CardsTab({ step }: { step: StepMeta }) {
       {/* Status filter + new card */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex gap-1">
-          {STATUS_TABS.map((t) => (
+          {tabs.map((t) => (
             <button
               key={t.id}
               onClick={() => setStatus(t.id)}
@@ -70,7 +78,7 @@ export default function CardsTab({ step }: { step: StepMeta }) {
           ))}
         </div>
 
-        {allowManualCreate && step.id !== '99-errors' && (
+        {allowManualCreate && !isErrors && (
           <Button size="sm" onClick={() => setShowNew(true)} disabled={!hasSchema} title={!hasSchema ? 'Define fields in the Schema tab first' : undefined}>
             <Plus size={13} strokeWidth={1.75} /> New card
           </Button>
@@ -82,20 +90,23 @@ export default function CardsTab({ step }: { step: StepMeta }) {
         <div className="text-xs text-neutral-400">Loading…</div>
       ) : cards.length === 0 ? (
         <div className="text-sm text-neutral-500 dark:text-neutral-400 py-12 text-center">
-          {status === 'pending' && 'No cards waiting. Create one to get started.'}
+          {status === 'pending' && (isErrors ? 'No failed cards. All clear.' : 'No cards waiting. Create one to get started.')}
           {status === 'ready' && 'No cards are ready yet.'}
           {status === 'archived' && 'No archived cards yet.'}
         </div>
       ) : (
-        <div className="flex flex-col">
+        <div className="flex flex-col -mx-3 rounded-md overflow-hidden border border-neutral-200/70 dark:border-neutral-800/70">
           {cards.map((c) => (
             <button
               key={c.id}
               onClick={() => setOpenCardId(c.id)}
               className="
-                group flex items-center gap-3 py-2.5 px-3 -mx-3 rounded-md
-                hover:bg-neutral-50 dark:hover:bg-neutral-900/50
+                group flex items-center gap-3 py-2.5 px-3
+                odd:bg-white even:bg-neutral-50/80
+                dark:odd:bg-neutral-950 dark:even:bg-neutral-900/40
+                hover:!bg-neutral-100 dark:hover:!bg-neutral-800/60
                 text-left transition-colors
+                border-b border-neutral-100 dark:border-neutral-900/60 last:border-b-0
               "
             >
               <div className="flex-1 min-w-0">

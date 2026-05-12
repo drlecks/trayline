@@ -38,39 +38,39 @@ export default function WorkerDetailPanel({ step }: WorkerDetailPanelProps) {
 
   return (
     <div className="flex flex-col w-full h-full overflow-hidden">
-      <div className="px-6 py-4 border-b border-black/[0.06] dark:border-white/[0.06] shrink-0">
+      <div className="px-6 py-5 border-b border-black/[0.06] dark:border-white/[0.06] shrink-0">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-md flex items-center justify-center bg-worker-light text-worker">
-            <Cpu size={16} strokeWidth={1.75} />
+          <div className="w-11 h-11 rounded-lg flex items-center justify-center bg-worker-strip text-white">
+            <Cpu size={20} strokeWidth={2} />
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <h1 className="text-base font-semibold tracking-tight truncate">{step.name}</h1>
+              <h1 className="text-lg font-semibold tracking-tight truncate">{step.name}</h1>
               <StatusPill status={status} />
             </div>
-            <div className="text-xs text-neutral-500 dark:text-neutral-400 truncate">
+            <div className="text-[13px] text-neutral-500 dark:text-neutral-400 truncate">
               Worker
               {step.description && <> · {step.description}</>}
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             {runNowFeedback && (
-              <span className="text-[11px] text-neutral-500">{runNowFeedback}</span>
+              <span className="text-[12px] text-neutral-500">{runNowFeedback}</span>
             )}
             <Button size="sm" variant="outline" onClick={handleRunNow} disabled={runNowBusy}>
-              <Play size={12} strokeWidth={2} className="mr-1" />
+              <Play size={14} strokeWidth={2} className="mr-1" />
               {runNowBusy ? 'Starting…' : 'Run now'}
             </Button>
           </div>
         </div>
 
-        <div className="flex gap-1 mt-4 -mb-4">
+        <div className="flex gap-1 mt-4 -mb-5">
           {(['instructions', 'config', 'runs'] as Tab[]).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
               className={`
-                px-3 py-1.5 text-xs font-medium capitalize border-b-2 transition-colors
+                px-3 py-2 text-[13px] font-medium capitalize border-b-2 transition-colors
                 ${tab === t
                   ? 'border-neutral-900 dark:border-neutral-100 text-neutral-900 dark:text-neutral-100'
                   : 'border-transparent text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200'}
