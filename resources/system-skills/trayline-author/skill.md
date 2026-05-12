@@ -57,7 +57,15 @@ You MUST output a single JSON object matching this schema, and nothing else:
    - Skills: `pdf-reader`, `csv-parser`, `email-sender`, `web-scraper` (only suggest if obviously needed; otherwise leave empty)
    - MCPs: `gmail`, `google-calendar`, `google-drive`, `web-browse`, `github`, `slack`, `notion`, `filesystem`, `fetch` (only suggest when the user's description clearly needs the integration)
 6. **Manual approval** for trays where a human should review before the workflow continues. **Auto** when the previous worker produced a definitive result.
-7. **process.md should be specific.** Reference `{{card.data}}` for input fields and tell the worker exactly what JSON shape to output.
+7. **process.md should be specific.** Tell the worker exactly which input fields it gets and what JSON shape to output.
+
+   **Template tokens.** Trayline substitutes these into the prompt before the worker runs:
+   - `{{card.data}}` → the entire card payload as pretty-printed JSON. Use this when the worker needs the whole record or when the field list is long.
+   - `{{card.data.<field>}}` → the value at that dotted path. Strings inline verbatim; missing paths render as empty. Use this when you want to reference individual fields by name in human-readable instructions, e.g. `Translate {{card.data.snippet}} into {{card.data.target_language}}.`
+   - Dotted paths may go deeper (`{{card.data.user.email}}`) if the schema nests.
+
+   Prefer dotted paths in instructional prose (clearer to a non-technical maintainer reading process.md) and `{{card.data}}` when the worker should reason over the whole object. Both forms can be mixed in the same file.
+
    Always include a short "If you cannot complete the task" section that instructs the worker to return the **Trayline Worker Output Contract** failure envelope instead of guessing:
 
    ```json
