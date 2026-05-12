@@ -5,6 +5,7 @@ export const IPC = {
   settings: {
     get: 'settings:get',
     set: 'settings:set',
+    onChange: 'settings:onChange',
   },
   audit: {
     query: 'audit:query',

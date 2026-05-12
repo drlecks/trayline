@@ -59,8 +59,9 @@ export default function Footer() {
       setUsage(snap)
     }
     void refresh()
-    const off = window.trayline.adapters.onUsageUpdate(() => { void refresh() })
-    return () => { cancelled = true; off() }
+    const offUsage = window.trayline.adapters.onUsageUpdate(() => { void refresh() })
+    const offSettings = window.trayline.settings.onChange(() => { void refresh() })
+    return () => { cancelled = true; offUsage(); offSettings() }
   }, [])
 
   const adapter = adapters.find((a) => a.id === settings?.defaultAdapterId) ?? null

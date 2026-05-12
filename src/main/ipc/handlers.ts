@@ -30,6 +30,12 @@ export function registerIpcHandlers(
       nativeTheme.themeSource = t === 'system' ? 'system' : t
     }
 
+    // Broadcast so other panes (e.g. the footer) refresh without waiting for
+    // the next worker run.
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) win.webContents.send('settings:onChange', settingsStore.store)
+    }
+
     return settingsStore.store
   })
 
