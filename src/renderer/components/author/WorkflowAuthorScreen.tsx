@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Sparkles, ArrowRight, ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { CopyButton } from '@/components/ui/copy-button'
 import { useProjectStore } from '@/stores/project-store'
 import type { ProjectCreateOutcome } from '../../../shared/types'
 
@@ -137,12 +138,26 @@ export default function WorkflowAuthorScreen() {
           bg-red-50 dark:bg-red-950/40 px-4 py-3 mb-4
           text-xs text-red-800 dark:text-red-300
         ">
-          <div className="font-medium mb-1">Couldn't generate the workflow</div>
+          <div className="flex items-start justify-between gap-2 mb-1">
+            <div className="font-medium">Couldn't generate the workflow</div>
+            <CopyButton
+              value={() => (error.raw ? `${error.message}\n\n--- raw ---\n${error.raw}` : error.message)}
+              title="Copy error to clipboard"
+              className="-mt-1 -mr-1 text-red-700 dark:text-red-300"
+            />
+          </div>
           <div>{error.message}</div>
           {error.raw && (
             <details className="mt-2">
               <summary className="cursor-pointer text-red-600 dark:text-red-400 hover:underline">Show raw agent output</summary>
-              <pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap text-[11px] font-mono">{error.raw}</pre>
+              <div className="relative mt-1">
+                <pre className="max-h-48 overflow-auto whitespace-pre-wrap text-[11px] font-mono pr-8">{error.raw}</pre>
+                <CopyButton
+                  value={error.raw}
+                  title="Copy raw output"
+                  className="absolute top-0 right-0 text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-950/40"
+                />
+              </div>
             </details>
           )}
         </div>
