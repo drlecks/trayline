@@ -69,15 +69,51 @@ export interface AISession {
   result(): Promise<AISessionResult>
 }
 
+export interface ModelInfo {
+  id: string
+  label: string
+  description?: string
+}
+
+export interface EffortInfo {
+  id: string
+  label: string
+}
+
+// AdapterUsageSnapshot lives in src/shared/types so the renderer can import it
+// without dragging main-process modules into its TS program.
+export type { AdapterUsageSnapshot } from '../../shared/types'
+import type { AdapterUsageSnapshot } from '../../shared/types'
+
 export interface AITerminalAdapter {
   /** Stable identifier used by worker config (`adapter: "claude-code"`). */
   id: string
   /** Human-readable name shown in settings. */
   displayName: string
+  /**
+   * `production` adapters are real CLI agents that workers can actually run
+   * against. `mock` adapters return scripted fixtures for tests and dev. The
+   * app refuses to start a worker run when no production adapter is installed
+   * — see the renderer's provider-guard and worker-runner's pre-flight check.
+   */
+  kind: 'production' | 'mock'
+  /** Optional URL with install instructions, surfaced when `detectInstalled()` is false. */
+  installUrl?: string
   /** Returns true if the underlying CLI is available on the host system. */
   detectInstalled(): Promise<boolean>
   /** Returns the CLI version string, or null if not installed. */
   getVersion(): Promise<string | null>
+  /** Models the user can pick for this provider. Empty array if not applicable. */
+  listModels(): Promise<ModelInfo[]>
+  /** Effort tiers for the given model. Return `[]` for providers that don't expose efforts. */
+  listEfforts(modelId: string): Promise<EffortInfo[]>
+  /** Account/usage telemetry. Return `null` when the provider does not expose rolling windows. */
+  getUsage?(): Promise<AdapterUsageSnapshot | null>
+  /**
+   * Invoke the provider's "/clear" (or equivalent) so the next run starts with
+   * empty transcript history. Must be safe to call when no session is open.
+   */
+  clearContext(): Promise<void>
   /** Spawn a session for a single card. */
   spawn(opts: SpawnOptions): Promise<AISession>
 }

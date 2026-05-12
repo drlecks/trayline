@@ -5,6 +5,7 @@ export const IPC = {
   settings: {
     get: 'settings:get',
     set: 'settings:set',
+    onChange: 'settings:onChange',
   },
   audit: {
     query: 'audit:query',
@@ -33,6 +34,11 @@ export const IPC = {
   adapters: {
     list: 'adapters:list',
     detect: 'adapters:detect',
+    listModels: 'adapters:listModels',
+    listEfforts: 'adapters:listEfforts',
+    getUsage: 'adapters:getUsage',
+    onUsageUpdate: 'adapters:onUsageUpdate',
+    checkProviderReady: 'adapters:checkProviderReady',
   },
   step: {
     addTray: 'step:addTray',

@@ -9,7 +9,9 @@ import type {
   StepMeta,
   SkillManifest,
   UsageSnapshot,
+  AdapterUsageSnapshot,
   ProjectCreateOutcome,
+  ProviderReadyResult,
 } from '../shared/types'
 import type { Card, CardStatus, CardCounts } from '../shared/card'
 import type { PlanFieldDef, PlanTrayStep, PlanWorkerStep } from '../shared/workflow-plan'
@@ -20,6 +22,11 @@ const api = {
     get: (): Promise<Settings> => ipcRenderer.invoke(IPC.settings.get),
     set: <K extends keyof Settings>(key: K, value: Settings[K]): Promise<Settings> =>
       ipcRenderer.invoke(IPC.settings.set, key, value),
+    onChange: (handler: (next: Settings) => void): (() => void) => {
+      const listener = (_e: unknown, next: Settings) => handler(next)
+      ipcRenderer.on(IPC.settings.onChange, listener)
+      return () => ipcRenderer.off(IPC.settings.onChange, listener)
+    },
   },
   audit: {
     query: (filters: Record<string, string>): Promise<AuditRow[]> =>
@@ -51,10 +58,23 @@ const api = {
     get: (): Promise<UsageSnapshot> => ipcRenderer.invoke(IPC.usage.get),
   },
   adapters: {
-    list: (): Promise<{ id: string; displayName: string }[]> =>
+    list: (): Promise<{ id: string; displayName: string; kind: 'production' | 'mock'; installUrl: string | null }[]> =>
       ipcRenderer.invoke(IPC.adapters.list),
+    checkProviderReady: (): Promise<ProviderReadyResult> =>
+      ipcRenderer.invoke(IPC.adapters.checkProviderReady),
     detect: (id: string): Promise<{ installed: boolean; version: string | null }> =>
       ipcRenderer.invoke(IPC.adapters.detect, id),
+    listModels: (id: string): Promise<{ id: string; label: string; description?: string }[]> =>
+      ipcRenderer.invoke(IPC.adapters.listModels, id),
+    listEfforts: (id: string, modelId: string): Promise<{ id: string; label: string }[]> =>
+      ipcRenderer.invoke(IPC.adapters.listEfforts, id, modelId),
+    getUsage: (id: string): Promise<AdapterUsageSnapshot | null> =>
+      ipcRenderer.invoke(IPC.adapters.getUsage, id),
+    onUsageUpdate: (handler: () => void): (() => void) => {
+      const listener = () => handler()
+      ipcRenderer.on(IPC.adapters.onUsageUpdate, listener)
+      return () => ipcRenderer.off(IPC.adapters.onUsageUpdate, listener)
+    },
   },
   step: {
     addTray: (input: {

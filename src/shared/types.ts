@@ -8,6 +8,10 @@ export interface Settings {
   theme: 'light' | 'dark' | 'system'
   defaultCliCommand: string
   defaultAdapterId: string
+  /** Per-adapter chosen model id. Keyed by adapter id; null when not yet set. */
+  defaultModelByAdapter: Record<string, string | null>
+  /** Per-adapter chosen effort id. Keyed by adapter id; null when not set or N/A. */
+  defaultEffortByAdapter: Record<string, string | null>
   notificationsEnabled: boolean
   /**
    * Name (folder id) of the last project the user had open. Restored on next
@@ -34,6 +38,7 @@ export type AuditEvent =
   | 'mcp_configured'
   | 'mcp_credentials_reset'
   | 'mcp_health_check_failed'
+  | 'ai_terminal_clear_failed'
 
 export interface AuditRow {
   id: string
@@ -93,6 +98,38 @@ export interface UsageSnapshot {
   source: 'placeholder' | 'claude-code' | 'unavailable'
   /** ISO timestamp of when this snapshot was produced. */
   updatedAt: string
+}
+
+// ── AI provider readiness ─────────────────────────────────────────────────────
+
+export interface ProviderInstallSuggestion {
+  id: string
+  displayName: string
+  description: string
+  installUrl: string
+  /** True when this suggestion is actually wired up as an adapter today. */
+  available: boolean
+}
+
+export interface ProviderReadyResult {
+  /** True when at least one production adapter is installed on this machine. */
+  ready: boolean
+  /** Adapter ids that detected as installed and are production-kind. */
+  installedIds: string[]
+  /** Curated install suggestions to show the user when `ready` is false. */
+  suggestions: ProviderInstallSuggestion[]
+}
+
+/**
+ * Adapter-level usage telemetry surfaced in Settings + Footer.
+ * Mirrors `AdapterUsageSnapshot` in `src/main/ai-terminals/adapter.ts` and
+ * lives here so the renderer can import it without pulling in main-process
+ * modules. Both windows are nullable so adapters can expose one and not the
+ * other.
+ */
+export interface AdapterUsageSnapshot {
+  fiveHour: { used: number; limit: number; resetsAt: string } | null
+  weekly: { used: number; limit: number; resetsAt: string } | null
 }
 
 // ── Project creation (Workflow Author flow) ──────────────────────────────────
