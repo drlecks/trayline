@@ -10,10 +10,16 @@ import type {
 } from './adapter'
 
 // Strip ANSI escape sequences before trying to parse output as JSON. The PTY
-// preserves cursor moves and colour codes from the underlying CLI, but the
-// worker contract treats stdout as the agent's reply text.
+// preserves cursor moves, colour codes, AND OSC title sequences from the
+// underlying CLI, but the worker contract treats stdout as the agent's reply
+// text. Handles:
+//   - CSI:   ESC [ ... <final-byte>
+//   - OSC:   ESC ] ... (BEL | ESC \)        ← e.g. \x1B]0;claude\x07
+//   - other: ESC <single-char>
+// Also drops stray BEL (\x07) bytes left after partial parses, plus any C1
+// control characters that conpty/Windows occasionally injects.
 // eslint-disable-next-line no-control-regex
-const ANSI_RE = /\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g
+const ANSI_RE = /\x1B\][^\x07\x1B]*(?:\x07|\x1B\\)|\x1B\[[0-?]*[ -/]*[@-~]|\x1B[@-Z\\-_]|[\x07\x00-\x06\x0E-\x1A\x1C-\x1F]/g
 
 // Lightweight heuristic: trailing prompt characters with no following newline
 // suggest the CLI is waiting on input. Conservative on purpose — Claude in
@@ -258,9 +264,14 @@ export const claudeCodeAdapter: AITerminalAdapter = {
       ? `/s /c "claude -p < "${promptFile}""`
       : ['-c', `claude -p < "${promptFile}"`]
 
+    // Use a very wide PTY so the CLI does not soft-wrap its stdout. ConPTY on
+    // Windows emits awkward last-column autowrap artifacts that split JSON
+    // tokens mid-word (e.g. "process_md": "...the tex<\n>xt..."); the xterm.js
+    // panel re-wraps to its own width regardless, so the only cost of a wide
+    // PTY is the unread parts of the scrollback buffer.
     const term = pty.spawn(shell, shellArgs, {
       name: 'xterm-256color',
-      cols: 120,
+      cols: 1000,
       rows: 30,
       cwd: opts.workingDir,
       env: process.env as Record<string, string>,
