@@ -724,49 +724,55 @@ On first launch, the app needs to lay down the global folder structure and seed 
 - Context pack picker in worker config
 - Variable resolution in `process.md` (`{{card.data}}`, `{{context.brand-voice}}`)
 
-### Phase 7 — Skill Finder (3 days)
+### Phase 7 — Terminal Configuration (3 days)
+- Settings screen with AI provider / model / effort pickers (each dropdown refreshes from the adapter when the prior selection changes)
+- Footer summary: `Provider · Model · Effort · 5h: <u/l> · Weekly: <u/l>`
+- Adapter API additions: `listModels`, `listEfforts`, `getUsage`, `clearContext`
+- Call `clearContext()` after every worker run (success or failure) to keep token usage down
+
+### Phase 8 — Skill Finder (3 days)
 - Settings → Skills tabs (Installed / Find)
 - Fetch remote index, cache locally
 - Install / uninstall / update flow
 - Loading + offline states
 
-### Phase 8 — Human Review Polish (3 days)
+### Phase 9 — Human Review Polish (3 days)
 - Card editor (not just viewer)
 - Send-back flow with note
 - "My Queue" global view in top bar
 - Notifications for items waiting on the user
 
-### Phase 9 — Run History & Audit Log UI (3 days)
+### Phase 10 — Run History & Audit Log UI (3 days)
 - Per-worker Runs tab
 - Global History view
 - Filters, search, CSV export
 - Click to expand run details modal
 
-### Phase 10 — Scheduler (3 days)
-- node-cron integration
-- Friendly cron picker UI
-- "Run now" manual trigger button
-- Show next scheduled run time
+### Phase 11 — Skills & Context Packs (1 week)
+- Global skills folder UI (already created in Phase 1)
+- Skill picker in worker config
+- Context pack editor + picker
+- Variable resolution in `process.md`
 
-### Phase 11 — Import / Export (4 days)
+### Phase 12 — Import / Export (4 days)
 - Zip export with manifest
 - Import flow with skill check
 - "Export without runs" option
 - Example project bundled with the app
 
-### Phase 12 — Errors & Retry (2 days)
+### Phase 13 — Errors & Retry (2 days)
 - Error tray UI
 - Retry / edit-and-retry flows
 - Failure notifications
 
-### Phase 13 — Polish & Beta (1 week)
+### Phase 14 — Polish & Beta (1 week)
 - Empty states everywhere
 - Onboarding tour for first-time users
 - Keyboard shortcuts
 - Bug bash
 - Build pipelines for macOS, Windows, Linux
 
-**Total MVP estimate: ~11–13 weeks for one full-time developer, faster with two.**
+**Total MVP estimate: ~12–14 weeks for one full-time developer, faster with two.**
 
 ---
 
