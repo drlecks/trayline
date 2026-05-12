@@ -209,6 +209,30 @@ class ClaudePtySession implements AISession {
   }
 }
 
+/**
+ * Substitute `{{card.data}}` and `{{card.data.<dotted.path>}}` tokens in a
+ * worker's process.md body with values from the card payload.
+ *
+ * - `{{card.data}}` → the full payload pretty-printed as JSON.
+ * - `{{card.data.foo}}` → the value at that path; strings are inlined verbatim,
+ *   objects/arrays are JSON-stringified. Missing paths render as empty string.
+ *
+ * The regex tolerates internal whitespace (e.g. `{{ card.data.foo }}`).
+ */
+function renderProcessTemplate(body: string, cardData: object): string {
+  const data = cardData as Record<string, unknown>
+  const dotted = body.replace(/\{\{\s*card\.data\.([a-zA-Z_$][\w$]*(?:\.[a-zA-Z_$][\w$]*)*)\s*\}\}/g, (_, path: string) => {
+    const value = path.split('.').reduce<unknown>((acc, key) => {
+      if (acc && typeof acc === 'object') return (acc as Record<string, unknown>)[key]
+      return undefined
+    }, data)
+    if (value === undefined || value === null) return ''
+    if (typeof value === 'string') return value
+    return JSON.stringify(value)
+  })
+  return dotted.replace(/\{\{\s*card\.data\s*\}\}/g, JSON.stringify(data, null, 2))
+}
+
 /** Pull the last JSON value out of a text blob, if one is present at the tail. */
 function extractTrailingJson(s: string): string | null {
   const trimmed = s.trim()
@@ -242,7 +266,7 @@ export const claudeCodeAdapter: AITerminalAdapter = {
     if (opts.contextPacks.length > 0) {
       promptParts.push(`## Context\n\n${opts.contextPacks.join('\n\n')}`)
     }
-    promptParts.push(processBody.replace('{{card.data}}', JSON.stringify(opts.cardData, null, 2)))
+    promptParts.push(renderProcessTemplate(processBody, opts.cardData))
 
     const prompt = promptParts.join('\n\n---\n\n')
 
