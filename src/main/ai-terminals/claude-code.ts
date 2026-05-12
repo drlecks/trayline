@@ -248,8 +248,14 @@ export const claudeCodeAdapter: AITerminalAdapter = {
 
     const isWin = process.platform === 'win32'
     const shell = isWin ? 'cmd.exe' : '/bin/sh'
-    const shellArgs = isWin
-      ? ['/c', `claude -p < "${promptFile}"`]
+    // On Windows, pass the command line as a single raw string to bypass
+    // node-pty's argv quoting. The array form ends up wrapping the entire
+    // command in quotes, and because of the shell-special `<` redirection
+    // cmd.exe then treats the quoted string as a program name and bails with
+    // "filename/directory/volume label syntax is incorrect". `/s /c "<cmd>"`
+    // tells cmd to use everything between the outer quotes verbatim.
+    const shellArgs: string | string[] = isWin
+      ? `/s /c "claude -p < "${promptFile}""`
       : ['-c', `claude -p < "${promptFile}"`]
 
     const term = pty.spawn(shell, shellArgs, {
