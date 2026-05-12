@@ -59,11 +59,24 @@
 
 **Worker** — shows `idle`, `running ⚙`, `failed ⚠`, with last run time underneath. A right-aligned **status bubble** mirrors the tray's pending-count slot for at-a-glance feedback: amber pulsing dot when `running`, blue pulsing dot when `awaiting_input`, solid red dot when the last run `failed`. Other states (idle, succeeded, interrupted, pending) show no bubble — the inline text pill carries that information.
 
+### Step card anatomy
+
+Step cards in the left rail are split into two visual zones:
+
+1. **Type strip** — a full-height, ~44 px wide colored band on the left of the card, containing the type icon in white. The strip's color is the type's accent at full saturation:
+   - Source → green (`#3FA86E`)
+   - Tray → blue (`#3F7CE0`)
+   - Worker → violet (`#6E50D8`)
+   - Error tray → red (`#CC3338`)
+2. **Content area** — the remainder of the card. White background with a soft type-tinted wash, holding the step name, type label, card count, and any status pill/bubble.
+
+This makes type immediately scannable in peripheral vision — users distinguish tray vs worker vs source vs error from the color band alone, before reading any text.
+
 ### Step card visual states
-- **Default** — soft background, light border
-- **Selected** — accent left border (4px), slightly raised shadow
+- **Default** — white content area on a soft type-tinted wash, light border, colored strip on left
+- **Selected** — 2 px accent ring in the strip's color, slight raised shadow
 - **Running** — animated subtle pulse on the icon
-- **Error** — red dot in corner
+- **Error** — dashed border, red strip, slightly reduced opacity until hovered
 
 ---
 
@@ -92,8 +105,13 @@ Typography: 11 px monospace (JetBrains Mono), tabular numerals so digits don't r
 ## Color Discipline
 
 - One accent color per project, set in project settings (default soft blue)
-- Sources = green family / Trays = blue family / Workers = orange family / Errors = red — but desaturated, not vivid
-- Default source color: `#4CB87E` (muted green). Distinct from tray blue and worker orange; communicates "data coming in from the world."
+- Sources = green family / Trays = blue family / Workers = violet family / Errors = red
+- Amber, red, and green are **reserved for live status signalling** (running / failed / done) and never used as a type identity color — workers therefore use violet, not orange.
+- Each type has three tokens in `tailwind.config.ts`: `DEFAULT` (mid-saturation, used for icons-on-light), `light` (soft wash for tinted backgrounds), and `strip` (full-saturation, used for the rail step card's left strip and panel header icon tiles).
+  - Source: `#4CB87E` / `#E8F6EE` / `#3FA86E`
+  - Tray: `#4F8EF7` / `#EBF2FE` / `#3F7CE0`
+  - Worker: `#8B6FE8` / `#F0EBFB` / `#6E50D8`
+  - Error: `#E5484D` / `#FDECEC` / `#CC3338`
 - Background: `#FAFAF9` (warm off-white) light mode / `#0F0F0F` dark mode
 - Minimum 24px around content blocks
 
@@ -103,8 +121,11 @@ Typography: 11 px monospace (JetBrains Mono), tabular numerals so digits don't r
 
 - **Inter** for UI
 - **JetBrains Mono** for terminal, JSON, and code
-- Sizes: 13px UI, 14px body, 18px headers, 24px page titles
+- Sizes: 13px secondary/meta, 14px body & rail item titles, 18px panel headers, 24px page titles
+- Rail width: 288 px (`w-72`) — wide enough for two-line step labels at 14 px without truncation
 - Line height 1.5 minimum
+
+The app is used daily by non-technical users; sizing leans generous on purpose. Avoid going below 12 px outside of dense status pills.
 
 ---
 

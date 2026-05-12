@@ -384,7 +384,7 @@ In settings, the user picks a default adapter and can override it per-worker. If
 
 ### Color discipline
 - One accent color per project, set in project settings (default soft blue)
-- Trays = blue family / Workers = orange family / Errors = red — but desaturated, not vivid
+- Trays = blue family / Workers = violet family / Errors = red — but desaturated, not vivid (amber/red/green reserved for status)
 - Background: `#FAFAF9` (warm off-white) light, `#0F0F0F` dark
 - Generous whitespace — minimum 24px around content blocks
 
