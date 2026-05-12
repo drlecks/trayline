@@ -63,12 +63,36 @@ export function registerIpcHandlers(
     projectService.listSteps(project, workflow),
   )
   ipcMain.handle('project:listSkills', () => projectService.listSkills())
-  ipcMain.handle('project:create', (_: unknown, description: string, opts?: { regenerateOf?: string }) =>
-    projectCreateService.createFromDescription(description, opts),
-  )
-  ipcMain.handle('project:delete', (_: unknown, name: string) =>
-    projectCreateService.deleteProject(name),
-  )
+  ipcMain.handle('project:create', async (_: unknown, description: string, opts?: { regenerateOf?: string }) => {
+    // If regenerating, tear down watchers for the old project's workflows
+    // before scaffolding overwrites the folders.
+    if (opts?.regenerateOf) {
+      const oldWorkflows = await projectService.listWorkflows(opts.regenerateOf).catch(() => [])
+      for (const w of oldWorkflows) {
+        await watcherService.unmountWorkflow(opts.regenerateOf, w.name)
+        schedulerService.unmountWorkflow(opts.regenerateOf, w.name)
+      }
+    }
+    const result = await projectCreateService.createFromDescription(description, opts)
+    if (result.ok) {
+      // Mount watchers + scheduler for every workflow in the new project so
+      // `on_ready` cards trigger workers without needing an app restart.
+      const workflows = await projectService.listWorkflows(result.project.name).catch(() => [])
+      for (const w of workflows) {
+        await watcherService.mountWorkflow(result.project.name, w.name)
+        await schedulerService.mountWorkflow(result.project.name, w.name)
+      }
+    }
+    return result
+  })
+  ipcMain.handle('project:delete', async (_: unknown, name: string) => {
+    const workflows = await projectService.listWorkflows(name).catch(() => [])
+    for (const w of workflows) {
+      await watcherService.unmountWorkflow(name, w.name)
+      schedulerService.unmountWorkflow(name, w.name)
+    }
+    await projectCreateService.deleteProject(name)
+  })
 
   // ── Usage / rate-limit windows ────────────────────────────────────────────
   ipcMain.handle('usage:get', () => usageService.getSnapshot())
