@@ -47,11 +47,31 @@ export default function TerminalPanel({ project, workflow, stepId, runId, status
     term.loadAddon(fit)
     term.loadAddon(search)
     term.open(hostRef.current)
-    try { fit.fit() } catch { /* no-op */ }
 
     termRef.current = term
     fitRef.current = fit
     searchRef.current = search
+
+    let disposed = false
+    let rafId: number | null = null
+
+    // `fit.fit()` reads xterm's internal renderer dimensions, which are set up
+    // asynchronously after `term.open()`. Calling fit before that — or with a
+    // zero-sized host — throws later inside Viewport.syncScrollArea. Guard
+    // against both: require a non-zero host and the renderer to exist before
+    // calling fit. If either isn't ready, retry on the next rAF.
+    function safeFit() {
+      if (disposed) return
+      const host = hostRef.current
+      if (!host || host.clientWidth <= 0 || host.clientHeight <= 0) return
+      // @ts-expect-error — peek at the private renderService to detect when xterm is ready
+      if (!term._core?._renderService?.dimensions) {
+        rafId = requestAnimationFrame(safeFit)
+        return
+      }
+      try { fit.fit() } catch { /* no-op */ }
+    }
+    rafId = requestAnimationFrame(safeFit)
 
     // Forward keystrokes to the live PTY only while the worker is awaiting input.
     // Otherwise the terminal is read-only and typing does nothing — matching
@@ -62,12 +82,12 @@ export default function TerminalPanel({ project, workflow, stepId, runId, status
       }
     })
 
-    const ro = new ResizeObserver(() => {
-      try { fit.fit() } catch { /* no-op */ }
-    })
+    const ro = new ResizeObserver(() => { safeFit() })
     ro.observe(hostRef.current)
 
     return () => {
+      disposed = true
+      if (rafId !== null) cancelAnimationFrame(rafId)
       ro.disconnect()
       term.dispose()
       termRef.current = null
