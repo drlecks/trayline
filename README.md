@@ -125,24 +125,6 @@ npm test               # unit tests (mock AI adapter, no real CLI required)
 
 ## Project structure
 
-```
-src/
-├── main/                    # Electron main process
-│   ├── ai-terminals/        # AI Terminal Adapter + adapters (claude-code, mock)
-│   ├── services/            # Project metadata, file system, audit log, MCP registry
-│   └── ipc/                 # IPC handlers (typed)
-└── renderer/                # React app
-    ├── components/
-    │   ├── workflow/        # Left rail, step cards
-    │   ├── tray/            # Tray detail, card list, schema builder
-    │   ├── worker/          # Worker detail, process.md editor, run history
-    │   ├── card/            # Card viewer/editor, history timeline
-    │   ├── terminal/        # xterm.js panel
-    │   ├── skills/          # Skills screen, install flow
-    │   └── mcps/            # MCPs screen, setup wizard
-    └── pages/
-```
-
 Data lives in `~/Documents/Trayline/`. The full folder layout — including how cards move between trays and how runs are stored — is documented in [`docs/data-model.md`](docs/data-model.md).
 
 ---
@@ -150,10 +132,6 @@ Data lives in `~/Documents/Trayline/`. The full folder layout — including how 
 ## Roadmap
 
 Implementation is organized into phases. The current status of each is tracked in [`docs/implementation/tasks.md`](docs/implementation/tasks.md).
-
-**MVP (Phases 0–13):** Core workflow engine, trays, workers, Claude Code integration, terminal, skills, skill finder, human review, run history, scheduler, import/export, error handling.
-
-**N2 (Phases N2.1–N2.8):** Enhanced skills (URL installs, validation), full MCP system (Gmail, Calendar, Drive, GitHub, Slack, Notion, and more), OAuth setup wizard, MCP-aware Workflow Author.
 
 ---
 
@@ -174,4 +152,14 @@ The full architectural context is in [`docs/`](docs/) and [`CLAUDE.md`](CLAUDE.m
 
 ## License
 
-MIT
+Trayline is released under the **GNU General Public License v3.0 (GPLv3)**.
+
+In plain English:
+
+- You can **use** Trayline for anything, including at a company, for free.
+- You can **modify** it however you want.
+- You can **redistribute** it — original or modified.
+- If you redistribute a modified version, it **must also be GPLv3** and you must make the source available.
+- There is **no warranty** — use it at your own risk.
+
+See the [full license text](https://www.gnu.org/licenses/gpl-3.0.txt) for the legal version.
