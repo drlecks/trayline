@@ -161,3 +161,41 @@ export interface SkillManifest {
   tools?: string[]
   _trayline?: Record<string, unknown>
 }
+
+// ── Skill catalog (Phase 8 — Skill Finder) ────────────────────────────────────
+
+export interface SkillCatalogEntry {
+  id: string
+  name: string
+  version: string
+  description: string
+  author?: string
+  tags?: string[]
+  /** Directory URL where the skill's files live (must end with `/`). */
+  base_url: string
+  /** Relative paths to fetch under base_url. Defaults to ["skill.json", "skill.md"]. */
+  files?: string[]
+}
+
+export interface SkillCatalogIndex {
+  schema_version?: number
+  generated_at?: string
+  skills: SkillCatalogEntry[]
+}
+
+export interface SkillCatalogFetchResult {
+  index: SkillCatalogIndex
+  source: 'remote' | 'cache'
+  /** Populated when source === 'cache' — why the remote attempt failed. */
+  remoteError?: string
+}
+
+export interface InstalledSkillRow {
+  manifest: SkillManifest
+  source: 'catalog' | 'url' | 'local' | 'system'
+  sourceUrl?: string
+  installedAt?: string
+  usedBy: { project: string; workflow: string; stepId: string }[]
+  /** Version available in the cached catalog when newer than installed. */
+  updateAvailable?: string
+}

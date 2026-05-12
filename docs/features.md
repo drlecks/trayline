@@ -143,11 +143,17 @@ The user never has to open the terminal to use Trayline. But it's always one cli
 
 ## 7.11 Skill Finder
 
-- Top bar → **Skills** → **+ Add skill** → **Browse catalog** tab
-- Fetches `https://raw.githubusercontent.com/[org]/trayline-skills/main/index.json`
-- Index: list of `{id, name, description, version, download_url, tags}`
-- Offline-friendly: if the index can't be fetched, the cached version is used
-- **Installed** section shows installed skills with **Update** / **Uninstall**
+- Top bar → **Skills** (lucide `Package` icon) → opens the Skills screen
+- **Installed** section lists installed user skills (not `_system`) with **Update** / **Uninstall**
+  - **Uninstall** is disabled with a tooltip naming the workers when any worker still references the skill in its `step.json` → `skills: []`
+  - **Update** is shown for skills installed from the catalog or a URL
+- **+ Add skill** opens a modal with two tabs
+  - **Browse catalog** — fetches `https://raw.githubusercontent.com/trayline/trayline-skills/main/index.json`, falls back to the cached copy at `app-data/skills-index-cache.json` when offline. Search box filters across name, description, and tags
+  - **From URL** — pastes a base URL containing `skill.json` and `skill.md`; phase 8 only accepts those two files, full validation (executable rejection, multi-file skills) lands in N2.1
+- Catalog entry shape used by phase 8:
+  - `{ id, name, version, description, author?, tags?, base_url, files? }`
+  - `base_url` is a directory URL (trailing slash optional); `files` defaults to `["skill.json", "skill.md"]`
+- Installed `skill.json` records the install source in `_trayline.source` (`catalog` / `url` / `system` / `local`) and `_trayline.source_url` so **Update** knows where to re-fetch from
 
 ---
 

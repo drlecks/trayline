@@ -12,6 +12,8 @@ import type {
   AdapterUsageSnapshot,
   ProjectCreateOutcome,
   ProviderReadyResult,
+  SkillCatalogFetchResult,
+  InstalledSkillRow,
 } from '../shared/types'
 import type { Card, CardStatus, CardCounts } from '../shared/card'
 import type { PlanFieldDef, PlanTrayStep, PlanWorkerStep } from '../shared/workflow-plan'
@@ -134,6 +136,20 @@ const api = {
       ipcRenderer.on(IPC.worker.onRunEvent, listener)
       return () => ipcRenderer.off(IPC.worker.onRunEvent, listener)
     },
+  },
+  skills: {
+    fetchCatalog: (opts?: { forceRefresh?: boolean }): Promise<SkillCatalogFetchResult> =>
+      ipcRenderer.invoke(IPC.skills.fetchCatalog, opts),
+    listInstalled: (): Promise<InstalledSkillRow[]> =>
+      ipcRenderer.invoke(IPC.skills.listInstalled),
+    install: (skillId: string): Promise<InstalledSkillRow> =>
+      ipcRenderer.invoke(IPC.skills.install, skillId),
+    installFromUrl: (url: string): Promise<InstalledSkillRow> =>
+      ipcRenderer.invoke(IPC.skills.installFromUrl, url),
+    update: (skillId: string): Promise<InstalledSkillRow> =>
+      ipcRenderer.invoke(IPC.skills.update, skillId),
+    uninstall: (skillId: string): Promise<void> =>
+      ipcRenderer.invoke(IPC.skills.uninstall, skillId),
   },
   card: {
     list: (project: string, workflow: string, stepId: string, status: CardStatus): Promise<Card[]> =>
