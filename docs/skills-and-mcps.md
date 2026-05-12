@@ -35,19 +35,42 @@ Accepts:
 - Direct zip: `https://example.com/my-skill.zip`
 - Raw `skill.json`: `https://raw.githubusercontent.com/.../skill.json` (Trayline resolves siblings)
 
-### Validation Pipeline (From URL)
+### Validation Pipeline (every install — From URL AND From catalog)
 
-Before accepting a skill, Trayline verifies:
+A skill is *instructions*. The installer's job is to prove the bundle cannot do anything other than be read as instructions. Both **From URL** and **Browse catalog** installs run the identical pipeline — being curated does not buy a bypass.
+
+Before accepting a skill, Trayline verifies, in order:
 
 1. **Downloadable** — if the URL fails, error: *"Couldn't reach this URL."*
-2. **`skill.json` present and valid** — must parse as JSON and pass zod schema (`id`, `name`, `version`, `description` required)
-3. **`skill.md` present and not empty**
-4. **ID collision** — if id already installed, prompts: *"A skill with id `pdf-reader` is already installed (v1.2.0). Replace it with this version (v1.3.0)?"*
-5. **Content sanity** — `skill.md` not empty or whitespace-only
-6. **Size limits** — `skill.md` ≤ 500KB, folder total ≤ 10MB
-7. **No executables** — allowed content: `skill.json`, markdown files, plain text, `templates/` files, small images. `.exe`, `.sh`, `.bat`, `.dll`, `.so`, binaries rejected with: *"This skill contains executable files, which Trayline doesn't allow. Skills are instructions only."*
+2. **Staged to temp** — every byte is written to a temp directory, never directly into `skills/`. Nothing is executed, rendered, or interpreted during validation.
+3. **`skill.json` valid** — parses as JSON and passes the zod schema (`id`, `name`, `version`, `description` required; `id` matches `^[a-z0-9][a-z0-9_-]{0,63}$`)
+4. **`skill.md` present and non-empty** after trimming whitespace
+5. **ID collision** — if id already installed, prompts: *"A skill with id `pdf-reader` is already installed (v1.2.0). Replace it with this version (v1.3.0)?"*
+6. **Size & shape limits** — `skill.md` ≤ 500KB, every individual file ≤ 1MB, total bundle ≤ 10MB, total file count ≤ 50
+7. **File-type allowlist** — permitted extensions: `.json`, `.md`, `.markdown`, `.txt`, `.yaml`, `.yml`, `.png`, `.jpg`, `.jpeg`, `.svg`, `.gif`, `.webp`. Anything else, including extensionless files, is rejected.
+8. **Executable / script rejection by extension** — explicit blocklist covering native binaries (`.exe`, `.dll`, `.so`, `.dylib`, `.bin`, `.app`, `.command`, `.scr`, `.com`, `.msi`, `.deb`, `.rpm`, `.apk`), shell and admin scripts (`.bat`, `.cmd`, `.ps1`, `.psm1`, `.sh`, `.bash`, `.zsh`, `.fish`, `.scpt`, `.vbs`, `.vbe`), and interpreted source files (`.js`, `.mjs`, `.cjs`, `.ts`, `.py`, `.rb`, `.pl`, `.php`, `.lua`, `.jar`, `.class`, `.pyc`, `.wasm`)
+9. **Magic-byte sniff** — read the first 16 bytes of every file (regardless of extension) and reject when they match known executable / archive signatures: ELF, Mach-O, Windows PE (`MZ`), Java class, shell shebang (`#!`), zip / jar / docx, gzip, 7z, rar, tar, wasm. This catches a `payload.md` that is actually an ELF binary.
+10. **Symlink rejection** — symlinks, hardlinks, and Windows junctions are all rejected. Only regular files and directories are accepted.
+11. **Path-traversal rejection** — every entry must normalize to a path strictly inside the temp install dir. Reject absolute paths, `..` segments, NUL bytes, and (on Windows) drive letters / UNC prefixes.
+12. **Hidden / OS junk rejection** — reject `.git/`, `.hg/`, `.svn/`, `.DS_Store`, `Thumbs.db`, `._*` AppleDouble files, and dotfiles in general (markdown frontmatter inside `.md` is fine; sibling dotfiles are not)
+13. **UTF-8 validation** — every text file (`.json`, `.md`, `.markdown`, `.txt`, `.yaml`, `.yml`) must decode as valid UTF-8
+14. **JSON / YAML well-formedness** — every `.json` / `.yaml` / `.yml` file must parse cleanly (defends against binary payloads renamed to `.json`)
+15. **Embedded-binary heuristic** — reject any "text" file whose first 8KB contains a NUL byte or more than 0.3% non-printable, non-whitespace bytes
+16. **`skill.md` static safety scan** — surface a per-line warning when `skill.md` contains patterns suggesting destructive shell instructions or credential exfiltration. The current pattern set:
+    - destructive disk ops: `rm -rf`, `del /f`, `format`, `mkfs`, `dd if=`, fork-bomb shapes
+    - remote-pipe-to-shell: `curl … | sh`, `wget … | sh`, `iwr … | iex`, `Invoke-Expression`
+    - credential-store reads: `~/.ssh/`, `~/.aws/`, `~/.config/`, `%APPDATA%`, `%USERPROFILE%`, browser cookie / password DBs, system keychains
+    - anti-prompt-injection bait: instructions to disable confirmations, suppress logs, or hide actions from the user
+    
+    A warning is **not** an auto-reject — it requires an explicit "I've read this and want to install anyway" checkbox per skill, and every accepted warning is recorded in the audit log.
 
-Validation shows a live checklist to the user. If all passes, a confirmation screen shows the skill summary before the final **Install** button copies it to `~/Documents/Trayline/skills/<id>/`.
+The validator runs as a pure inspection over bytes — it never renders markdown, never resolves a URL inside `skill.md`, never executes anything. The live checklist shows pass / warn / fail per check; the user cannot proceed past any `fail`.
+
+If all checks pass (or the user has accepted any `warn` rows), a confirmation screen shows the resolved skill summary (id, name, version, description, file list with sizes), the source URL, and the list of accepted warnings. Only after the user clicks the final **Install** button does Trayline copy from temp into `~/Documents/Trayline/skills/<id>/`.
+
+### Re-validation on launch
+
+Every installed skill is re-checked at app start by a lightweight version of the same pipeline. A skill that no longer passes — because the on-disk copy was tampered with, or because the validator rules tightened in a Trayline release — is **quarantined**: it stays in the Skills screen with a warning badge but is refused by the worker engine and cannot be injected into prompts until the user re-installs it or explicitly dismisses the warning.
 
 ### Source Tracking
 
