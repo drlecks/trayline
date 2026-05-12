@@ -116,6 +116,23 @@ async function resolveSkill(skillId: string): Promise<{ id: string; content: str
   return null
 }
 
+/**
+ * Worker output contract: if the parsed output object contains a
+ * `trayline_error` envelope, return a single-line "<code>: <message>"
+ * string that the run-failure path can record. Otherwise return null.
+ */
+function extractTraylineError(output: object | string | null): string | null {
+  if (!output || typeof output !== 'object') return null
+  const err = (output as Record<string, unknown>).trayline_error
+  if (!err || typeof err !== 'object') return null
+  const e = err as Record<string, unknown>
+  const code = typeof e.code === 'string' && e.code.length ? e.code : 'worker_reported_error'
+  const message = typeof e.message === 'string' && e.message.length
+    ? e.message
+    : 'Worker reported it could not complete the task.'
+  return `${code}: ${message}`
+}
+
 async function resolveContextPack(project: string, file: string): Promise<string | null> {
   const path = join(projectService.paths.projectDir(project), 'context', file)
   if (!(await pathExists(path))) return null
@@ -280,7 +297,10 @@ async function runInner(input: TriggerRunInput): Promise<TriggerRunResult> {
   emit({ type: 'started', project, workflow, stepId, runId, cardId })
 
   // 3. Resolve skills + context packs
-  const skills = (await Promise.all((worker.skills ?? []).map(resolveSkill))).filter((s): s is { id: string; content: string } => s !== null)
+  // Always inject `trayline-worker-contract` first so every worker is told how
+  // to signal failure via the trayline_error envelope.
+  const workerSkillIds = ['trayline-worker-contract', ...(worker.skills ?? [])]
+  const skills = (await Promise.all(workerSkillIds.map(resolveSkill))).filter((s): s is { id: string; content: string } => s !== null)
   const contextPacks = (await Promise.all(
     (worker.context_packs ?? []).map((f) => resolveContextPack(project, f)),
   )).filter((c): c is string => c !== null)
@@ -341,6 +361,15 @@ async function runInner(input: TriggerRunInput): Promise<TriggerRunResult> {
 
   const endedAt = new Date().toISOString()
   const elapsedMs = Date.parse(endedAt) - Date.parse(startedAt)
+
+  // Worker output contract: an output object containing `trayline_error` means
+  // the agent ran fine but signalled it could not complete the task. Treat as
+  // a failed run so the source card lands in the error tray with the message.
+  const reportedError = extractTraylineError(output)
+  if (reportedError && runError === undefined) {
+    runError = reportedError
+  }
+
   const succeeded = runError === undefined && exitCode === 0
 
   // 5. Persist output.json (atomic)
