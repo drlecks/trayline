@@ -7,6 +7,7 @@ import WelcomeSplash from './components/splash/WelcomeSplash'
 import WorkflowAuthorScreen from './components/author/WorkflowAuthorScreen'
 import ProjectScreen from './components/project/ProjectScreen'
 import SettingsScreen from './components/settings/SettingsScreen'
+import SkillsScreen from './components/skills/SkillsScreen'
 import ProviderNotInstalledModal from './components/layout/ProviderNotInstalledModal'
 
 function applyThemeClass(theme: 'light' | 'dark' | 'system') {
@@ -83,6 +84,11 @@ export default function App() {
         {screen === 'settings' && (
           <div className="flex-1 overflow-y-auto">
             <SettingsScreen />
+          </div>
+        )}
+        {screen === 'skills' && (
+          <div className="flex-1 overflow-y-auto">
+            <SkillsScreen />
           </div>
         )}
       </main>
