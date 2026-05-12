@@ -12,7 +12,7 @@ function getBundledRoot(): string {
   return join(app.getAppPath(), 'resources', 'system-skills')
 }
 
-const SYSTEM_SKILL_IDS = ['trayline-author', 'trayline-scaffold'] as const
+const SYSTEM_SKILL_IDS = ['trayline-author', 'trayline-scaffold', 'trayline-worker-contract'] as const
 export type SystemSkillId = (typeof SYSTEM_SKILL_IDS)[number]
 
 async function copyDir(src: string, dest: string): Promise<void> {

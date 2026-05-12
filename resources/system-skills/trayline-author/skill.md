@@ -58,6 +58,13 @@ You MUST output a single JSON object matching this schema, and nothing else:
    - MCPs: `gmail`, `google-calendar`, `google-drive`, `web-browse`, `github`, `slack`, `notion`, `filesystem`, `fetch` (only suggest when the user's description clearly needs the integration)
 6. **Manual approval** for trays where a human should review before the workflow continues. **Auto** when the previous worker produced a definitive result.
 7. **process.md should be specific.** Reference `{{card.data}}` for input fields and tell the worker exactly what JSON shape to output.
+   Always include a short "If you cannot complete the task" section that instructs the worker to return the **Trayline Worker Output Contract** failure envelope instead of guessing:
+
+   ```json
+   { "trayline_error": { "code": "<short_snake_case>", "message": "<one-line explanation>" } }
+   ```
+
+   The worker contract skill is injected automatically at runtime — process.md just needs to remind the worker to *use* it on failure.
 8. **Don't invent steps the user didn't ask for** — keep workflows minimal. The user can always add more later.
 
 ## Examples of good naming

@@ -341,6 +341,28 @@ A card never gets moved partway. The rule: **a card only changes folders when th
 
 ---
 
+## Worker Output Contract
+
+Every worker run produces a single JSON object on stdout. The shape is decided by the worker's `process.md`, but Trayline reserves one top-level key, `trayline_error`, as the **failure envelope**:
+
+```json
+{
+  "trayline_error": {
+    "code": "<short_snake_case>",
+    "message": "<one-line human-readable explanation>",
+    "details": "<optional longer explanation>"
+  }
+}
+```
+
+When the parsed output contains `trayline_error`, the worker-runner treats the run as **failed** regardless of the process exit code: it writes a `run_failed` audit entry with `code: message` as the error note, leaves `output.json` unwritten, and moves the source card into the project's error tray (`99-errors/cards/pending/`). The error tray card preserves the original `card.data`; the failure note lives in `card.history`.
+
+Workers are taught this contract by the bundled `trayline-worker-contract` system skill, which the runner injects automatically into every worker prompt — per-worker `process.md` files only need to *remind* the agent to use the envelope when it cannot complete the task.
+
+Success replies must **not** include `trayline_error`. The contract is exclusive: either the worker returns its task-specific success shape, or it returns the failure envelope.
+
+---
+
 ## Audit Log (SQLite — `audit.db`)
 
 | Column | Type |
