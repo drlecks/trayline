@@ -35,6 +35,16 @@
 
 ---
 
+## Testing
+
+- **Vitest** — test runner for both main-process and shared code. Run with `npm test` (one-shot) or `npm run test:watch`.
+- **Test layout** — tests live **co-located** with the code they cover (`foo.ts` ↔ `foo.test.ts`). No separate `__tests__/` folder.
+- **Isolation** — `vitest.setup.ts` stubs the `electron` module and points `fs-service.Paths` at a freshly created tmp directory per test run, so tests never touch a developer's real `~/Documents/Trayline`.
+- **Mocking external systems** — use `vi.mock` for libraries like `node-cron` and `chokidar`, and `vi.stubGlobal('fetch', ...)` for HTTP. Tests must not depend on real timers or the network.
+- **What must have tests** — see the **Testing Policy** section of `CLAUDE.md`. In short: every non-trivial main-process service, every adapter, every rule-encoding shared utility, every data-integrity path, and every bug fix on those paths.
+
+---
+
 ## No External Dependencies at Runtime
 
 - No cloud services
