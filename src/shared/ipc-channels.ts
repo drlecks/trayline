@@ -38,6 +38,7 @@ export const IPC = {
     listEfforts: 'adapters:listEfforts',
     getUsage: 'adapters:getUsage',
     onUsageUpdate: 'adapters:onUsageUpdate',
+    checkProviderReady: 'adapters:checkProviderReady',
   },
   step: {
     addTray: 'step:addTray',

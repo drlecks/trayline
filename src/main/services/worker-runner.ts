@@ -309,6 +309,16 @@ async function runInner(input: TriggerRunInput): Promise<TriggerRunResult> {
   const adapterId = worker.execution?.adapter ?? 'claude-code'
   const adapter = adapterRegistry.get(adapterId)
   if (!adapter) throw new Error(`Adapter not found: ${adapterId}`)
+  // Pre-flight: refuse to run a production worker when its CLI isn't on this
+  // machine. The renderer pops a modal for user-triggered runs, but watchers
+  // and the scheduler call straight through — without this check they'd race
+  // through to a confusing "claude: command not found" PTY failure.
+  if (adapter.kind === 'production' && !(await adapter.detectInstalled())) {
+    throw new Error(
+      `AI provider "${adapter.displayName}" is not installed on this machine. ` +
+      `Open Settings → AI Terminal and install a provider before running workers.`,
+    )
+  }
 
   const timeoutMs = (worker.execution?.timeout_seconds ?? 180) * 1000
   const processFile = join(workerDir, 'process.md')

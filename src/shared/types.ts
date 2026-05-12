@@ -100,6 +100,26 @@ export interface UsageSnapshot {
   updatedAt: string
 }
 
+// ── AI provider readiness ─────────────────────────────────────────────────────
+
+export interface ProviderInstallSuggestion {
+  id: string
+  displayName: string
+  description: string
+  installUrl: string
+  /** True when this suggestion is actually wired up as an adapter today. */
+  available: boolean
+}
+
+export interface ProviderReadyResult {
+  /** True when at least one production adapter is installed on this machine. */
+  ready: boolean
+  /** Adapter ids that detected as installed and are production-kind. */
+  installedIds: string[]
+  /** Curated install suggestions to show the user when `ready` is false. */
+  suggestions: ProviderInstallSuggestion[]
+}
+
 /**
  * Adapter-level usage telemetry surfaced in Settings + Footer.
  * Mirrors `AdapterUsageSnapshot` in `src/main/ai-terminals/adapter.ts` and

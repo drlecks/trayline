@@ -80,6 +80,7 @@ const MOCK_EFFORTS_BY_MODEL: Record<string, EffortInfo[]> = {
 export const mockAdapter: AITerminalAdapter = {
   id: 'mock',
   displayName: 'Mock (test)',
+  kind: 'mock',
   async detectInstalled() { return true },
   async getVersion() { return '0.0.0-mock' },
   async listModels() { return MOCK_MODELS },
