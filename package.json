@@ -93,9 +93,14 @@
       {
         "from": "resources/system-skills",
         "to": "system-skills"
+      },
+      {
+        "from": "resources/icon-fill-128.png",
+        "to": "icon-fill-128.png"
       }
     ],
     "mac": {
+      "icon": "resources/icon-fill-1024.png",
       "target": [
         {
           "target": "dmg",
@@ -106,6 +111,7 @@
       ]
     },
     "win": {
+      "icon": "resources/icon-fill-1024.png",
       "target": [
         {
           "target": "nsis"
@@ -113,6 +119,7 @@
       ]
     },
     "linux": {
+      "icon": "resources/icon-fill-1024.png",
       "target": [
         {
           "target": "AppImage"
