@@ -99,7 +99,11 @@ export function registerIpcHandlers(
 
   // ── AI adapters ───────────────────────────────────────────────────────────
   ipcMain.handle('adapters:list', () =>
-    adapterRegistry.list().map((a) => ({ id: a.id, displayName: a.displayName })),
+    adapterRegistry.list().map((a) => ({
+      id: a.id,
+      displayName: a.displayName,
+      installUrl: a.installUrl ?? null,
+    })),
   )
   ipcMain.handle('adapters:detect', async (_: unknown, id: string) => {
     const a = adapterRegistry.get(id)
@@ -107,6 +111,21 @@ export function registerIpcHandlers(
     const installed = await a.detectInstalled()
     const version = installed ? await a.getVersion() : null
     return { installed, version }
+  })
+  ipcMain.handle('adapters:listModels', async (_: unknown, id: string) => {
+    const a = adapterRegistry.get(id)
+    if (!a) return []
+    return a.listModels()
+  })
+  ipcMain.handle('adapters:listEfforts', async (_: unknown, id: string, modelId: string) => {
+    const a = adapterRegistry.get(id)
+    if (!a) return []
+    return a.listEfforts(modelId)
+  })
+  ipcMain.handle('adapters:getUsage', async (_: unknown, id: string) => {
+    const a = adapterRegistry.get(id)
+    if (!a || !a.getUsage) return null
+    return a.getUsage()
   })
 
   // ── Steps (trays/workers) ─────────────────────────────────────────────────
