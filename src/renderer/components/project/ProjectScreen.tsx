@@ -151,6 +151,31 @@ function RailStatusPill({ status }: { status: WorkerRunStatus }) {
   )
 }
 
+// Right-aligned status bubble for worker rows, mirroring the tray pending-count
+// bubble. Only renders for states that warrant attention; succeeded/interrupted
+// fall back to the inline text pill alone.
+const BUBBLE_CLASS: Partial<Record<WorkerRunStatus, string>> = {
+  running: 'bg-amber-500 animate-pulse',
+  awaiting_input: 'bg-blue-500 animate-pulse',
+  failed: 'bg-red-500',
+}
+const BUBBLE_TITLE: Partial<Record<WorkerRunStatus, string>> = {
+  running: 'Running',
+  awaiting_input: 'Waiting for input',
+  failed: 'Last run failed',
+}
+function WorkerStatusBubble({ status }: { status: WorkerRunStatus | 'idle' }) {
+  if (status === 'idle') return null
+  const cls = BUBBLE_CLASS[status as WorkerRunStatus]
+  if (!cls) return null
+  return (
+    <span
+      title={BUBBLE_TITLE[status as WorkerRunStatus]}
+      className={`shrink-0 inline-block w-[10px] h-[10px] mt-1 rounded-full ${cls}`}
+    />
+  )
+}
+
 function StepCard({ step, selected, onClick }: { step: StepMeta; selected: boolean; onClick: () => void }) {
   const Icon = step.kind === 'tray'
     ? (step.id === '99-errors' ? AlertTriangle : Inbox)
@@ -232,6 +257,7 @@ function StepCard({ step, selected, onClick }: { step: StepMeta; selected: boole
             {counts.pending}
           </span>
         )}
+        {step.kind === 'worker' && <WorkerStatusBubble status={workerStatus} />}
       </div>
     </button>
   )

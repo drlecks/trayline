@@ -57,7 +57,7 @@
 
 **Tray** — shows count of cards in `pending` + `ready`. A small dot turns amber if anything is overdue (SLA), red if errors.
 
-**Worker** — shows `idle`, `running ⚙`, `failed ⚠`, with last run time underneath.
+**Worker** — shows `idle`, `running ⚙`, `failed ⚠`, with last run time underneath. A right-aligned **status bubble** mirrors the tray's pending-count slot for at-a-glance feedback: amber pulsing dot when `running`, blue pulsing dot when `awaiting_input`, solid red dot when the last run `failed`. Other states (idle, succeeded, interrupted, pending) show no bubble — the inline text pill carries that information.
 
 ### Step card visual states
 - **Default** — soft background, light border
