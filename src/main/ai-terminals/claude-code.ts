@@ -286,11 +286,21 @@ export const claudeCodeAdapter: AITerminalAdapter = {
     return CLAUDE_MODELS
   },
 
-  // Claude Code does not expose a `--effort` flag to the headless `-p` mode;
-  // reasoning depth is influenced by prompt wording rather than a discrete
-  // tier. Return [] so the Settings UI knows to hide the effort dropdown.
-  async listEfforts(_modelId: string): Promise<EffortInfo[]> {
-    return []
+  // Claude Code's `-p` mode does not take an `--effort` flag; reasoning depth
+  // is steered via prompt wording. We still expose the standard tiers here so
+  // the user can pick a default that workers can echo into their process.md
+  // (e.g. "ultrathink") — the choice is persisted globally and applied at
+  // prompt-assembly time. Haiku doesn't gain meaningfully from deeper thinking
+  // budgets, so we collapse it to a single tier.
+  async listEfforts(modelId: string): Promise<EffortInfo[]> {
+    if (modelId === 'claude-haiku-4-5') {
+      return [{ id: 'low', label: 'Low' }]
+    }
+    return [
+      { id: 'low',    label: 'Low' },
+      { id: 'medium', label: 'Medium' },
+      { id: 'high',   label: 'High' },
+    ]
   },
 
   // Claude Code does not surface 5h / weekly rolling-window state through any

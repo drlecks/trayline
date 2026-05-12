@@ -21,6 +21,11 @@ const api = {
     get: (): Promise<Settings> => ipcRenderer.invoke(IPC.settings.get),
     set: <K extends keyof Settings>(key: K, value: Settings[K]): Promise<Settings> =>
       ipcRenderer.invoke(IPC.settings.set, key, value),
+    onChange: (handler: (next: Settings) => void): (() => void) => {
+      const listener = (_e: unknown, next: Settings) => handler(next)
+      ipcRenderer.on(IPC.settings.onChange, listener)
+      return () => ipcRenderer.off(IPC.settings.onChange, listener)
+    },
   },
   audit: {
     query: (filters: Record<string, string>): Promise<AuditRow[]> =>
