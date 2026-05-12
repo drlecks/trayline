@@ -34,26 +34,53 @@ async function pathExists(p: string): Promise<boolean> {
   try { await fs.access(p); return true } catch { return false }
 }
 
+async function readManifestVersion(manifestPath: string): Promise<string | null> {
+  try {
+    const raw = await fs.readFile(manifestPath, 'utf-8')
+    const parsed = JSON.parse(raw) as { id?: string; version?: string }
+    if (!parsed.id || !parsed.version) return null
+    return parsed.version
+  } catch {
+    return null
+  }
+}
+
 async function isValidSystemSkill(skillDir: string): Promise<boolean> {
   const manifest = join(skillDir, 'skill.json')
   const instructions = join(skillDir, 'skill.md')
   if (!(await pathExists(manifest)) || !(await pathExists(instructions))) return false
+  return (await readManifestVersion(manifest)) !== null
+}
 
-  try {
-    const raw = await fs.readFile(manifest, 'utf-8')
-    const parsed = JSON.parse(raw) as { id?: string; version?: string }
-    return !!parsed.id && !!parsed.version
-  } catch {
-    return false
+/**
+ * Compare semver-ish strings like "1.2.3". Falls back to string compare on any
+ * non-numeric segment so weird versions still produce a stable ordering.
+ */
+function compareVersions(a: string, b: string): number {
+  const pa = a.split('.')
+  const pb = b.split('.')
+  const len = Math.max(pa.length, pb.length)
+  for (let i = 0; i < len; i++) {
+    const na = Number(pa[i] ?? '0')
+    const nb = Number(pb[i] ?? '0')
+    if (!Number.isNaN(na) && !Number.isNaN(nb) && na !== nb) return na - nb
+    if (Number.isNaN(na) || Number.isNaN(nb)) {
+      const sa = pa[i] ?? ''
+      const sb = pb[i] ?? ''
+      if (sa !== sb) return sa < sb ? -1 : 1
+    }
   }
+  return 0
 }
 
 /**
  * Copy bundled system skills into ~/Documents/Trayline/skills/_system/.
- * Runs on every launch — if a system skill is missing or its manifest is
- * unreadable, it gets restored from the bundle. Existing valid copies are
- * left alone so power users can edit (e.g.) the master prompt of
- * `trayline-author/skill.md`.
+ * Runs on every launch. A skill is restored from the bundle when any of:
+ *   - the local copy is missing or its manifest is unreadable, or
+ *   - the bundled version is newer than the local version (semver-ish).
+ * Otherwise the local copy is left alone so power users can edit the
+ * master prompts (e.g. `trayline-author/skill.md`) without losing their
+ * changes on every launch.
  */
 async function ensureInstalled(): Promise<{ restored: SystemSkillId[] }> {
   const bundledRoot = getBundledRoot()
@@ -61,16 +88,23 @@ async function ensureInstalled(): Promise<{ restored: SystemSkillId[] }> {
 
   for (const id of SYSTEM_SKILL_IDS) {
     const target = join(Paths.systemSkills, id)
-    const valid = await isValidSystemSkill(target)
-    if (valid) continue
-
-    // Need to restore — wipe target and copy fresh
-    if (await pathExists(target)) {
-      await fs.rm(target, { recursive: true, force: true })
-    }
     const source = join(bundledRoot, id)
     if (!(await pathExists(source))) {
       throw new Error(`Bundled system skill missing: ${source}`)
+    }
+
+    let shouldRestore = !(await isValidSystemSkill(target))
+    if (!shouldRestore) {
+      const localVersion = await readManifestVersion(join(target, 'skill.json'))
+      const bundledVersion = await readManifestVersion(join(source, 'skill.json'))
+      if (localVersion && bundledVersion && compareVersions(bundledVersion, localVersion) > 0) {
+        shouldRestore = true
+      }
+    }
+    if (!shouldRestore) continue
+
+    if (await pathExists(target)) {
+      await fs.rm(target, { recursive: true, force: true })
     }
     await copyDir(source, target)
     restored.push(id)
