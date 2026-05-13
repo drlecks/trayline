@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useCallback } from 'react'
 import cronParser from 'cron-parser'
-import { Cpu, Play, Trash2 } from 'lucide-react'
+import { AlertTriangle, Cpu, Play, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CopyButton } from '@/components/ui/copy-button'
 import {
@@ -25,6 +25,7 @@ interface WorkerDetailPanelProps {
 export default function WorkerDetailPanel({ step }: WorkerDetailPanelProps) {
   const active = useProjectStore((s) => s.active)
   const workflow = useProjectStore((s) => s.workflow)
+  const missingSkillsByStep = useProjectStore((s) => s.missingSkillsByStep)
   const [tab, setTab] = useState<Tab>('instructions')
   const [runNowBusy, setRunNowBusy] = useState(false)
   const [runNowFeedback, setRunNowFeedback] = useState<string | null>(null)
@@ -91,6 +92,21 @@ export default function WorkerDetailPanel({ step }: WorkerDetailPanelProps) {
           ))}
         </div>
       </div>
+
+      {(missingSkillsByStep[step.id]?.length ?? 0) > 0 && (
+        <div className="
+          flex items-start gap-2 px-6 py-2.5 shrink-0
+          bg-amber-50 dark:bg-amber-950/30
+          border-b border-amber-200/60 dark:border-amber-900/40
+          text-xs text-amber-900 dark:text-amber-300
+        ">
+          <AlertTriangle size={13} strokeWidth={1.75} className="mt-0.5 shrink-0" />
+          <span>
+            Missing skill{missingSkillsByStep[step.id].length > 1 ? 's' : ''}:{' '}
+            <strong>{missingSkillsByStep[step.id].join(', ')}</strong>. Install them in the Skills screen before running this worker.
+          </span>
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto">
         {tab === 'instructions' && active && workflow && (

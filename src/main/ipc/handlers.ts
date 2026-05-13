@@ -70,6 +70,9 @@ export function registerIpcHandlers(
     projectService.listSteps(project, workflow),
   )
   ipcMain.handle('project:listSkills', () => projectService.listSkills())
+  ipcMain.handle('project:checkSkills', (_: unknown, project: string) =>
+    projectService.checkProjectSkills(project),
+  )
   ipcMain.handle('project:listContextFiles', (_: unknown, project: string) =>
     projectService.listContextFiles(project),
   )
