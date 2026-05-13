@@ -126,7 +126,7 @@ export default function ContextPackEditor({ project }: Props) {
                 if (e.key === 'Enter') void createFile()
                 if (e.key === 'Escape') { setShowNewFile(false); setNewFileName('') }
               }}
-              placeholder="brand-voice.md"
+              placeholder="company-info.md"
               className="flex-1 text-xs rounded border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-2 py-1 font-mono"
             />
             <button

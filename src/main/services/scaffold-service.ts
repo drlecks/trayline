@@ -87,8 +87,8 @@ async function scaffold(plan: WorkflowPlan, options: ScaffoldOptions = {}): Prom
 
   // Base context file: always auto-included in every worker run (prefix '_' marks it as base)
   await writeFileAtomic(
-    join(projectPath, 'context', '_project-overview.md'),
-    `# ${plan.project.display_name}\n\n${plan.project.description}\n`,
+    join(projectPath, 'context', '_brand-voice.md'),
+    `# Brand Voice\n\n_Describe your brand's communication style here. All workers will use this as a reference for tone, style, and language._\n\n## Tone\n\n## Language guidelines\n\n## Things to avoid\n`,
   )
 
   // ── 2. Workflow + steps ─────────────────────────────────────────────────────

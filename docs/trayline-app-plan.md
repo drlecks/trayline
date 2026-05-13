@@ -109,7 +109,7 @@ The whole Trayline world lives in the user's Documents folder so it's discoverab
         │
         ├── context/                  # Context Packs
         │   ├── company-info.md
-        │   ├── brand-voice.md
+        │   ├── _brand-voice.md
         │   └── pricing.md
         │
         ├── workflows/
@@ -214,7 +214,7 @@ Each tray has its own `state/` subfolder for any persistent data the tray needs 
   "color": "#F7A14F",
   "icon": "cpu",
   "skills": ["pdf-reader", "csv-parser"],
-  "context_packs": ["company-info.md", "brand-voice.md"],
+  "context_packs": ["company-info.md"],
   "execution": {
     "command": "claude",
     "args": ["--no-color"],
@@ -538,7 +538,7 @@ Tabs: **Cards** / **Config** / **Schema**
 ### 7.3 Worker Detail View (right panel)
 Tabs: **Config** / **Instructions** / **Runs** / **Skills & Context**
 - **Config**: name, description, command (default `claude`), timeout, trigger mode, schedule cron (if scheduled)
-- **Instructions**: full-screen markdown editor for `process.md`, with a side preview. Token estimate displayed. Variables like `{{card.data}}` and `{{context.brand-voice}}` autocomplete.
+- **Instructions**: full-screen markdown editor for `process.md`, with a side preview. Token estimate displayed. Variables like `{{card.data}}` and `{{context._brand-voice}}` autocomplete.
 - **Runs**: history table, click for detail
 - **Skills & Context**: checklist of installed skills + checklist of context pack files. What's checked gets injected into the prompt.
 
