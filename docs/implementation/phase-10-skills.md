@@ -12,15 +12,15 @@ Wire up the skills system and context packs so they are read by workers at run t
 
 ## Tasks
 
-- [ ] **Skill picker** in worker config (Skills, MCPs & Context tab) — checklist of installed skills
-- [ ] **Skill `skill.md` injection** — at run time, the adapter concatenates selected skills' `skill.md` contents into the prompt
-- [ ] **Context pack editor** — simple file list in project sidebar + markdown editor for `context/` files
-- [ ] **Context pack picker** in worker config — checklist of context files in `context/`
-- [ ] **Variable resolution** in `process.md`:
+- [x] **Skill picker** in worker config (Skills, MCPs & Context tab) — checklist of installed skills
+- [x] **Skill `skill.md` injection** — at run time, the adapter concatenates selected skills' `skill.md` contents into the prompt
+- [x] **Context pack editor** — simple file list in project sidebar + markdown editor for `context/` files
+- [x] **Context pack picker** in worker config — checklist of context files in `context/`
+- [x] **Variable resolution** in `process.md`:
   - `{{card.data}}` — substituted with the card's `data` JSON
   - `{{context.brand-voice}}` — substituted with the contents of `context/brand-voice.md`
-  - Autocomplete in the process.md editor
-- [ ] Skills screen showing installed skills (basic list; full redesign is N2.1)
+  - Variable reference chips in the process.md editor (click to copy)
+- [x] Skills screen showing installed skills (basic list; full redesign is N2.1)
 
 ---
 
