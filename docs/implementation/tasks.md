@@ -32,11 +32,10 @@ Each task corresponds to a phase file in this folder. Check off tasks as they ar
 - [x] [Phase 7 — Terminal Configuration](./phase-7-terminal-configuration.md)
 - [x] [Phase 8 — Skill Finder](./phase-8-skill-finder.md)
 - [ ] [Phase 9 — Human Review Polish](./phase-9-human-review.md)
-- [ ] [Phase 10 — Run History & Audit Log UI](./phase-10-audit-log.md)
-- [ ] [Phase 11 — Skills & Context Packs](./phase-11-skills.md)
-- [ ] [Phase 12 — Import / Export](./phase-12-import-export.md)
-- [ ] [Phase 13 — Errors & Retry](./phase-13-errors.md)
-- [ ] [Phase 14 — Polish & Beta](./phase-14-polish.md)
+- [ ] [Phase 10 — Skills & Context Packs](./phase-10-skills.md)
+- [ ] [Phase 11 — Import / Export](./phase-11-import-export.md)
+- [ ] [Phase 12 — Errors & Retry](./phase-12-errors.md)
+- [ ] [Phase 13 — Polish & Beta](./phase-13-polish.md)
 
 ---
 
@@ -62,13 +61,20 @@ Each task corresponds to a phase file in this folder. Check off tasks as they ar
 
 ---
 
+## N4 Phases (Observability)
+
+- [ ] [Phase N4.1 — Run History & Audit Log UI](./phase-n4-1-audit-log.md)
+
+---
+
 ## Estimates
 
 | Block | Estimate |
 |---|---|
-| MVP (Phases 0–14) | ~12–14 weeks (1 developer) |
+| MVP (Phases 0–13) | ~11–13 weeks (1 developer) |
 | N2 (Phases N2.1–N2.8) | ~6–7 weeks (1 developer) |
 | N3 (Phases N3.1–N3.4) | ~3–4 weeks (1 developer) |
+| N4 (Phase N4.1) | ~3 days (1 developer) |
 | **Total** | **~20–24 weeks** |
 
 Highest-risk areas: Phase N2.4 (OAuth in Electron has OS-specific quirks), Phase N2.5 (clean MCP integration into the adapter layer), Phase N3.1 (atomic dedup index under crash conditions).

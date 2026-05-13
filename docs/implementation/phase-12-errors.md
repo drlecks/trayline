@@ -1,4 +1,4 @@
-# Phase 13 — Errors & Retry
+# Phase 12 — Errors & Retry
 
 **Estimate:** 2 days
 

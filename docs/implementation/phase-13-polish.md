@@ -1,4 +1,4 @@
-# Phase 14 — Polish & Beta
+# Phase 13 — Polish & Beta
 
 **Estimate:** 1 week
 

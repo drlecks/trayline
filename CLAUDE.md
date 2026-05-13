@@ -32,7 +32,9 @@ All design decisions, data models, flows, and implementation plans live in `docs
 Each phase in `docs/implementation/` has its own file with detailed tasks and acceptance criteria:
 
 **MVP:** phase-0 through phase-13  
-**N2 (Skills & MCPs):** phase-n2-1 through phase-n2-8
+**N2 (Skills & MCPs):** phase-n2-1 through phase-n2-8  
+**N3 (Sources & Batch Workers):** phase-n3-1 through phase-n3-4  
+**N4 (Observability):** phase-n4-1
 
 ---
 

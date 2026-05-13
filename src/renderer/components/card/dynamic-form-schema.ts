@@ -11,7 +11,7 @@ import type { PlanFieldDef } from '../../../shared/workflow-plan'
  * - number: coerced from string; required → required number, otherwise empty
  *   string also passes through as undefined.
  * - checkbox: boolean.
- * - file: array of strings (placeholder until Phase 11 wires real attachments).
+ * - file: array of strings (placeholder until Phase 10 wires real attachments).
  */
 export function buildZodSchema(fields: PlanFieldDef[]) {
   const shape: Record<string, z.ZodTypeAny> = {}
