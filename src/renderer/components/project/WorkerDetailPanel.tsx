@@ -510,12 +510,12 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
                   {!entry.found && (
                     <AlertTriangle size={13} strokeWidth={1.75} className="shrink-0 text-amber-500 dark:text-amber-400" />
                   )}
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0 flex items-baseline gap-1.5 overflow-hidden">
                     {entry.found ? (
                       <>
-                        <span className="text-xs font-medium">{entry.manifest.name}</span>
+                        <span className="text-xs font-medium shrink-0">{entry.manifest.name}</span>
                         {entry.manifest.description && (
-                          <span className="text-xs text-neutral-500 dark:text-neutral-400 ml-1.5 truncate">{entry.manifest.description}</span>
+                          <span className="text-xs text-neutral-500 dark:text-neutral-400 truncate min-w-0">{entry.manifest.description}</span>
                         )}
                       </>
                     ) : (
