@@ -76,7 +76,7 @@ export default function WorkflowAuthorScreen() {
   return (
     <div className="flex flex-col items-center justify-center w-full max-w-2xl mx-auto px-8">
       <button
-        onClick={() => setScreen('splash')}
+        onClick={() => setScreen(all.length > 0 ? 'projectList' : 'splash')}
         className="self-start flex items-center gap-1 text-xs text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200 mb-8"
       >
         <ArrowLeft size={13} strokeWidth={1.75} /> Back

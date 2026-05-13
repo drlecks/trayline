@@ -20,6 +20,7 @@ type Tab = 'catalog' | 'url'
 export default function SkillsScreen() {
   const setScreen = useProjectStore((s) => s.setScreen)
   const active = useProjectStore((s) => s.active)
+  const all = useProjectStore((s) => s.all)
   const [installed, setInstalled] = useState<InstalledSkillRow[] | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -64,7 +65,7 @@ export default function SkillsScreen() {
   return (
     <div className="flex flex-col w-full max-w-3xl mx-auto px-8 py-8">
       <button
-        onClick={() => setScreen(active ? 'project' : 'splash')}
+        onClick={() => setScreen(active ? 'project' : all.length > 0 ? 'projectList' : 'splash')}
         className="self-start flex items-center gap-1 text-xs text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200 mb-6"
       >
         <ArrowLeft size={13} strokeWidth={1.75} /> Back

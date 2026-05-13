@@ -72,12 +72,15 @@ async function scaffold(plan: WorkflowPlan, options: ScaffoldOptions = {}): Prom
   await fs.mkdir(join(projectPath, 'context'), { recursive: true })
   await fs.mkdir(join(projectPath, 'exports'), { recursive: true })
 
+  const now = new Date().toISOString()
   const projectMeta: ProjectMeta = {
     id: plan.project.name,
     name: plan.project.name,
     display_name: plan.project.display_name,
     description: plan.project.description,
-    created_at: new Date().toISOString(),
+    created_at: now,
+    status: 'active',
+    updated_at: now,
   }
   await writeFileAtomic(join(projectPath, 'project.json'), JSON.stringify(projectMeta, null, 2))
   await writeFileAtomic(join(projectPath, 'README.md'), `# ${plan.project.display_name}\n\n${plan.project.description}\n`)

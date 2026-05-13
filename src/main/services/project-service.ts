@@ -3,13 +3,14 @@ import fs from 'fs/promises'
 import { Paths } from './fs-service'
 import type {
   ProjectMeta,
+  ProjectStatus,
   WorkflowMeta,
   StepKind,
   StepMeta,
   SkillManifest,
 } from '../../shared/types'
 
-export type { ProjectMeta, WorkflowMeta, StepKind, StepMeta, SkillManifest }
+export type { ProjectMeta, ProjectStatus, WorkflowMeta, StepKind, StepMeta, SkillManifest }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -38,6 +39,19 @@ function stepDir(projectName: string, workflowName: string, stepId: string): str
   return join(workflowDir(projectName, workflowName), 'steps', stepId)
 }
 
+function normalizeMeta(raw: Partial<ProjectMeta> & { name: string }): ProjectMeta {
+  const created_at = raw.created_at ?? new Date(0).toISOString()
+  return {
+    id: raw.id ?? raw.name,
+    name: raw.name,
+    display_name: raw.display_name ?? raw.name,
+    description: raw.description ?? '',
+    created_at,
+    status: raw.status === 'inactive' ? 'inactive' : 'active',
+    updated_at: raw.updated_at ?? created_at,
+  }
+}
+
 // ─── Project operations ───────────────────────────────────────────────────────
 
 async function listProjects(): Promise<ProjectMeta[]> {
@@ -46,14 +60,29 @@ async function listProjects(): Promise<ProjectMeta[]> {
   const projects: ProjectMeta[] = []
   for (const entry of entries) {
     if (!entry.isDirectory()) continue
-    const meta = await readJsonSafe<ProjectMeta>(join(Paths.projects, entry.name, 'project.json'))
-    if (meta) projects.push(meta)
+    const meta = await readJsonSafe<Partial<ProjectMeta>>(join(Paths.projects, entry.name, 'project.json'))
+    if (meta) projects.push(normalizeMeta({ ...meta, name: meta.name ?? entry.name }))
   }
+  // Most-recently-updated first.
+  projects.sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1))
   return projects
 }
 
 async function getProject(projectName: string): Promise<ProjectMeta | null> {
-  return readJsonSafe<ProjectMeta>(join(projectDir(projectName), 'project.json'))
+  const raw = await readJsonSafe<Partial<ProjectMeta>>(join(projectDir(projectName), 'project.json'))
+  if (!raw) return null
+  return normalizeMeta({ ...raw, name: raw.name ?? projectName })
+}
+
+async function setStatus(projectName: string, status: ProjectStatus): Promise<ProjectMeta> {
+  const path = join(projectDir(projectName), 'project.json')
+  const raw = await readJsonSafe<Partial<ProjectMeta>>(path)
+  if (!raw) throw new Error(`Project not found: ${projectName}`)
+  const next = normalizeMeta({ ...raw, name: raw.name ?? projectName, status, updated_at: new Date().toISOString() })
+  const tmp = path + '.tmp'
+  await fs.writeFile(tmp, JSON.stringify(next, null, 2), 'utf-8')
+  await fs.rename(tmp, path)
+  return next
 }
 
 async function listWorkflows(projectName: string): Promise<WorkflowMeta[]> {
@@ -152,6 +181,7 @@ async function getSkill(skillId: string): Promise<SkillManifest | null> {
 export const projectService = {
   listProjects,
   getProject,
+  setStatus,
   listWorkflows,
   getWorkflow,
   listSteps,

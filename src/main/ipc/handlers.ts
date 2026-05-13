@@ -92,6 +92,9 @@ export function registerIpcHandlers(
     }
     return result
   })
+  ipcMain.handle('project:setStatus', (_: unknown, name: string, status: 'active' | 'inactive') =>
+    projectService.setStatus(name, status),
+  )
   ipcMain.handle('project:delete', async (_: unknown, name: string) => {
     const workflows = await projectService.listWorkflows(name).catch(() => [])
     for (const w of workflows) {
