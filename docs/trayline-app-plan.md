@@ -737,35 +737,35 @@ On first launch, the app needs to lay down the global folder structure and seed 
 - "My Queue" global view in top bar
 - Notifications for items waiting on the user
 
-### Phase 10 — Run History & Audit Log UI (3 days)
-- Per-worker Runs tab
-- Global History view
-- Filters, search, CSV export
-- Click to expand run details modal
-
-### Phase 11 — Skills & Context Packs (1 week)
+### Phase 10 — Skills & Context Packs (1 week)
 - Global skills folder UI (already created in Phase 1)
 - Skill picker in worker config
 - Context pack editor + picker
 - Variable resolution in `process.md`
 
-### Phase 12 — Import / Export (4 days)
+### Phase 11 — Import / Export (4 days)
 - Zip export with manifest
 - Import flow with skill check
 - "Export without runs" option
 - Example project bundled with the app
 
-### Phase 13 — Errors & Retry (2 days)
+### Phase 12 — Errors & Retry (2 days)
 - Error tray UI
 - Retry / edit-and-retry flows
 - Failure notifications
 
-### Phase 14 — Polish & Beta (1 week)
+### Phase 13 — Polish & Beta (1 week)
 - Empty states everywhere
 - Onboarding tour for first-time users
 - Keyboard shortcuts
 - Bug bash
 - Build pipelines for macOS, Windows, Linux
+
+### Phase N4.1 — Run History & Audit Log UI (3 days, post-MVP)
+- Per-worker Runs tab
+- Global History view
+- Filters, search, CSV export
+- Click to expand run details modal
 
 **Total MVP estimate: ~12–14 weeks for one full-time developer, faster with two.**
 
