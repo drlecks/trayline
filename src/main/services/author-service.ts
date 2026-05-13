@@ -39,21 +39,67 @@ async function loadSystemSkill(skillId: string): Promise<{ id: string; content: 
   }
 }
 
+function tryParse(s: string): unknown | null {
+  try { return JSON.parse(s) } catch { return null }
+}
+
+/**
+ * Escape raw control characters (newlines, tabs, carriage returns) that appear
+ * inside JSON string values. The AI sometimes emits literal newlines inside
+ * strings, producing invalid JSON that JSON.parse rejects outright.
+ */
+function sanitizeJsonStrings(raw: string): string {
+  let out = ''
+  let inString = false
+  let i = 0
+  while (i < raw.length) {
+    const ch = raw[i]
+    if (inString) {
+      if (ch === '\\') {
+        out += ch
+        i++
+        if (i < raw.length) out += raw[i]
+      } else if (ch === '"') {
+        inString = false
+        out += ch
+      } else if (ch === '\n') {
+        out += '\\n'
+      } else if (ch === '\r') {
+        out += '\\r'
+      } else if (ch === '\t') {
+        out += '\\t'
+      } else {
+        out += ch
+      }
+    } else {
+      if (ch === '"') inString = true
+      out += ch
+    }
+    i++
+  }
+  return out
+}
+
 function extractJson(raw: string): unknown | null {
   // Be lenient: the agent may wrap output in fences or add a preamble.
   // Find the first '{' and the matching last '}' and parse what's between.
   const trimmed = raw.trim()
-  const direct = (() => { try { return JSON.parse(trimmed) } catch { return null } })()
+
+  // 1. Direct parse (clean output)
+  const direct = tryParse(trimmed)
   if (direct !== null) return direct
 
+  // 2. Extract outermost {...} block (agent added preamble/postamble)
   const start = trimmed.indexOf('{')
   const end = trimmed.lastIndexOf('}')
   if (start === -1 || end === -1 || end <= start) return null
-  try {
-    return JSON.parse(trimmed.slice(start, end + 1))
-  } catch {
-    return null
-  }
+  const slice = trimmed.slice(start, end + 1)
+
+  const sliceDirect = tryParse(slice)
+  if (sliceDirect !== null) return sliceDirect
+
+  // 3. Sanitize unescaped control characters inside string values, then retry
+  return tryParse(sanitizeJsonStrings(slice))
 }
 
 function isWorkflowPlan(value: unknown): value is WorkflowPlan {
