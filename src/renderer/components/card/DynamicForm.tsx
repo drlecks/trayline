@@ -42,7 +42,7 @@ function buildZodSchema(fields: PlanFieldDef[]) {
       case 'file':
         // File handling lives outside the form value object — we just accept the
         // filename string here. Phase 3 doesn't actually move files, so this is
-        // a placeholder until Phase 11 wires attachments through.
+        // a placeholder until Phase 10 wires attachments through.
         s = z.array(z.string())
         if (!f.required) s = s.optional()
         break
@@ -153,7 +153,7 @@ export default function DynamicForm({
 
             {f.type === 'file' && (
               <div className="text-xs text-neutral-500 italic px-2 py-2 rounded border border-dashed border-neutral-300 dark:border-neutral-700">
-                File attachments arrive in Phase 11. Leave empty for now.
+                File attachments arrive in Phase 10. Leave empty for now.
               </div>
             )}
 
