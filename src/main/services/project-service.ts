@@ -143,23 +143,14 @@ async function listSkills(): Promise<SkillManifest[]> {
   if (!(await pathExists(Paths.skills))) return []
   const out: SkillManifest[] = []
 
-  // User skills (top level of skills/)
+  // User-installed skills only (top level of skills/, not _system/)
+  // System skills are auto-managed and never exposed to the worker skill picker.
   const top = await fs.readdir(Paths.skills, { withFileTypes: true })
   for (const e of top) {
     if (!e.isDirectory()) continue
     if (e.name === '_system') continue
     const m = await readJsonSafe<SkillManifest>(join(Paths.skills, e.name, 'skill.json'))
     if (m) out.push(m)
-  }
-
-  // System skills
-  if (await pathExists(Paths.systemSkills)) {
-    const sys = await fs.readdir(Paths.systemSkills, { withFileTypes: true })
-    for (const e of sys) {
-      if (!e.isDirectory()) continue
-      const m = await readJsonSafe<SkillManifest>(join(Paths.systemSkills, e.name, 'skill.json'))
-      if (m) out.push(m)
-    }
   }
 
   return out
