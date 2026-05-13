@@ -1,4 +1,4 @@
-import { join } from 'path'
+import { join, basename } from 'path'
 import fs from 'fs/promises'
 import { Paths } from './fs-service'
 import type {
@@ -178,6 +178,42 @@ async function getSkill(skillId: string): Promise<SkillManifest | null> {
   return null
 }
 
+// ─── Context pack operations ──────────────────────────────────────────────────
+
+async function listContextFiles(projectName: string): Promise<string[]> {
+  const dir = join(projectDir(projectName), 'context')
+  if (!(await pathExists(dir))) return []
+  const entries = await fs.readdir(dir, { withFileTypes: true })
+  return entries
+    .filter((e) => e.isFile() && e.name.endsWith('.md'))
+    .map((e) => e.name)
+    .sort()
+}
+
+async function readContextFile(projectName: string, file: string): Promise<string> {
+  const safe = basename(file)
+  const p = join(projectDir(projectName), 'context', safe)
+  if (!(await pathExists(p))) return ''
+  return fs.readFile(p, 'utf-8')
+}
+
+async function writeContextFile(projectName: string, file: string, content: string): Promise<void> {
+  const safe = basename(file)
+  if (!safe.endsWith('.md')) throw new Error('Context files must have a .md extension')
+  const dir = join(projectDir(projectName), 'context')
+  await fs.mkdir(dir, { recursive: true })
+  const p = join(dir, safe)
+  const tmp = p + '.tmp'
+  await fs.writeFile(tmp, content, 'utf-8')
+  await fs.rename(tmp, p)
+}
+
+async function deleteContextFile(projectName: string, file: string): Promise<void> {
+  const safe = basename(file)
+  const p = join(projectDir(projectName), 'context', safe)
+  if (await pathExists(p)) await fs.unlink(p)
+}
+
 export const projectService = {
   listProjects,
   getProject,
@@ -188,6 +224,10 @@ export const projectService = {
   getStep,
   listSkills,
   getSkill,
+  listContextFiles,
+  readContextFile,
+  writeContextFile,
+  deleteContextFile,
   paths: {
     projectDir,
     workflowDir,

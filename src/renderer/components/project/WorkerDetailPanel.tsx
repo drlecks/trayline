@@ -6,7 +6,7 @@ import { CopyButton } from '@/components/ui/copy-button'
 import { useProjectStore } from '@/stores/project-store'
 import { useProviderGuard } from '@/stores/provider-guard-store'
 import TerminalPanel, { OpenExternalTerminalButton } from './TerminalPanel'
-import type { StepMeta } from '../../../shared/types'
+import type { StepMeta, SkillManifest } from '../../../shared/types'
 import type { WorkerRun, WorkerRunEvent, WorkerRunStatus } from '../../../shared/worker-run'
 
 type Tab = 'instructions' | 'config' | 'runs'
@@ -165,15 +165,20 @@ function InstructionsTab({ project, workflow, stepId }: { project: string; workf
   const [saved, setSaved] = useState('')
   const [busy, setBusy] = useState(false)
   const [loaded, setLoaded] = useState(false)
+  const [contextFiles, setContextFiles] = useState<string[]>([])
 
   useEffect(() => {
     let cancelled = false
     void (async () => {
-      const md = await window.trayline.step.readProcess(project, workflow, stepId)
+      const [md, files] = await Promise.all([
+        window.trayline!.step.readProcess(project, workflow, stepId),
+        window.trayline!.project.listContextFiles(project),
+      ])
       if (cancelled) return
       setBody(md)
       setSaved(md)
       setLoaded(true)
+      setContextFiles(files)
     })()
     return () => { cancelled = true }
   }, [project, workflow, stepId])
@@ -183,7 +188,7 @@ function InstructionsTab({ project, workflow, stepId }: { project: string; workf
   async function save() {
     setBusy(true)
     try {
-      await window.trayline.step.updateProcess({ project, workflow, stepId, processMd: body })
+      await window.trayline!.step.updateProcess({ project, workflow, stepId, processMd: body })
       setSaved(body)
     } finally {
       setBusy(false)
@@ -191,6 +196,9 @@ function InstructionsTab({ project, workflow, stepId }: { project: string; workf
   }
 
   if (!loaded) return <div className="p-6 text-xs text-neutral-500">Loading…</div>
+
+  const contextVars = contextFiles.map((f) => `{{context.${f.replace(/\.md$/, '')}}}`)
+  const allVars = ['{{card.data}}', ...contextVars]
 
   return (
     <div className="p-6 flex flex-col gap-3 h-full">
@@ -213,6 +221,22 @@ function InstructionsTab({ project, workflow, stepId }: { project: string; workf
           <MarkdownPreview source={body} />
         </div>
       </div>
+      {allVars.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-[11px] text-neutral-400">Variables:</span>
+          {allVars.map((v) => (
+            <button
+              key={v}
+              type="button"
+              title="Click to copy"
+              onClick={() => void navigator.clipboard.writeText(v)}
+              className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors"
+            >
+              {v}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="flex justify-end gap-2">
         <Button size="sm" variant="ghost" disabled={!dirty || busy} onClick={() => setBody(saved)}>
           Reset
@@ -284,6 +308,41 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
   const [scheduleCron, setScheduleCron] = useState<string>(trigger.schedule_cron ?? '0 * * * *')
   const [busy, setBusy] = useState(false)
 
+  // Skills + context packs
+  const [installedSkills, setInstalledSkills] = useState<SkillManifest[]>([])
+  const [selectedSkills, setSelectedSkills] = useState<string[]>(raw.skills ?? [])
+  const [contextFiles, setContextFiles] = useState<string[]>([])
+  const [selectedContextPacks, setSelectedContextPacks] = useState<string[]>(raw.context_packs ?? [])
+
+  useEffect(() => {
+    void window.trayline!.project.listSkills().then(setInstalledSkills)
+    void window.trayline!.project.listContextFiles(project).then(setContextFiles)
+  }, [project])
+
+  // Re-sync picker state when the step changes (e.g. user picks a different worker)
+  useEffect(() => {
+    setSelectedSkills(raw.skills ?? [])
+    setSelectedContextPacks(raw.context_packs ?? [])
+    setCommand(exec.command ?? 'claude')
+    setTimeoutSec(exec.timeout_seconds ?? 180)
+    setRetries(exec.retry_attempts ?? 1)
+    setTriggerMode(trigger.mode === 'scheduled' ? 'scheduled' : trigger.mode === 'manual' ? 'manual' : 'on_ready')
+    setScheduleCron(trigger.schedule_cron ?? '0 * * * *')
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step.id])
+
+  function toggleSkill(id: string) {
+    setSelectedSkills((prev) =>
+      prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id],
+    )
+  }
+
+  function toggleContextPack(file: string) {
+    setSelectedContextPacks((prev) =>
+      prev.includes(file) ? prev.filter((f) => f !== file) : [...prev, file],
+    )
+  }
+
   async function save() {
     setBusy(true)
     try {
@@ -296,6 +355,8 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
             mode: triggerMode,
             schedule_cron: triggerMode === 'scheduled' ? scheduleCron : null,
           },
+          skills: selectedSkills,
+          context_packs: selectedContextPacks,
         } as Record<string, unknown>,
       })
       await refreshSteps()
@@ -308,8 +369,11 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
     { value: 'manual', label: 'Manual only', desc: 'Never fires automatically — only via "Run now".' },
   ]
 
+  // Skills that can be toggled (hide trayline-worker-contract — always injected automatically)
+  const toggleableSkills = installedSkills.filter((s) => s.id !== 'trayline-worker-contract')
+
   return (
-    <div className="p-6 flex flex-col gap-4 max-w-xl">
+    <div className="p-6 flex flex-col gap-5 max-w-xl">
       <div className="flex flex-col gap-1.5">
         <label className="text-xs text-neutral-500">Command</label>
         <input
@@ -367,16 +431,57 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
         </>
       )}
 
-      {(raw.skills?.length ?? 0) > 0 && (
-        <div className="flex flex-col gap-1.5">
-          <label className="text-xs text-neutral-500">Skills</label>
-          <div className="flex flex-wrap gap-1.5">
-            {raw.skills!.map((s) => (
-              <span key={s} className="text-[11px] px-2 py-0.5 rounded-full bg-neutral-100 dark:bg-neutral-800">{s}</span>
+      <div className="flex flex-col gap-1.5">
+        <label className="text-xs text-neutral-500">Skills</label>
+        {toggleableSkills.length === 0 ? (
+          <p className="text-xs text-neutral-400 dark:text-neutral-600 italic">
+            No skills installed — visit the Skills screen to add some.
+          </p>
+        ) : (
+          <div className="flex flex-col gap-1">
+            {toggleableSkills.map((s) => (
+              <label key={s.id} className="flex items-start gap-2 cursor-pointer group">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 shrink-0"
+                  checked={selectedSkills.includes(s.id)}
+                  onChange={() => toggleSkill(s.id)}
+                />
+                <div className="min-w-0">
+                  <span className="text-xs font-medium">{s.name}</span>
+                  {s.description && (
+                    <span className="text-xs text-neutral-500 dark:text-neutral-400 ml-1.5">{s.description}</span>
+                  )}
+                </div>
+              </label>
             ))}
           </div>
-        </div>
-      )}
+        )}
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label className="text-xs text-neutral-500">Context packs</label>
+        {contextFiles.length === 0 ? (
+          <p className="text-xs text-neutral-400 dark:text-neutral-600 italic">
+            No context files yet — add them under Context files in the sidebar.
+          </p>
+        ) : (
+          <div className="flex flex-col gap-1">
+            {contextFiles.map((file) => (
+              <label key={file} className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="shrink-0"
+                  checked={selectedContextPacks.includes(file)}
+                  onChange={() => toggleContextPack(file)}
+                />
+                <span className="text-xs font-mono">{file}</span>
+              </label>
+            ))}
+          </div>
+        )}
+      </div>
+
       <div className="flex justify-end">
         <Button size="sm" onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save'}</Button>
       </div>
