@@ -144,31 +144,37 @@ export default function ContextPackEditor({ project }: Props) {
         )}
 
         <div className="flex flex-col gap-0.5 overflow-y-auto flex-1 px-2">
-          {files.map((file) => (
-            <button
-              key={file}
-              onClick={() => void selectFile(file)}
-              className={`
-                group flex items-center justify-between gap-1 px-2 py-1.5 rounded text-left text-xs
-                ${selectedFile === file
-                  ? 'bg-neutral-100 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100'
-                  : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-50 dark:hover:bg-neutral-900'}
-              `}
-            >
-              <span className="flex items-center gap-1.5 min-w-0 truncate">
-                <FileText size={12} strokeWidth={1.75} className="shrink-0 text-neutral-400" />
-                {file}
-              </span>
-              <span
-                role="button"
-                title="Delete"
-                onClick={(e) => { e.stopPropagation(); void deleteFile(file) }}
-                className="shrink-0 opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-red-600 dark:hover:text-red-400"
+          {files.map((file) => {
+            const isBase = file.startsWith('_')
+            return (
+              <button
+                key={file}
+                onClick={() => void selectFile(file)}
+                className={`
+                  group flex items-center justify-between gap-1 px-2 py-1.5 rounded text-left text-xs
+                  ${selectedFile === file
+                    ? 'bg-neutral-100 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100'
+                    : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-50 dark:hover:bg-neutral-900'}
+                `}
               >
-                <Trash2 size={11} strokeWidth={1.75} />
-              </span>
-            </button>
-          ))}
+                <span className="flex items-center gap-1.5 min-w-0 truncate">
+                  <FileText size={12} strokeWidth={1.75} className="shrink-0 text-neutral-400" />
+                  <span className="truncate">{file}</span>
+                  {isBase && (
+                    <span className="shrink-0 text-[9px] px-1 py-px rounded bg-neutral-200 dark:bg-neutral-700 text-neutral-500 dark:text-neutral-400 font-medium uppercase tracking-wide">base</span>
+                  )}
+                </span>
+                <span
+                  role="button"
+                  title="Delete"
+                  onClick={(e) => { e.stopPropagation(); void deleteFile(file) }}
+                  className="shrink-0 opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-red-600 dark:hover:text-red-400"
+                >
+                  <Trash2 size={11} strokeWidth={1.75} />
+                </span>
+              </button>
+            )
+          })}
         </div>
       </div>
 

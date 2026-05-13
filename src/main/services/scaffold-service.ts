@@ -85,6 +85,12 @@ async function scaffold(plan: WorkflowPlan, options: ScaffoldOptions = {}): Prom
   await writeFileAtomic(join(projectPath, 'project.json'), JSON.stringify(projectMeta, null, 2))
   await writeFileAtomic(join(projectPath, 'README.md'), `# ${plan.project.display_name}\n\n${plan.project.description}\n`)
 
+  // Base context file: always auto-included in every worker run (prefix '_' marks it as base)
+  await writeFileAtomic(
+    join(projectPath, 'context', '_project-overview.md'),
+    `# ${plan.project.display_name}\n\n${plan.project.description}\n`,
+  )
+
   // ── 2. Workflow + steps ─────────────────────────────────────────────────────
   const workflowPath = join(projectPath, 'workflows', plan.workflow.name)
   const stepsRoot = join(workflowPath, 'steps')
