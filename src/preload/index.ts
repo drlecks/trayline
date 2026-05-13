@@ -16,6 +16,7 @@ import type {
   SkillCatalogFetchResult,
   InstalledSkillRow,
 } from '../shared/types'
+import type { MissingSkillsEntry } from '../shared/types'
 import type { Card, CardStatus, CardCounts } from '../shared/card'
 import type { PlanFieldDef, PlanTrayStep, PlanWorkerStep } from '../shared/workflow-plan'
 import type { WorkerRun, WorkerRunEvent } from '../shared/worker-run'
@@ -53,6 +54,8 @@ const api = {
     listSteps: (project: string, workflow: string): Promise<StepMeta[]> =>
       ipcRenderer.invoke(IPC.project.listSteps, project, workflow),
     listSkills: (): Promise<SkillManifest[]> => ipcRenderer.invoke(IPC.project.listSkills),
+    checkSkills: (project: string): Promise<MissingSkillsEntry[]> =>
+      ipcRenderer.invoke(IPC.project.checkSkills, project),
     listContextFiles: (project: string): Promise<string[]> =>
       ipcRenderer.invoke(IPC.project.listContextFiles, project),
     readContextFile: (project: string, file: string): Promise<string> =>

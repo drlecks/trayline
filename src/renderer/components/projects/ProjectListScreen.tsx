@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Plus, Trash2 } from 'lucide-react'
+import { AlertTriangle, Plus, Trash2 } from 'lucide-react'
 import { useProjectStore } from '@/stores/project-store'
 import type { ProjectMeta, ProjectStatus } from '../../../shared/types'
 
@@ -17,6 +17,7 @@ function formatRelative(iso: string): string {
 
 export default function ProjectListScreen() {
   const all = useProjectStore((s) => s.all)
+  const projectsWithMissingSkills = useProjectStore((s) => s.projectsWithMissingSkills)
   const setActive = useProjectStore((s) => s.setActive)
   const setScreen = useProjectStore((s) => s.setScreen)
   const refreshProjects = useProjectStore((s) => s.refreshProjects)
@@ -110,8 +111,16 @@ export default function ProjectListScreen() {
                     </div>
                   )}
                 </div>
-                <div className="shrink-0 text-xs text-neutral-400 dark:text-neutral-500">
-                  {formatRelative(p.updated_at)}
+                <div className="shrink-0 flex items-center gap-2">
+                  {projectsWithMissingSkills.has(p.name) && (
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                      <AlertTriangle size={10} strokeWidth={2} />
+                      Missing skills
+                    </span>
+                  )}
+                  <span className="text-xs text-neutral-400 dark:text-neutral-500">
+                    {formatRelative(p.updated_at)}
+                  </span>
                 </div>
               </button>
 

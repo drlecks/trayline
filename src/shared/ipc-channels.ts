@@ -28,6 +28,7 @@ export const IPC = {
     listWorkflows: 'project:listWorkflows',
     listSteps: 'project:listSteps',
     listSkills: 'project:listSkills',
+    checkSkills: 'project:checkSkills',
     listContextFiles: 'project:listContextFiles',
     readContextFile: 'project:readContextFile',
     writeContextFile: 'project:writeContextFile',

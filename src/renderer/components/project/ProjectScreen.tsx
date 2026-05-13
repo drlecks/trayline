@@ -19,6 +19,7 @@ export default function ProjectScreen() {
   const selectedStepId = useProjectStore((s) => s.selectedStepId)
   const setSelectedStepId = useProjectStore((s) => s.setSelectedStepId)
   const unconfiguredMcps = useProjectStore((s) => s.unconfiguredMcps)
+  const missingSkillsByStep = useProjectStore((s) => s.missingSkillsByStep)
   const setScreen = useProjectStore((s) => s.setScreen)
   const setRegenerateOf = useProjectStore((s) => s.setRegenerateOf)
   const refreshSteps = useProjectStore((s) => s.refreshSteps)
@@ -70,6 +71,7 @@ export default function ProjectScreen() {
                 key={step.id}
                 step={step}
                 selected={step.id === selectedStepId && !showContextEditor}
+                missingSkills={missingSkillsByStep[step.id] ?? []}
                 onClick={() => { setSelectedStepId(step.id); setShowContextEditor(false) }}
               />
             ))}
@@ -193,7 +195,7 @@ function WorkerStatusBubble({ status }: { status: WorkerRunStatus | 'idle' }) {
   )
 }
 
-function StepCard({ step, selected, onClick }: { step: StepMeta; selected: boolean; onClick: () => void }) {
+function StepCard({ step, selected, missingSkills, onClick }: { step: StepMeta; selected: boolean; missingSkills: string[]; onClick: () => void }) {
   const Icon = step.kind === 'tray'
     ? (step.id === '99-errors' ? AlertTriangle : Inbox)
     : Cpu
@@ -302,6 +304,11 @@ function StepCard({ step, selected, onClick }: { step: StepMeta; selected: boole
           {counts && counts.pending > 0 && step.kind === 'tray' && !isError && (
             <span className="shrink-0 inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-400 text-[11px] font-semibold">
               {counts.pending}
+            </span>
+          )}
+          {step.kind === 'worker' && missingSkills.length > 0 && (
+            <span title="Missing skill" className="shrink-0">
+              <AlertTriangle size={13} strokeWidth={2} className="text-amber-500" />
             </span>
           )}
           {step.kind === 'worker' && <WorkerStatusBubble status={workerStatus} />}
