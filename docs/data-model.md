@@ -71,6 +71,24 @@ Workflows are linear — the prefix encodes order on disk. Reordering the workfl
 
 ## File Shapes
 
+### Project (`project.json`)
+
+```json
+{
+  "id": "client-onboarding",
+  "name": "client-onboarding",
+  "display_name": "Client Onboarding",
+  "description": "Intake new clients and route their requests.",
+  "created_at": "2026-05-07T14:32:11Z",
+  "status": "active",
+  "updated_at": "2026-05-13T09:10:22Z"
+}
+```
+
+- `status` is `"active" | "inactive"`. It does not gate execution today; it's a hook for future scheduling/visibility features and drives the green/red dot on the Project List screen.
+- `updated_at` is bumped whenever the project is created, regenerated, or has its status toggled. The Project List screen sorts on this field, descending.
+- Both fields are optional on disk for backward compatibility — readers default missing `status` to `"active"` and missing `updated_at` to `created_at`.
+
 ### Card (`card_2026-05-07_001.json`)
 
 ```json

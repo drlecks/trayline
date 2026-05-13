@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ChevronDown, Plus, Trash2, Home } from 'lucide-react'
+import { ChevronDown, Plus, Trash2, List } from 'lucide-react'
 import { useProjectStore } from '@/stores/project-store'
 import type { ProjectMeta } from '../../../shared/types'
 
@@ -83,11 +83,11 @@ export default function ProjectSwitcher() {
 
           <div className="border-t border-neutral-100 dark:border-neutral-900 mt-1 pt-1">
             <button
-              onClick={() => { setActive(null); setScreen('splash'); setOpen(false) }}
+              onClick={() => { setActive(null); setScreen('projectList'); setOpen(false) }}
               className="w-full flex items-center gap-2 px-3 py-2 text-xs text-neutral-600 dark:text-neutral-400 hover:bg-neutral-50 dark:hover:bg-neutral-900"
             >
-              <Home size={12} strokeWidth={1.75} />
-              Welcome screen
+              <List size={12} strokeWidth={1.75} />
+              All projects
             </button>
             <button
               onClick={() => { setScreen('author'); setOpen(false) }}

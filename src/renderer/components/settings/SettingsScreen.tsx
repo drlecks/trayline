@@ -17,6 +17,8 @@ interface EffortEntry { id: string; label: string }
 
 export default function SettingsScreen() {
   const setScreen = useProjectStore((s) => s.setScreen)
+  const active = useProjectStore((s) => s.active)
+  const all = useProjectStore((s) => s.all)
   const { theme, setTheme } = useThemeStore()
   const [settings, setSettings] = useState<Settings | null>(null)
   const [adapters, setAdapters] = useState<AdapterEntry[]>([])
@@ -126,7 +128,7 @@ export default function SettingsScreen() {
   return (
     <div className="flex flex-col w-full max-w-2xl mx-auto px-8 py-8">
       <button
-        onClick={() => setScreen('splash')}
+        onClick={() => setScreen(active ? 'project' : all.length > 0 ? 'projectList' : 'splash')}
         className="self-start flex items-center gap-1 text-xs text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200 mb-6"
       >
         <ArrowLeft size={13} strokeWidth={1.75} /> Back

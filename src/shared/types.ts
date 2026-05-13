@@ -61,12 +61,25 @@ export interface BootstrapInfo {
 
 // ── Project metadata ──────────────────────────────────────────────────────────
 
+export type ProjectStatus = 'active' | 'inactive'
+
 export interface ProjectMeta {
   id: string
   name: string
   display_name: string
   description: string
   created_at: string
+  /**
+   * Workflow status. Hooks for future features (scheduling, watchers, etc.)
+   * may gate themselves on this. Defaults to 'active' on read when absent.
+   */
+  status: ProjectStatus
+  /**
+   * ISO timestamp of the last write to this project (creation, status change,
+   * regenerate, etc.). Drives the most-recent-first ordering of the project
+   * list screen. Defaults to `created_at` on read when absent.
+   */
+  updated_at: string
 }
 
 export interface WorkflowMeta {
