@@ -1,8 +1,15 @@
 import { useEffect, useMemo, useState, useCallback } from 'react'
 import cronParser from 'cron-parser'
-import { Cpu, Play } from 'lucide-react'
+import { Cpu, Play, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CopyButton } from '@/components/ui/copy-button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { useProjectStore } from '@/stores/project-store'
 import { useProviderGuard } from '@/stores/provider-guard-store'
 import TerminalPanel, { OpenExternalTerminalButton } from './TerminalPanel'
@@ -314,6 +321,10 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
   const [contextFiles, setContextFiles] = useState<string[]>([])
   const [selectedContextPacks, setSelectedContextPacks] = useState<string[]>(raw.context_packs ?? [])
 
+  // Removal confirmation modal state
+  const [removeSkill, setRemoveSkill] = useState<SkillManifest | null>(null)
+  const [removeContextPack, setRemoveContextPack] = useState<string | null>(null)
+
   useEffect(() => {
     void window.trayline!.project.listSkills().then(setInstalledSkills)
     void window.trayline!.project.listContextFiles(project).then(setContextFiles)
@@ -331,16 +342,26 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step.id])
 
-  function toggleSkill(id: string) {
-    setSelectedSkills((prev) =>
-      prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id],
-    )
+  function addSkill(id: string) {
+    if (!id || selectedSkills.includes(id)) return
+    setSelectedSkills((prev) => [...prev, id])
   }
 
-  function toggleContextPack(file: string) {
-    setSelectedContextPacks((prev) =>
-      prev.includes(file) ? prev.filter((f) => f !== file) : [...prev, file],
-    )
+  function confirmRemoveSkill() {
+    if (!removeSkill) return
+    setSelectedSkills((prev) => prev.filter((s) => s !== removeSkill.id))
+    setRemoveSkill(null)
+  }
+
+  function addContextPack(file: string) {
+    if (!file || selectedContextPacks.includes(file)) return
+    setSelectedContextPacks((prev) => [...prev, file])
+  }
+
+  function confirmRemoveContextPack() {
+    if (!removeContextPack) return
+    setSelectedContextPacks((prev) => prev.filter((f) => f !== removeContextPack))
+    setRemoveContextPack(null)
   }
 
   async function save() {
@@ -369,123 +390,198 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
     { value: 'manual', label: 'Manual only', desc: 'Never fires automatically — only via "Run now".' },
   ]
 
-  // Skills that can be toggled (hide trayline-worker-contract — always injected automatically)
-  const toggleableSkills = installedSkills.filter((s) => s.id !== 'trayline-worker-contract')
+  // Skills available to add (installed user skills not yet selected)
+  const skillsToAdd = installedSkills.filter((s) => !selectedSkills.includes(s.id))
+  // Resolve selected skill IDs back to manifests for display
+  const selectedSkillManifests = selectedSkills
+    .map((id) => installedSkills.find((s) => s.id === id))
+    .filter((s): s is SkillManifest => s !== undefined)
+
+  // Context files available to add (not yet selected)
+  const contextToAdd = contextFiles.filter((f) => !selectedContextPacks.includes(f))
 
   return (
-    <div className="p-6 flex flex-col gap-5 max-w-xl">
-      <div className="flex flex-col gap-1.5">
-        <label className="text-xs text-neutral-500">Command</label>
-        <input
-          value={command}
-          onChange={(e) => setCommand(e.target.value)}
-          className="rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-3 py-1.5 text-xs"
-        />
-      </div>
-      <div className="flex gap-3">
-        <div className="flex flex-col gap-1.5 flex-1">
-          <label className="text-xs text-neutral-500">Timeout (seconds)</label>
+    <>
+      <div className="p-6 flex flex-col gap-5 max-w-xl">
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs text-neutral-500">Command</label>
           <input
-            type="number" min={5}
-            value={timeoutSec}
-            onChange={(e) => setTimeoutSec(parseInt(e.target.value, 10) || 0)}
+            value={command}
+            onChange={(e) => setCommand(e.target.value)}
             className="rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-3 py-1.5 text-xs"
           />
         </div>
-        <div className="flex flex-col gap-1.5 flex-1">
-          <label className="text-xs text-neutral-500">Retry attempts</label>
-          <input
-            type="number" min={0}
-            value={retries}
-            onChange={(e) => setRetries(parseInt(e.target.value, 10) || 0)}
-            className="rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-3 py-1.5 text-xs"
-          />
+        <div className="flex gap-3">
+          <div className="flex flex-col gap-1.5 flex-1">
+            <label className="text-xs text-neutral-500">Timeout (seconds)</label>
+            <input
+              type="number" min={5}
+              value={timeoutSec}
+              onChange={(e) => setTimeoutSec(parseInt(e.target.value, 10) || 0)}
+              className="rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-3 py-1.5 text-xs"
+            />
+          </div>
+          <div className="flex flex-col gap-1.5 flex-1">
+            <label className="text-xs text-neutral-500">Retry attempts</label>
+            <input
+              type="number" min={0}
+              value={retries}
+              onChange={(e) => setRetries(parseInt(e.target.value, 10) || 0)}
+              className="rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-3 py-1.5 text-xs"
+            />
+          </div>
         </div>
-      </div>
 
-      <div className="flex flex-col gap-1.5">
-        <label className="text-xs text-neutral-500">Trigger mode</label>
-        <div className="flex gap-2">
-          {TRIGGER_OPTIONS.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => setTriggerMode(opt.value)}
-              className={`flex-1 px-3 py-2 rounded-md border text-left text-xs ${
-                triggerMode === opt.value
-                  ? 'border-neutral-900 dark:border-neutral-100 bg-neutral-50 dark:bg-neutral-900'
-                  : 'border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-900'
-              }`}
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs text-neutral-500">Trigger mode</label>
+          <div className="flex gap-2">
+            {TRIGGER_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setTriggerMode(opt.value)}
+                className={`flex-1 px-3 py-2 rounded-md border text-left text-xs ${
+                  triggerMode === opt.value
+                    ? 'border-neutral-900 dark:border-neutral-100 bg-neutral-50 dark:bg-neutral-900'
+                    : 'border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-900'
+                }`}
+              >
+                <div className="font-medium">{opt.label}</div>
+                <div className="text-neutral-500 mt-0.5">{opt.desc}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {triggerMode === 'scheduled' && (
+          <>
+            <CronPicker value={scheduleCron} onChange={setScheduleCron} />
+            <NextRunTime expr={scheduleCron} />
+          </>
+        )}
+
+        {/* Skills */}
+        <div className="flex flex-col gap-2">
+          <label className="text-xs text-neutral-500">Skills</label>
+          {skillsToAdd.length > 0 && (
+            <select
+              defaultValue=""
+              onChange={(e) => { addSkill(e.target.value); e.target.value = '' }}
+              className="rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-3 py-1.5 text-xs"
             >
-              <div className="font-medium">{opt.label}</div>
-              <div className="text-neutral-500 mt-0.5">{opt.desc}</div>
-            </button>
-          ))}
+              <option value="" disabled>Add a skill…</option>
+              {skillsToAdd.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          )}
+          {selectedSkillManifests.length > 0 ? (
+            <ul className="flex flex-col gap-1">
+              {selectedSkillManifests.map((s) => (
+                <li key={s.id} className="flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950">
+                  <div className="flex-1 min-w-0">
+                    <span className="text-xs font-medium">{s.name}</span>
+                    {s.description && (
+                      <span className="text-xs text-neutral-500 dark:text-neutral-400 ml-1.5 truncate">{s.description}</span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setRemoveSkill(s)}
+                    className="shrink-0 text-neutral-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                  >
+                    <Trash2 size={13} strokeWidth={1.75} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            skillsToAdd.length === 0 && installedSkills.length === 0 && (
+              <p className="text-xs text-neutral-400 dark:text-neutral-600 italic">
+                No skills installed — visit the Skills screen to add some.
+              </p>
+            )
+          )}
+        </div>
+
+        {/* Context packs */}
+        <div className="flex flex-col gap-2">
+          <label className="text-xs text-neutral-500">Context packs</label>
+          {contextToAdd.length > 0 && (
+            <select
+              defaultValue=""
+              onChange={(e) => { addContextPack(e.target.value); e.target.value = '' }}
+              className="rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-3 py-1.5 text-xs font-mono"
+            >
+              <option value="" disabled>Add a context file…</option>
+              {contextToAdd.map((f) => (
+                <option key={f} value={f}>{f}</option>
+              ))}
+            </select>
+          )}
+          {selectedContextPacks.length > 0 ? (
+            <ul className="flex flex-col gap-1">
+              {selectedContextPacks.map((file) => (
+                <li key={file} className="flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950">
+                  <span className="flex-1 text-xs font-mono truncate">{file}</span>
+                  <button
+                    type="button"
+                    onClick={() => setRemoveContextPack(file)}
+                    className="shrink-0 text-neutral-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                  >
+                    <Trash2 size={13} strokeWidth={1.75} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            contextFiles.length === 0 && (
+              <p className="text-xs text-neutral-400 dark:text-neutral-600 italic">
+                No context files yet — add them under Context files in the sidebar.
+              </p>
+            )
+          )}
+        </div>
+
+        <div className="flex justify-end">
+          <Button size="sm" onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save'}</Button>
         </div>
       </div>
 
-      {triggerMode === 'scheduled' && (
-        <>
-          <CronPicker value={scheduleCron} onChange={setScheduleCron} />
-          <NextRunTime expr={scheduleCron} />
-        </>
-      )}
-
-      <div className="flex flex-col gap-1.5">
-        <label className="text-xs text-neutral-500">Skills</label>
-        {toggleableSkills.length === 0 ? (
-          <p className="text-xs text-neutral-400 dark:text-neutral-600 italic">
-            No skills installed — visit the Skills screen to add some.
-          </p>
-        ) : (
-          <div className="flex flex-col gap-1">
-            {toggleableSkills.map((s) => (
-              <label key={s.id} className="flex items-start gap-2 cursor-pointer group">
-                <input
-                  type="checkbox"
-                  className="mt-0.5 shrink-0"
-                  checked={selectedSkills.includes(s.id)}
-                  onChange={() => toggleSkill(s.id)}
-                />
-                <div className="min-w-0">
-                  <span className="text-xs font-medium">{s.name}</span>
-                  {s.description && (
-                    <span className="text-xs text-neutral-500 dark:text-neutral-400 ml-1.5">{s.description}</span>
-                  )}
-                </div>
-              </label>
-            ))}
+      {/* Remove skill confirmation */}
+      <Dialog open={removeSkill !== null} onOpenChange={(open) => { if (!open) setRemoveSkill(null) }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Remove skill</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to remove <strong>{removeSkill?.name}</strong> from this worker?
+              The skill will remain installed — you can re-add it at any time.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2 mt-2">
+            <Button size="sm" variant="outline" onClick={() => setRemoveSkill(null)}>Cancel</Button>
+            <Button size="sm" variant="destructive" onClick={confirmRemoveSkill}>Remove</Button>
           </div>
-        )}
-      </div>
+        </DialogContent>
+      </Dialog>
 
-      <div className="flex flex-col gap-1.5">
-        <label className="text-xs text-neutral-500">Context packs</label>
-        {contextFiles.length === 0 ? (
-          <p className="text-xs text-neutral-400 dark:text-neutral-600 italic">
-            No context files yet — add them under Context files in the sidebar.
-          </p>
-        ) : (
-          <div className="flex flex-col gap-1">
-            {contextFiles.map((file) => (
-              <label key={file} className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  className="shrink-0"
-                  checked={selectedContextPacks.includes(file)}
-                  onChange={() => toggleContextPack(file)}
-                />
-                <span className="text-xs font-mono">{file}</span>
-              </label>
-            ))}
+      {/* Remove context pack confirmation */}
+      <Dialog open={removeContextPack !== null} onOpenChange={(open) => { if (!open) setRemoveContextPack(null) }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Remove context pack</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to remove <strong>{removeContextPack}</strong> from this worker?
+              The file will remain in the project — you can re-add it at any time.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2 mt-2">
+            <Button size="sm" variant="outline" onClick={() => setRemoveContextPack(null)}>Cancel</Button>
+            <Button size="sm" variant="destructive" onClick={confirmRemoveContextPack}>Remove</Button>
           </div>
-        )}
-      </div>
-
-      <div className="flex justify-end">
-        <Button size="sm" onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save'}</Button>
-      </div>
-    </div>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }
 
