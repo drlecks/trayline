@@ -54,7 +54,7 @@ You MUST output a single JSON object matching this schema, and nothing else:
 3. **Always end with a tray** — the last step is where the result waits for archival, sending, or human approval.
 4. **Use `01-`, `02-`, etc. prefixes** on step ids for ordering.
 5. **Pick recommended skills and MCPs** from these lists:
-   - Skills: `pdf-reader`, `csv-parser`, `email-sender`, `web-scraper` (only suggest if obviously needed; otherwise leave empty)
+   - Skills: `pdf`, `docx`, `xlsx`, `canvas-design`, `marketing-psychology`, `social-content`, `triage` (only suggest if obviously needed; otherwise leave empty)
    - MCPs: `gmail`, `google-calendar`, `google-drive`, `web-browse`, `github`, `slack`, `notion`, `filesystem`, `fetch` (only suggest when the user's description clearly needs the integration)
 6. **Manual approval** for trays where a human should review before the workflow continues. **Auto** when the previous worker produced a definitive result.
 7. **process.md should be specific.** Tell the worker exactly which input fields it gets and what JSON shape to output.

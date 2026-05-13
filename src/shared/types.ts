@@ -212,3 +212,9 @@ export interface InstalledSkillRow {
   /** Version available in the cached catalog when newer than installed. */
   updateAvailable?: string
 }
+
+export interface MissingSkillsEntry {
+  stepId: string
+  workflowId: string
+  missingSkillIds: string[]
+}

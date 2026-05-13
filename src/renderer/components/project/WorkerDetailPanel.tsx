@@ -1,12 +1,19 @@
 import { useEffect, useMemo, useState, useCallback } from 'react'
 import cronParser from 'cron-parser'
-import { Cpu, Play } from 'lucide-react'
+import { AlertTriangle, Cpu, Play, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CopyButton } from '@/components/ui/copy-button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { useProjectStore } from '@/stores/project-store'
 import { useProviderGuard } from '@/stores/provider-guard-store'
 import TerminalPanel, { OpenExternalTerminalButton } from './TerminalPanel'
-import type { StepMeta } from '../../../shared/types'
+import type { StepMeta, SkillManifest } from '../../../shared/types'
 import type { WorkerRun, WorkerRunEvent, WorkerRunStatus } from '../../../shared/worker-run'
 
 type Tab = 'instructions' | 'config' | 'runs'
@@ -18,6 +25,7 @@ interface WorkerDetailPanelProps {
 export default function WorkerDetailPanel({ step }: WorkerDetailPanelProps) {
   const active = useProjectStore((s) => s.active)
   const workflow = useProjectStore((s) => s.workflow)
+  const missingSkillsByStep = useProjectStore((s) => s.missingSkillsByStep)
   const [tab, setTab] = useState<Tab>('instructions')
   const [runNowBusy, setRunNowBusy] = useState(false)
   const [runNowFeedback, setRunNowFeedback] = useState<string | null>(null)
@@ -84,6 +92,21 @@ export default function WorkerDetailPanel({ step }: WorkerDetailPanelProps) {
           ))}
         </div>
       </div>
+
+      {(missingSkillsByStep[step.id]?.length ?? 0) > 0 && (
+        <div className="
+          flex items-start gap-2 px-6 py-2.5 shrink-0
+          bg-amber-50 dark:bg-amber-950/30
+          border-b border-amber-200/60 dark:border-amber-900/40
+          text-xs text-amber-900 dark:text-amber-300
+        ">
+          <AlertTriangle size={13} strokeWidth={1.75} className="mt-0.5 shrink-0" />
+          <span>
+            Missing skill{missingSkillsByStep[step.id].length > 1 ? 's' : ''}:{' '}
+            <strong>{missingSkillsByStep[step.id].join(', ')}</strong>. Install them in the Skills screen before running this worker.
+          </span>
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto">
         {tab === 'instructions' && active && workflow && (
@@ -165,15 +188,20 @@ function InstructionsTab({ project, workflow, stepId }: { project: string; workf
   const [saved, setSaved] = useState('')
   const [busy, setBusy] = useState(false)
   const [loaded, setLoaded] = useState(false)
+  const [contextFiles, setContextFiles] = useState<string[]>([])
 
   useEffect(() => {
     let cancelled = false
     void (async () => {
-      const md = await window.trayline.step.readProcess(project, workflow, stepId)
+      const [md, files] = await Promise.all([
+        window.trayline!.step.readProcess(project, workflow, stepId),
+        window.trayline!.project.listContextFiles(project),
+      ])
       if (cancelled) return
       setBody(md)
       setSaved(md)
       setLoaded(true)
+      setContextFiles(files)
     })()
     return () => { cancelled = true }
   }, [project, workflow, stepId])
@@ -183,7 +211,7 @@ function InstructionsTab({ project, workflow, stepId }: { project: string; workf
   async function save() {
     setBusy(true)
     try {
-      await window.trayline.step.updateProcess({ project, workflow, stepId, processMd: body })
+      await window.trayline!.step.updateProcess({ project, workflow, stepId, processMd: body })
       setSaved(body)
     } finally {
       setBusy(false)
@@ -191,6 +219,9 @@ function InstructionsTab({ project, workflow, stepId }: { project: string; workf
   }
 
   if (!loaded) return <div className="p-6 text-xs text-neutral-500">Loading…</div>
+
+  const contextVars = contextFiles.map((f) => `{{context.${f.replace(/\.md$/, '')}}}`)
+  const allVars = ['{{card.data}}', ...contextVars]
 
   return (
     <div className="p-6 flex flex-col gap-3 h-full">
@@ -213,6 +244,22 @@ function InstructionsTab({ project, workflow, stepId }: { project: string; workf
           <MarkdownPreview source={body} />
         </div>
       </div>
+      {allVars.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-[11px] text-neutral-400">Variables:</span>
+          {allVars.map((v) => (
+            <button
+              key={v}
+              type="button"
+              title="Click to copy"
+              onClick={() => void navigator.clipboard.writeText(v)}
+              className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors"
+            >
+              {v}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="flex justify-end gap-2">
         <Button size="sm" variant="ghost" disabled={!dirty || busy} onClick={() => setBody(saved)}>
           Reset
@@ -284,6 +331,55 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
   const [scheduleCron, setScheduleCron] = useState<string>(trigger.schedule_cron ?? '0 * * * *')
   const [busy, setBusy] = useState(false)
 
+  // Skills + context packs
+  const [installedSkills, setInstalledSkills] = useState<SkillManifest[]>([])
+  const [selectedSkills, setSelectedSkills] = useState<string[]>(raw.skills ?? [])
+  const [contextFiles, setContextFiles] = useState<string[]>([])
+  const [selectedContextPacks, setSelectedContextPacks] = useState<string[]>(raw.context_packs ?? [])
+
+  // Removal confirmation modal state
+  const [removeSkill, setRemoveSkill] = useState<SkillManifest | null>(null)
+  const [removeContextPack, setRemoveContextPack] = useState<string | null>(null)
+
+  useEffect(() => {
+    void window.trayline!.project.listSkills().then(setInstalledSkills)
+    void window.trayline!.project.listContextFiles(project).then(setContextFiles)
+  }, [project])
+
+  // Re-sync picker state when the step changes (e.g. user picks a different worker)
+  useEffect(() => {
+    setSelectedSkills(raw.skills ?? [])
+    setSelectedContextPacks(raw.context_packs ?? [])
+    setCommand(exec.command ?? 'claude')
+    setTimeoutSec(exec.timeout_seconds ?? 180)
+    setRetries(exec.retry_attempts ?? 1)
+    setTriggerMode(trigger.mode === 'scheduled' ? 'scheduled' : trigger.mode === 'manual' ? 'manual' : 'on_ready')
+    setScheduleCron(trigger.schedule_cron ?? '0 * * * *')
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step.id])
+
+  function addSkill(id: string) {
+    if (!id || selectedSkills.includes(id)) return
+    setSelectedSkills((prev) => [...prev, id])
+  }
+
+  function confirmRemoveSkill() {
+    if (!removeSkill) return
+    setSelectedSkills((prev) => prev.filter((s) => s !== removeSkill.id))
+    setRemoveSkill(null)
+  }
+
+  function addContextPack(file: string) {
+    if (!file || selectedContextPacks.includes(file)) return
+    setSelectedContextPacks((prev) => [...prev, file])
+  }
+
+  function confirmRemoveContextPack() {
+    if (!removeContextPack) return
+    setSelectedContextPacks((prev) => prev.filter((f) => f !== removeContextPack))
+    setRemoveContextPack(null)
+  }
+
   async function save() {
     setBusy(true)
     try {
@@ -296,6 +392,8 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
             mode: triggerMode,
             schedule_cron: triggerMode === 'scheduled' ? scheduleCron : null,
           },
+          skills: selectedSkills,
+          context_packs: selectedContextPacks,
         } as Record<string, unknown>,
       })
       await refreshSteps()
@@ -308,79 +406,198 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
     { value: 'manual', label: 'Manual only', desc: 'Never fires automatically — only via "Run now".' },
   ]
 
+  // Skills available to add (installed user skills not yet selected)
+  const skillsToAdd = installedSkills.filter((s) => !selectedSkills.includes(s.id))
+  // Resolve selected skill IDs back to manifests for display
+  const selectedSkillManifests = selectedSkills
+    .map((id) => installedSkills.find((s) => s.id === id))
+    .filter((s): s is SkillManifest => s !== undefined)
+
+  // Context files available to add (not yet selected)
+  const contextToAdd = contextFiles.filter((f) => !selectedContextPacks.includes(f))
+
   return (
-    <div className="p-6 flex flex-col gap-4 max-w-xl">
-      <div className="flex flex-col gap-1.5">
-        <label className="text-xs text-neutral-500">Command</label>
-        <input
-          value={command}
-          onChange={(e) => setCommand(e.target.value)}
-          className="rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-3 py-1.5 text-xs"
-        />
-      </div>
-      <div className="flex gap-3">
-        <div className="flex flex-col gap-1.5 flex-1">
-          <label className="text-xs text-neutral-500">Timeout (seconds)</label>
-          <input
-            type="number" min={5}
-            value={timeoutSec}
-            onChange={(e) => setTimeoutSec(parseInt(e.target.value, 10) || 0)}
-            className="rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-3 py-1.5 text-xs"
-          />
-        </div>
-        <div className="flex flex-col gap-1.5 flex-1">
-          <label className="text-xs text-neutral-500">Retry attempts</label>
-          <input
-            type="number" min={0}
-            value={retries}
-            onChange={(e) => setRetries(parseInt(e.target.value, 10) || 0)}
-            className="rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-3 py-1.5 text-xs"
-          />
-        </div>
-      </div>
-
-      <div className="flex flex-col gap-1.5">
-        <label className="text-xs text-neutral-500">Trigger mode</label>
-        <div className="flex gap-2">
-          {TRIGGER_OPTIONS.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => setTriggerMode(opt.value)}
-              className={`flex-1 px-3 py-2 rounded-md border text-left text-xs ${
-                triggerMode === opt.value
-                  ? 'border-neutral-900 dark:border-neutral-100 bg-neutral-50 dark:bg-neutral-900'
-                  : 'border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-900'
-              }`}
-            >
-              <div className="font-medium">{opt.label}</div>
-              <div className="text-neutral-500 mt-0.5">{opt.desc}</div>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {triggerMode === 'scheduled' && (
-        <>
-          <CronPicker value={scheduleCron} onChange={setScheduleCron} />
-          <NextRunTime expr={scheduleCron} />
-        </>
-      )}
-
-      {(raw.skills?.length ?? 0) > 0 && (
+    <>
+      <div className="p-6 flex flex-col gap-5 max-w-xl">
         <div className="flex flex-col gap-1.5">
-          <label className="text-xs text-neutral-500">Skills</label>
-          <div className="flex flex-wrap gap-1.5">
-            {raw.skills!.map((s) => (
-              <span key={s} className="text-[11px] px-2 py-0.5 rounded-full bg-neutral-100 dark:bg-neutral-800">{s}</span>
+          <label className="text-xs text-neutral-500">Command</label>
+          <input
+            value={command}
+            onChange={(e) => setCommand(e.target.value)}
+            className="rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-3 py-1.5 text-xs"
+          />
+        </div>
+        <div className="flex gap-3">
+          <div className="flex flex-col gap-1.5 flex-1">
+            <label className="text-xs text-neutral-500">Timeout (seconds)</label>
+            <input
+              type="number" min={5}
+              value={timeoutSec}
+              onChange={(e) => setTimeoutSec(parseInt(e.target.value, 10) || 0)}
+              className="rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-3 py-1.5 text-xs"
+            />
+          </div>
+          <div className="flex flex-col gap-1.5 flex-1">
+            <label className="text-xs text-neutral-500">Retry attempts</label>
+            <input
+              type="number" min={0}
+              value={retries}
+              onChange={(e) => setRetries(parseInt(e.target.value, 10) || 0)}
+              className="rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-3 py-1.5 text-xs"
+            />
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs text-neutral-500">Trigger mode</label>
+          <div className="flex gap-2">
+            {TRIGGER_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setTriggerMode(opt.value)}
+                className={`flex-1 px-3 py-2 rounded-md border text-left text-xs ${
+                  triggerMode === opt.value
+                    ? 'border-neutral-900 dark:border-neutral-100 bg-neutral-50 dark:bg-neutral-900'
+                    : 'border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-900'
+                }`}
+              >
+                <div className="font-medium">{opt.label}</div>
+                <div className="text-neutral-500 mt-0.5">{opt.desc}</div>
+              </button>
             ))}
           </div>
         </div>
-      )}
-      <div className="flex justify-end">
-        <Button size="sm" onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save'}</Button>
+
+        {triggerMode === 'scheduled' && (
+          <>
+            <CronPicker value={scheduleCron} onChange={setScheduleCron} />
+            <NextRunTime expr={scheduleCron} />
+          </>
+        )}
+
+        {/* Skills */}
+        <div className="flex flex-col gap-2">
+          <label className="text-xs text-neutral-500">Skills</label>
+          {skillsToAdd.length > 0 && (
+            <select
+              defaultValue=""
+              onChange={(e) => { addSkill(e.target.value); e.target.value = '' }}
+              className="rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-3 py-1.5 text-xs"
+            >
+              <option value="" disabled>Add a skill…</option>
+              {skillsToAdd.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          )}
+          {selectedSkillManifests.length > 0 ? (
+            <ul className="flex flex-col gap-1">
+              {selectedSkillManifests.map((s) => (
+                <li key={s.id} className="flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950">
+                  <div className="flex-1 min-w-0">
+                    <span className="text-xs font-medium">{s.name}</span>
+                    {s.description && (
+                      <span className="text-xs text-neutral-500 dark:text-neutral-400 ml-1.5 truncate">{s.description}</span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setRemoveSkill(s)}
+                    className="shrink-0 text-neutral-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                  >
+                    <Trash2 size={13} strokeWidth={1.75} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            skillsToAdd.length === 0 && installedSkills.length === 0 && (
+              <p className="text-xs text-neutral-400 dark:text-neutral-600 italic">
+                No skills installed — visit the Skills screen to add some.
+              </p>
+            )
+          )}
+        </div>
+
+        {/* Context packs */}
+        <div className="flex flex-col gap-2">
+          <label className="text-xs text-neutral-500">Context packs</label>
+          {contextToAdd.length > 0 && (
+            <select
+              defaultValue=""
+              onChange={(e) => { addContextPack(e.target.value); e.target.value = '' }}
+              className="rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-3 py-1.5 text-xs font-mono"
+            >
+              <option value="" disabled>Add a context file…</option>
+              {contextToAdd.map((f) => (
+                <option key={f} value={f}>{f}</option>
+              ))}
+            </select>
+          )}
+          {selectedContextPacks.length > 0 ? (
+            <ul className="flex flex-col gap-1">
+              {selectedContextPacks.map((file) => (
+                <li key={file} className="flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950">
+                  <span className="flex-1 text-xs font-mono truncate">{file}</span>
+                  <button
+                    type="button"
+                    onClick={() => setRemoveContextPack(file)}
+                    className="shrink-0 text-neutral-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                  >
+                    <Trash2 size={13} strokeWidth={1.75} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            contextFiles.length === 0 && (
+              <p className="text-xs text-neutral-400 dark:text-neutral-600 italic">
+                No context files yet — add them under Context files in the sidebar.
+              </p>
+            )
+          )}
+        </div>
+
+        <div className="flex justify-end">
+          <Button size="sm" onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save'}</Button>
+        </div>
       </div>
-    </div>
+
+      {/* Remove skill confirmation */}
+      <Dialog open={removeSkill !== null} onOpenChange={(open) => { if (!open) setRemoveSkill(null) }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Remove skill</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to remove <strong>{removeSkill?.name}</strong> from this worker?
+              The skill will remain installed — you can re-add it at any time.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2 mt-2">
+            <Button size="sm" variant="outline" onClick={() => setRemoveSkill(null)}>Cancel</Button>
+            <Button size="sm" variant="destructive" onClick={confirmRemoveSkill}>Remove</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Remove context pack confirmation */}
+      <Dialog open={removeContextPack !== null} onOpenChange={(open) => { if (!open) setRemoveContextPack(null) }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Remove context pack</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to remove <strong>{removeContextPack}</strong> from this worker?
+              The file will remain in the project — you can re-add it at any time.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2 mt-2">
+            <Button size="sm" variant="outline" onClick={() => setRemoveContextPack(null)}>Cancel</Button>
+            <Button size="sm" variant="destructive" onClick={confirmRemoveContextPack}>Remove</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }
 

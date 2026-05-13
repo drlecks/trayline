@@ -139,6 +139,37 @@ async function resolveContextPack(project: string, file: string): Promise<string
   return fs.readFile(path, 'utf-8')
 }
 
+/**
+ * Resolve {{context.name}} variables in process.md.
+ * Each occurrence is replaced with the contents of context/<name>.md.
+ * Returns the original processFile path if there are no context vars.
+ * Otherwise writes the resolved content to runDir/process.md and returns that path.
+ */
+async function resolveProcessVariables(processFile: string, project: string, runDir: string): Promise<string> {
+  let content: string
+  try { content = await fs.readFile(processFile, 'utf-8') } catch { return processFile }
+
+  const re = /\{\{\s*context\.([a-zA-Z0-9_-]+)\s*\}\}/g
+  const names = new Set<string>()
+  let m: RegExpExecArray | null
+  while ((m = re.exec(content)) !== null) names.add(m[1])
+  if (names.size === 0) return processFile
+
+  const replacements = new Map<string, string>()
+  for (const name of names) {
+    const val = (await resolveContextPack(project, `${name}.md`)) ?? (await resolveContextPack(project, name)) ?? ''
+    replacements.set(name, val)
+  }
+
+  const resolved = content.replace(
+    /\{\{\s*context\.([a-zA-Z0-9_-]+)\s*\}\}/g,
+    (_, name: string) => replacements.get(name) ?? '',
+  )
+  const outFile = join(runDir, 'process.md')
+  await fs.writeFile(outFile, resolved, 'utf-8')
+  return outFile
+}
+
 // ── Run id allocation ─────────────────────────────────────────────────────────
 
 function todayDate(): string {
@@ -305,6 +336,13 @@ async function runInner(input: TriggerRunInput): Promise<TriggerRunResult> {
     (worker.context_packs ?? []).map((f) => resolveContextPack(project, f)),
   )).filter((c): c is string => c !== null)
 
+  // 3b. Resolve {{context.x}} variables in process.md → write snapshot to runDir
+  const processFile = await resolveProcessVariables(
+    join(workerDir, 'process.md'),
+    project,
+    runDir,
+  )
+
   // 4. Spawn adapter
   const adapterId = worker.execution?.adapter ?? 'claude-code'
   const adapter = adapterRegistry.get(adapterId)
@@ -321,7 +359,6 @@ async function runInner(input: TriggerRunInput): Promise<TriggerRunResult> {
   }
 
   const timeoutMs = (worker.execution?.timeout_seconds ?? 180) * 1000
-  const processFile = join(workerDir, 'process.md')
 
   let exitCode = -1
   let output: object | string | null = null

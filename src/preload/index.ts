@@ -16,6 +16,7 @@ import type {
   SkillCatalogFetchResult,
   InstalledSkillRow,
 } from '../shared/types'
+import type { MissingSkillsEntry } from '../shared/types'
 import type { Card, CardStatus, CardCounts } from '../shared/card'
 import type { PlanFieldDef, PlanTrayStep, PlanWorkerStep } from '../shared/workflow-plan'
 import type { WorkerRun, WorkerRunEvent } from '../shared/worker-run'
@@ -53,6 +54,16 @@ const api = {
     listSteps: (project: string, workflow: string): Promise<StepMeta[]> =>
       ipcRenderer.invoke(IPC.project.listSteps, project, workflow),
     listSkills: (): Promise<SkillManifest[]> => ipcRenderer.invoke(IPC.project.listSkills),
+    checkSkills: (project: string): Promise<MissingSkillsEntry[]> =>
+      ipcRenderer.invoke(IPC.project.checkSkills, project),
+    listContextFiles: (project: string): Promise<string[]> =>
+      ipcRenderer.invoke(IPC.project.listContextFiles, project),
+    readContextFile: (project: string, file: string): Promise<string> =>
+      ipcRenderer.invoke(IPC.project.readContextFile, project, file),
+    writeContextFile: (project: string, file: string, content: string): Promise<void> =>
+      ipcRenderer.invoke(IPC.project.writeContextFile, project, file, content),
+    deleteContextFile: (project: string, file: string): Promise<void> =>
+      ipcRenderer.invoke(IPC.project.deleteContextFile, project, file),
     create: (description: string, opts?: { regenerateOf?: string }): Promise<ProjectCreateOutcome> =>
       ipcRenderer.invoke(IPC.project.create, description, opts),
     delete: (name: string): Promise<void> => ipcRenderer.invoke(IPC.project.delete, name),
