@@ -5,6 +5,7 @@ import TopBar from './components/layout/TopBar'
 import Footer from './components/layout/Footer'
 import WelcomeSplash from './components/splash/WelcomeSplash'
 import WorkflowAuthorScreen from './components/author/WorkflowAuthorScreen'
+import ProjectListScreen from './components/projects/ProjectListScreen'
 import ProjectScreen from './components/project/ProjectScreen'
 import SettingsScreen from './components/settings/SettingsScreen'
 import SkillsScreen from './components/skills/SkillsScreen'
@@ -26,6 +27,7 @@ export default function App() {
   const { theme, setTheme } = useThemeStore()
   const screen = useProjectStore((s) => s.screen)
   const setActive = useProjectStore((s) => s.setActive)
+  const setScreen = useProjectStore((s) => s.setScreen)
   const refreshProjects = useProjectStore((s) => s.refreshProjects)
 
   useEffect(() => {
@@ -40,8 +42,11 @@ export default function App() {
     return () => mq.removeEventListener('change', handler)
   }, [theme])
 
-  // First-mount bootstrap: load saved settings, then if a last-opened project
-  // is recorded and still exists on disk, jump straight back into it.
+  // First-mount bootstrap. Routing rules:
+  //   - No projects on disk → straight into the Workflow Author (clean state).
+  //   - Otherwise → Project List screen, where the user picks one to open.
+  // The previous behaviour of auto-resuming the last-opened project was removed
+  // intentionally so the user always sees the list (and project status) first.
   useEffect(() => {
     let cancelled = false
     ;(async () => {
@@ -49,22 +54,18 @@ export default function App() {
       if (cancelled) return
       setTheme(settings.theme)
 
-      if (settings.lastOpenedProject) {
-        await refreshProjects()
-        if (cancelled) return
-        const project = await window.trayline.project.get(settings.lastOpenedProject)
-        if (cancelled) return
-        if (project) {
-          setActive(project)
-        } else {
-          // Recorded project no longer exists (deleted, renamed). Forget it
-          // so the next launch goes straight to the welcome screen.
-          void window.trayline.settings.set('lastOpenedProject', null)
-        }
+      await refreshProjects()
+      if (cancelled) return
+      const projects = useProjectStore.getState().all
+      if (projects.length === 0) {
+        setScreen('author')
+        void window.trayline.settings.set('lastOpenedProject', null)
+      } else {
+        setScreen('projectList')
       }
     })()
     return () => { cancelled = true }
-  }, [setTheme, setActive, refreshProjects])
+  }, [setTheme, setActive, setScreen, refreshProjects])
 
   return (
     <div className="flex flex-col h-full">
@@ -73,6 +74,11 @@ export default function App() {
         {screen === 'splash' && (
           <div className="flex-1 overflow-y-auto py-12 flex">
             <WelcomeSplash />
+          </div>
+        )}
+        {screen === 'projectList' && (
+          <div className="flex-1 overflow-y-auto py-12 flex">
+            <ProjectListScreen />
           </div>
         )}
         {screen === 'author' && (

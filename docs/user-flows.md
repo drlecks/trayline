@@ -4,12 +4,25 @@
 
 ## 6.1 First Launch
 
-1. Empty state with three options: **Create new project** / **Import project (.zip)** / **Open example project**
-2. Picking "Create new" launches the **Workflow Author** flow
+1. **No projects on disk** → the app opens straight into the **Workflow Author** flow so the user can describe their first workflow.
+2. **One or more projects on disk** → the app opens the **Project List** screen.
+
+### Project List screen
+
+A pill list of every project on disk, ordered by `updated_at` descending (most recently changed first). The first item is always a dashed **+ Create new project** pill that launches the Workflow Author flow.
+
+Each project pill shows, left to right:
+
+- A **status dot** — green for `active`, red for `inactive`. Click it to toggle. The toggle writes the new value plus a fresh `updated_at` to the project's `project.json`. Status has no functional gating yet; it's a hook for future scheduling/visibility features.
+- The project's **display name** and one-line description.
+- A relative timestamp (e.g. *"3h ago"*).
+- A trash icon (visible on hover) to delete the project.
+
+Clicking the body of a pill opens the project. The project switcher in the top bar exposes an **All projects** entry that returns to this screen.
 
 ### Subsequent launches
 
-The app reopens to the project the user had active when it last closed. The active project name is persisted to `app-data/settings.json` as `lastOpenedProject`; on launch the renderer reads that field and, if the project still exists on disk, jumps straight back into the project view. If the recorded project no longer exists (deleted, renamed), the field is cleared and the user lands on the welcome screen instead.
+The app no longer auto-resumes the last-opened project. The user always sees the Project List (or the Workflow Author when there are no projects) so the choice of which workflow to focus on is explicit. `settings.lastOpenedProject` is still maintained for future use but no longer drives bootstrap routing.
 
 ---
 

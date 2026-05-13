@@ -2,6 +2,18 @@
 
 ---
 
+## 7.0 Project List Screen
+
+The default landing screen on launch when at least one project exists on disk. (When the projects folder is empty, the app opens the Workflow Author flow directly instead.)
+
+- Pill list, ordered by `project.json:updated_at` descending — most recently changed project first.
+- The first row is always a dashed **+ Create new project** pill that opens the Workflow Author flow.
+- Each project pill shows: status dot · display name · description · relative timestamp · delete (on hover).
+- The status dot is **green** for `active`, **red** for `inactive`, and clickable to toggle. Toggling persists `status` and bumps `updated_at` in the project's `project.json`. The status field is a forward-looking hook — it does not gate execution today.
+- Clicking the pill body opens the project. The top-bar project switcher exposes an **All projects** entry that returns to this screen.
+
+---
+
 ## 7.1 Linear Workflow Editor (Left Rail)
 
 - Vertical stack of step cards, drag-to-reorder

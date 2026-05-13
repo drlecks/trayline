@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { ProjectMeta, StepMeta, WorkflowMeta } from '../../shared/types'
 
-type Screen = 'splash' | 'author' | 'project' | 'settings' | 'skills'
+type Screen = 'splash' | 'projectList' | 'author' | 'project' | 'settings' | 'skills'
 
 interface ProjectStoreState {
   /** The project currently open in the right canvas, or null on the splash. */
@@ -42,7 +42,7 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
 
   setScreen: (s) => set({ screen: s }),
   setActive: (p) => {
-    set({ active: p, screen: p ? 'project' : 'splash', selectedStepId: null, steps: [], workflow: null })
+    set({ active: p, screen: p ? 'project' : 'projectList', selectedStepId: null, steps: [], workflow: null })
     void window.trayline.settings.set('lastOpenedProject', p ? p.name : null)
   },
   setSelectedStepId: (id) => set({ selectedStepId: id }),

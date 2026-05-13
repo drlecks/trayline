@@ -9,7 +9,7 @@ async function writeJson(path: string, data: unknown) {
   await fs.writeFile(path, JSON.stringify(data, null, 2), 'utf-8')
 }
 
-async function makeProject(name: string) {
+async function makeProject(name: string, extra: Record<string, unknown> = {}) {
   const projectDir = join(Paths.projects, name)
   await writeJson(join(projectDir, 'project.json'), {
     id: name,
@@ -17,6 +17,7 @@ async function makeProject(name: string) {
     display_name: name,
     description: '',
     created_at: new Date().toISOString(),
+    ...extra,
   })
   return projectDir
 }
@@ -70,6 +71,32 @@ describe('projectService', () => {
 
   it('getProject returns null for missing project', async () => {
     expect(await projectService.getProject('nope')).toBeNull()
+  })
+
+  it('listProjects defaults missing status to "active" and missing updated_at to created_at', async () => {
+    await makeProject('legacy')
+    const [meta] = await projectService.listProjects()
+    expect(meta.status).toBe('active')
+    expect(meta.updated_at).toBe(meta.created_at)
+  })
+
+  it('listProjects orders by updated_at descending (most recent first)', async () => {
+    await makeProject('older', { updated_at: '2026-01-01T00:00:00.000Z' })
+    await makeProject('newer', { updated_at: '2026-05-01T00:00:00.000Z' })
+    await makeProject('middle', { updated_at: '2026-03-01T00:00:00.000Z' })
+    const all = await projectService.listProjects()
+    expect(all.map((p) => p.name)).toEqual(['newer', 'middle', 'older'])
+  })
+
+  it('setStatus updates status and bumps updated_at; rejects unknown projects', async () => {
+    await makeProject('p', { status: 'active', updated_at: '2026-01-01T00:00:00.000Z' })
+    const next = await projectService.setStatus('p', 'inactive')
+    expect(next.status).toBe('inactive')
+    expect(next.updated_at > '2026-01-01T00:00:00.000Z').toBe(true)
+    // Round-tripped through getProject
+    const round = await projectService.getProject('p')
+    expect(round?.status).toBe('inactive')
+    await expect(projectService.setStatus('missing', 'inactive')).rejects.toThrow(/Project not found/)
   })
 
   it('listWorkflows reads workflow.json files', async () => {
