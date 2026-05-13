@@ -18,7 +18,7 @@ import { Paths, fsService } from './fs-service'
 import { projectService } from './project-service'
 import type { SkillManifest } from '../../shared/types'
 
-const CATALOG_URL = process.env.TRAYLINE_CATALOG_URL ?? 'https://raw.githubusercontent.com/drlecks/trayline/main/catalog/index.json'
+const CATALOG_URL = process.env.TRAYLINE_CATALOG_URL ?? 'https://raw.githubusercontent.com/drlecks/trayline/develop/catalog/index.json'
 const CACHE_PATH = join(Paths.appData, 'skills-index-cache.json')
 const FETCH_TIMEOUT_MS = 8000
 

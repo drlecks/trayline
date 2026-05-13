@@ -338,7 +338,7 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
   const [selectedContextPacks, setSelectedContextPacks] = useState<string[]>(raw.context_packs ?? [])
 
   // Removal confirmation modal state
-  const [removeSkill, setRemoveSkill] = useState<SkillManifest | null>(null)
+  const [removeSkillId, setRemoveSkillId] = useState<string | null>(null)
   const [removeContextPack, setRemoveContextPack] = useState<string | null>(null)
 
   useEffect(() => {
@@ -364,9 +364,9 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
   }
 
   function confirmRemoveSkill() {
-    if (!removeSkill) return
-    setSelectedSkills((prev) => prev.filter((s) => s !== removeSkill.id))
-    setRemoveSkill(null)
+    if (!removeSkillId) return
+    setSelectedSkills((prev) => prev.filter((s) => s !== removeSkillId))
+    setRemoveSkillId(null)
   }
 
   function addContextPack(file: string) {
@@ -408,10 +408,13 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
 
   // Skills available to add (installed user skills not yet selected)
   const skillsToAdd = installedSkills.filter((s) => !selectedSkills.includes(s.id))
-  // Resolve selected skill IDs back to manifests for display
-  const selectedSkillManifests = selectedSkills
-    .map((id) => installedSkills.find((s) => s.id === id))
-    .filter((s): s is SkillManifest => s !== undefined)
+  // Resolve selected IDs — keep missing ones as ghost entries so they stay visible
+  const selectedSkillEntries = selectedSkills.map((id) => {
+    const manifest = installedSkills.find((s) => s.id === id)
+    return manifest
+      ? { found: true as const, id, manifest }
+      : { found: false as const, id }
+  })
 
   // Context files available to add (not yet selected)
   const contextToAdd = contextFiles.filter((f) => !selectedContextPacks.includes(f))
@@ -491,19 +494,38 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
               ))}
             </select>
           )}
-          {selectedSkillManifests.length > 0 ? (
+          {selectedSkillEntries.length > 0 ? (
             <ul className="flex flex-col gap-1">
-              {selectedSkillManifests.map((s) => (
-                <li key={s.id} className="flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950">
+              {selectedSkillEntries.map((entry) => (
+                <li
+                  key={entry.id}
+                  className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md border bg-white dark:bg-neutral-950 ${
+                    entry.found
+                      ? 'border-neutral-200 dark:border-neutral-800'
+                      : 'border-amber-300 dark:border-amber-700/60 bg-amber-50/50 dark:bg-amber-950/20'
+                  }`}
+                >
+                  {!entry.found && (
+                    <AlertTriangle size={13} strokeWidth={1.75} className="shrink-0 text-amber-500 dark:text-amber-400" />
+                  )}
                   <div className="flex-1 min-w-0">
-                    <span className="text-xs font-medium">{s.name}</span>
-                    {s.description && (
-                      <span className="text-xs text-neutral-500 dark:text-neutral-400 ml-1.5 truncate">{s.description}</span>
+                    {entry.found ? (
+                      <>
+                        <span className="text-xs font-medium">{entry.manifest.name}</span>
+                        {entry.manifest.description && (
+                          <span className="text-xs text-neutral-500 dark:text-neutral-400 ml-1.5 truncate">{entry.manifest.description}</span>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-xs font-medium font-mono">{entry.id}</span>
+                        <span className="text-xs text-amber-600 dark:text-amber-400 ml-1.5">Not installed</span>
+                      </>
                     )}
                   </div>
                   <button
                     type="button"
-                    onClick={() => setRemoveSkill(s)}
+                    onClick={() => setRemoveSkillId(entry.id)}
                     className="shrink-0 text-neutral-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
                   >
                     <Trash2 size={13} strokeWidth={1.75} />
@@ -565,21 +587,29 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
       </div>
 
       {/* Remove skill confirmation */}
-      <Dialog open={removeSkill !== null} onOpenChange={(open) => { if (!open) setRemoveSkill(null) }}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Remove skill</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to remove <strong>{removeSkill?.name}</strong> from this worker?
-              The skill will remain installed — you can re-add it at any time.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex justify-end gap-2 mt-2">
-            <Button size="sm" variant="outline" onClick={() => setRemoveSkill(null)}>Cancel</Button>
-            <Button size="sm" variant="destructive" onClick={confirmRemoveSkill}>Remove</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {(() => {
+        const entry = removeSkillId ? selectedSkillEntries.find((e) => e.id === removeSkillId) : null
+        const label = entry?.found ? entry.manifest.name : removeSkillId
+        return (
+          <Dialog open={removeSkillId !== null} onOpenChange={(open) => { if (!open) setRemoveSkillId(null) }}>
+            <DialogContent className="max-w-sm">
+              <DialogHeader>
+                <DialogTitle>Remove skill</DialogTitle>
+                <DialogDescription>
+                  Are you sure you want to remove <strong>{label}</strong> from this worker?
+                  {entry?.found
+                    ? ' The skill will remain installed — you can re-add it at any time.'
+                    : ' This skill is not currently installed.'}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex justify-end gap-2 mt-2">
+                <Button size="sm" variant="outline" onClick={() => setRemoveSkillId(null)}>Cancel</Button>
+                <Button size="sm" variant="destructive" onClick={confirmRemoveSkill}>Remove</Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        )
+      })()}
 
       {/* Remove context pack confirmation */}
       <Dialog open={removeContextPack !== null} onOpenChange={(open) => { if (!open) setRemoveContextPack(null) }}>
