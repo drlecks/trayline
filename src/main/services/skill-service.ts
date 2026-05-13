@@ -31,8 +31,8 @@ export interface CatalogEntry {
   tags?: string[]
   /** Directory URL where the skill's files live (must end with `/`). */
   base_url: string
-  /** Relative paths to fetch under base_url. Defaults to ["skill.json", "skill.md"]. */
-  files?: string[]
+  /** Instruction file name inside base_url. Defaults to "skill.md". Remote repos may use "SKILL.md". */
+  skill_md?: string
 }
 
 export interface CatalogIndex {
@@ -306,19 +306,31 @@ async function installFromCatalog(skillId: string): Promise<InstalledSkill> {
   const { index } = await fetchCatalog()
   const entry = index.skills.find((s) => s.id === skillId)
   if (!entry) throw new Error(`Skill not found in catalog: ${skillId}`)
-  const files = entry.files ?? ['skill.json', 'skill.md']
-  const { manifest, skillMd } = await fetchSkillFiles(entry.base_url, files)
-  if (manifest.id !== entry.id) {
-    throw new Error(`Catalog id "${entry.id}" doesn't match manifest id "${manifest.id}"`)
+
+  // Manifest is synthesized from catalog metadata — remote repos don't need skill.json.
+  const manifest: SkillManifest = {
+    id: entry.id,
+    name: entry.name,
+    version: entry.version,
+    description: entry.description,
+    tags: entry.tags,
   }
-  await writeSkillToDisk(manifest, skillMd, { source: 'catalog', sourceUrl: normalizeBaseUrl(entry.base_url) })
+
+  const base = normalizeBaseUrl(entry.base_url)
+  const skillMdFile = entry.skill_md ?? 'skill.md'
+  const mdRes = await fetchWithTimeout(`${base}${skillMdFile}`, { headers: { Accept: 'text/markdown,text/plain' } })
+  if (!mdRes.ok) throw new Error(`Failed to fetch ${skillMdFile}: HTTP ${mdRes.status}`)
+  const skillMd = await mdRes.text()
+  if (!skillMd.trim()) throw new Error(`${skillMdFile} is empty`)
+
+  await writeSkillToDisk(manifest, skillMd, { source: 'catalog', sourceUrl: base })
   const loaded = await readInstalledManifest(manifest.id)
   if (!loaded) throw new Error('Install completed but skill is unreadable on disk')
   return {
     manifest: loaded.manifest,
     dir: loaded.dir,
     source: 'catalog',
-    sourceUrl: normalizeBaseUrl(entry.base_url),
+    sourceUrl: base,
     installedAt: new Date().toISOString(),
     usedBy: [],
   }
