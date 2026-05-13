@@ -18,7 +18,7 @@ Wire up the skills system and context packs so they are read by workers at run t
 - [x] **Context pack picker** in worker config — checklist of context files in `context/`
 - [x] **Variable resolution** in `process.md`:
   - `{{card.data}}` — substituted with the card's `data` JSON
-  - `{{context.brand-voice}}` — substituted with the contents of `context/brand-voice.md`
+  - `{{context._brand-voice}}` — substituted with the contents of `context/_brand-voice.md`
   - Variable reference chips in the process.md editor (click to copy)
 - [x] Skills screen showing installed skills (basic list; full redesign is N2.1)
 

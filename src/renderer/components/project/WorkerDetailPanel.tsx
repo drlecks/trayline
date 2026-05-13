@@ -416,8 +416,10 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
       : { found: false as const, id }
   })
 
-  // Context files available to add (not yet selected)
-  const contextToAdd = contextFiles.filter((f) => !selectedContextPacks.includes(f))
+  // Base context files (prefix '_') are auto-included in every run — hide from selector
+  const baseContextFiles = contextFiles.filter((f) => f.startsWith('_'))
+  // Context files available to add (non-base, not yet selected)
+  const contextToAdd = contextFiles.filter((f) => !f.startsWith('_') && !selectedContextPacks.includes(f))
 
   return (
     <>
@@ -508,12 +510,12 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
                   {!entry.found && (
                     <AlertTriangle size={13} strokeWidth={1.75} className="shrink-0 text-amber-500 dark:text-amber-400" />
                   )}
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0 flex items-baseline gap-1.5 overflow-hidden">
                     {entry.found ? (
                       <>
-                        <span className="text-xs font-medium">{entry.manifest.name}</span>
+                        <span className="text-xs font-medium shrink-0">{entry.manifest.name}</span>
                         {entry.manifest.description && (
-                          <span className="text-xs text-neutral-500 dark:text-neutral-400 ml-1.5 truncate">{entry.manifest.description}</span>
+                          <span className="text-xs text-neutral-500 dark:text-neutral-400 truncate min-w-0">{entry.manifest.description}</span>
                         )}
                       </>
                     ) : (
@@ -545,6 +547,19 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
         {/* Context packs */}
         <div className="flex flex-col gap-2">
           <label className="text-xs text-neutral-500">Context packs</label>
+
+          {/* Base context files — always auto-included, read-only */}
+          {baseContextFiles.length > 0 && (
+            <ul className="flex flex-col gap-1">
+              {baseContextFiles.map((f) => (
+                <li key={f} className="flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-neutral-100 dark:border-neutral-800/60 bg-neutral-50 dark:bg-neutral-900/40">
+                  <span className="flex-1 text-xs font-mono text-neutral-500 dark:text-neutral-500 truncate">{f}</span>
+                  <span className="text-[10px] text-neutral-400 dark:text-neutral-600 italic shrink-0">always included</span>
+                </li>
+              ))}
+            </ul>
+          )}
+
           {contextToAdd.length > 0 && (
             <select
               defaultValue=""
@@ -573,7 +588,7 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
               ))}
             </ul>
           ) : (
-            contextFiles.length === 0 && (
+            contextFiles.filter((f) => !f.startsWith('_')).length === 0 && (
               <p className="text-xs text-neutral-400 dark:text-neutral-600 italic">
                 No context files yet — add them under Context files in the sidebar.
               </p>

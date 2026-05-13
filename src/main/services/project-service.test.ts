@@ -163,9 +163,9 @@ describe('projectService', () => {
 
   it('writeContextFile creates the file and listContextFiles returns it', async () => {
     await makeProject('ctx1')
-    await projectService.writeContextFile('ctx1', 'brand-voice.md', '# Brand\n\nFriendly.')
+    await projectService.writeContextFile('ctx1', '_brand-voice.md', '# Brand\n\nFriendly.')
     const files = await projectService.listContextFiles('ctx1')
-    expect(files).toEqual(['brand-voice.md'])
+    expect(files).toEqual(['_brand-voice.md'])
   })
 
   it('readContextFile returns the written content', async () => {
