@@ -1,4 +1,4 @@
-# Phase 11 — Skills & Context Packs
+# Phase 10 — Skills & Context Packs
 
 **Estimate:** 1 week
 
