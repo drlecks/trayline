@@ -50,7 +50,7 @@ Everything is files. SQLite is just a fast index built from those files.
         ├── README.md
         ├── context/
         │   ├── company-info.md
-        │   └── brand-voice.md
+        │   └── _brand-voice.md
         ├── workflows/
         │   └── new-client-intake/
         │       ├── workflow.json
@@ -147,7 +147,7 @@ Cards live in three subfolders: `pending/`, `ready/`, `archived/`.
   "icon": "cpu",
   "skills": ["pdf-reader", "csv-parser"],
   "mcps": ["gmail", "google-calendar"],
-  "context_packs": ["company-info.md", "brand-voice.md"],
+  "context_packs": ["company-info.md"],
   "execution": {
     "command": "claude",
     "args": ["--no-color"],

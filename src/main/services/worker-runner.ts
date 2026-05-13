@@ -332,9 +332,19 @@ async function runInner(input: TriggerRunInput): Promise<TriggerRunResult> {
   // to signal failure via the trayline_error envelope.
   const workerSkillIds = ['trayline-worker-contract', ...(worker.skills ?? [])]
   const skills = (await Promise.all(workerSkillIds.map(resolveSkill))).filter((s): s is { id: string; content: string } => s !== null)
-  const contextPacks = (await Promise.all(
-    (worker.context_packs ?? []).map((f) => resolveContextPack(project, f)),
+
+  // Base context files (prefix '_') are auto-loaded for every run regardless of worker selection.
+  // Explicit context_packs drop any '_'-prefixed names to prevent duplication.
+  const allContextFiles = await projectService.listContextFiles(project)
+  const baseContextPacks = (await Promise.all(
+    allContextFiles.filter((f) => f.startsWith('_')).map((f) => resolveContextPack(project, f)),
   )).filter((c): c is string => c !== null)
+  const contextPacks = [
+    ...baseContextPacks,
+    ...(await Promise.all(
+      (worker.context_packs ?? []).filter((f) => !f.startsWith('_')).map((f) => resolveContextPack(project, f)),
+    )).filter((c): c is string => c !== null),
+  ]
 
   // 3b. Resolve {{context.x}} variables in process.md → write snapshot to runDir
   const processFile = await resolveProcessVariables(
