@@ -5,6 +5,7 @@ import type {
   AuditRow,
   BootstrapInfo,
   ProjectMeta,
+  ProjectStatus,
   WorkflowMeta,
   StepMeta,
   SkillManifest,
@@ -55,6 +56,8 @@ const api = {
     create: (description: string, opts?: { regenerateOf?: string }): Promise<ProjectCreateOutcome> =>
       ipcRenderer.invoke(IPC.project.create, description, opts),
     delete: (name: string): Promise<void> => ipcRenderer.invoke(IPC.project.delete, name),
+    setStatus: (name: string, status: ProjectStatus): Promise<ProjectMeta> =>
+      ipcRenderer.invoke(IPC.project.setStatus, name, status),
   },
   usage: {
     get: (): Promise<UsageSnapshot> => ipcRenderer.invoke(IPC.usage.get),

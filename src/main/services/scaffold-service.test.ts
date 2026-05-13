@@ -53,6 +53,8 @@ describe('scaffoldService', () => {
     const res = await scaffoldService.scaffold(plan)
 
     expect(res.project.name).toBe('demo')
+    expect(res.project.status).toBe('active')
+    expect(res.project.updated_at).toBe(res.project.created_at)
     expect(res.unconfiguredMcps).toEqual(['gmail'])
     expect(res.projectPath).toBe(join(Paths.projects, 'demo'))
 
