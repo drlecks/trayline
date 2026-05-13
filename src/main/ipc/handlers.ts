@@ -70,6 +70,21 @@ export function registerIpcHandlers(
     projectService.listSteps(project, workflow),
   )
   ipcMain.handle('project:listSkills', () => projectService.listSkills())
+  ipcMain.handle('project:checkSkills', (_: unknown, project: string) =>
+    projectService.checkProjectSkills(project),
+  )
+  ipcMain.handle('project:listContextFiles', (_: unknown, project: string) =>
+    projectService.listContextFiles(project),
+  )
+  ipcMain.handle('project:readContextFile', (_: unknown, project: string, file: string) =>
+    projectService.readContextFile(project, file),
+  )
+  ipcMain.handle('project:writeContextFile', (_: unknown, project: string, file: string, content: string) =>
+    projectService.writeContextFile(project, file, content),
+  )
+  ipcMain.handle('project:deleteContextFile', (_: unknown, project: string, file: string) =>
+    projectService.deleteContextFile(project, file),
+  )
   ipcMain.handle('project:create', async (_: unknown, description: string, opts?: { regenerateOf?: string }) => {
     // If regenerating, tear down watchers for the old project's workflows
     // before scaffolding overwrites the folders.

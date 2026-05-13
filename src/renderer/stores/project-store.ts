@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { ProjectMeta, StepMeta, WorkflowMeta } from '../../shared/types'
+import type { MissingSkillsEntry } from '../../shared/types'
 
 type Screen = 'splash' | 'projectList' | 'author' | 'project' | 'settings' | 'skills'
 
@@ -18,6 +19,10 @@ interface ProjectStoreState {
   screen: Screen
   /** MCPs referenced by the active project that aren't ready. Drives the banner. */
   unconfiguredMcps: string[]
+  /** Missing skills per worker step in the open project. stepId → skill IDs. */
+  missingSkillsByStep: Record<string, string[]>
+  /** Project names that have at least one worker with a missing skill. */
+  projectsWithMissingSkills: Set<string>
   /** When set, the author screen treats Generate as a regenerate of this project. */
   regenerateOf: string | null
 
@@ -38,6 +43,8 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
   selectedStepId: null,
   screen: 'splash',
   unconfiguredMcps: [],
+  missingSkillsByStep: {},
+  projectsWithMissingSkills: new Set(),
   regenerateOf: null,
 
   setScreen: (s) => set({ screen: s }),
@@ -51,23 +58,37 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
 
   refreshProjects: async () => {
     const all = await window.trayline.project.list()
-    set({ all })
+    // Check all projects in parallel for missing skills (drives the list-screen badge).
+    const checks = await Promise.all(
+      all.map((p) => window.trayline.project.checkSkills(p.name).catch(() => [] as MissingSkillsEntry[])),
+    )
+    const projectsWithMissingSkills = new Set(
+      all.filter((_, i) => checks[i].length > 0).map((p) => p.name),
+    )
+    set({ all, projectsWithMissingSkills })
   },
 
   refreshSteps: async () => {
     const active = get().active
     if (!active) {
-      set({ workflow: null, steps: [] })
+      set({ workflow: null, steps: [], missingSkillsByStep: {} })
       return
     }
-    const workflows = await window.trayline.project.listWorkflows(active.name)
+    const [workflows, skillEntries] = await Promise.all([
+      window.trayline.project.listWorkflows(active.name),
+      window.trayline.project.checkSkills(active.name).catch(() => [] as MissingSkillsEntry[]),
+    ])
     const wf = workflows[0] ?? null
     if (!wf) {
-      set({ workflow: null, steps: [] })
+      set({ workflow: null, steps: [], missingSkillsByStep: {} })
       return
     }
     const steps = await window.trayline.project.listSteps(active.name, wf.name)
-    set({ workflow: wf, steps })
+    const missingSkillsByStep: Record<string, string[]> = {}
+    for (const entry of skillEntries) {
+      missingSkillsByStep[entry.stepId] = entry.missingSkillIds
+    }
+    set({ workflow: wf, steps, missingSkillsByStep })
     // If the previously selected step no longer exists, clear it.
     const sel = get().selectedStepId
     if (sel && !steps.some((s) => s.id === sel)) set({ selectedStepId: null })

@@ -176,6 +176,50 @@ describe('workerRunner', () => {
     expect(getMockClearContextCalls()).toBe(1)
   })
 
+  it('resolves {{context.x}} variables in process.md before passing to adapter', async () => {
+    const project = `ctx-vars-${Date.now()}`
+    const { stepsDir } = await buildWorkflow({ name: project, trayId: '01-src', workerId: '02-worker', nextTrayId: '03-next' })
+
+    // Write a context file
+    const contextDir = join(Paths.projects, project, 'context')
+    await fs.mkdir(contextDir, { recursive: true })
+    await fs.writeFile(join(contextDir, 'brand-voice.md'), 'Be friendly and concise.', 'utf-8')
+
+    // Write process.md that references the context variable
+    await fs.writeFile(
+      join(stepsDir, '02-worker', 'process.md'),
+      '# Instructions\n\n{{context.brand-voice}}\n\nProcess: {{card.data}}',
+      'utf-8',
+    )
+
+    await seedReadyCard(stepsDir, '01-src', 'card_ctx_001')
+    const { runId } = await workerRunner.triggerRun({ project, workflow: 'wf', stepId: '02-worker', cardId: 'card_ctx_001' })
+
+    // The run dir should contain a resolved process.md with the context injected
+    const runDir = join(stepsDir, '02-worker', 'runs', runId)
+    const resolved = await fs.readFile(join(runDir, 'process.md'), 'utf-8')
+    expect(resolved).toContain('Be friendly and concise.')
+    expect(resolved).not.toContain('{{context.brand-voice}}')
+    // {{card.data}} should remain in the snapshot (adapter resolves it)
+    expect(resolved).toContain('{{card.data}}')
+  })
+
+  it('leaves process.md unchanged when no context variables are present', async () => {
+    const project = `no-ctx-vars-${Date.now()}`
+    const { stepsDir } = await buildWorkflow({ name: project, trayId: '01-src', workerId: '02-worker', nextTrayId: '03-next' })
+
+    const processMd = '# Simple\n\nProcess this card: {{card.data}}'
+    await fs.writeFile(join(stepsDir, '02-worker', 'process.md'), processMd, 'utf-8')
+
+    await seedReadyCard(stepsDir, '01-src', 'card_noctx_001')
+    const { runId } = await workerRunner.triggerRun({ project, workflow: 'wf', stepId: '02-worker', cardId: 'card_noctx_001' })
+
+    // No resolved snapshot should exist when no substitution occurred
+    const runDir = join(stepsDir, '02-worker', 'runs', runId)
+    const resolvedExists = await pathExists(join(runDir, 'process.md'))
+    expect(resolvedExists).toBe(false)
+  })
+
   it('marks orphaned running runs as interrupted', async () => {
     const project = `crash-${Date.now()}`
     const { stepsDir } = await buildWorkflow({ name: project, trayId: '01-src', workerId: '02-worker', nextTrayId: '03-next' })

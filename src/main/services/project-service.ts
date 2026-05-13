@@ -1,4 +1,4 @@
-import { join } from 'path'
+import { join, basename } from 'path'
 import fs from 'fs/promises'
 import { Paths } from './fs-service'
 import type {
@@ -8,6 +8,7 @@ import type {
   StepKind,
   StepMeta,
   SkillManifest,
+  MissingSkillsEntry,
 } from '../../shared/types'
 
 export type { ProjectMeta, ProjectStatus, WorkflowMeta, StepKind, StepMeta, SkillManifest }
@@ -143,7 +144,8 @@ async function listSkills(): Promise<SkillManifest[]> {
   if (!(await pathExists(Paths.skills))) return []
   const out: SkillManifest[] = []
 
-  // User skills (top level of skills/)
+  // User-installed skills only (top level of skills/, not _system/)
+  // System skills are auto-managed and never exposed to the worker skill picker.
   const top = await fs.readdir(Paths.skills, { withFileTypes: true })
   for (const e of top) {
     if (!e.isDirectory()) continue
@@ -152,17 +154,46 @@ async function listSkills(): Promise<SkillManifest[]> {
     if (m) out.push(m)
   }
 
-  // System skills
-  if (await pathExists(Paths.systemSkills)) {
-    const sys = await fs.readdir(Paths.systemSkills, { withFileTypes: true })
-    for (const e of sys) {
-      if (!e.isDirectory()) continue
-      const m = await readJsonSafe<SkillManifest>(join(Paths.systemSkills, e.name, 'skill.json'))
-      if (m) out.push(m)
+  return out
+}
+
+/**
+ * Check every worker in the project and return entries for any worker whose
+ * required skills are not installed as user skills.
+ * System skills (in Paths.systemSkills) are auto-restored on launch and never
+ * appear in a worker's skills[] array, so we only check Paths.skills here.
+ */
+async function checkProjectSkills(projectName: string): Promise<MissingSkillsEntry[]> {
+  const result: MissingSkillsEntry[] = []
+  const wfRoot = join(projectDir(projectName), 'workflows')
+  if (!(await pathExists(wfRoot))) return result
+
+  const wfs = await fs.readdir(wfRoot, { withFileTypes: true })
+  for (const wfEntry of wfs) {
+    if (!wfEntry.isDirectory()) continue
+    const stepsRoot = join(wfRoot, wfEntry.name, 'steps')
+    if (!(await pathExists(stepsRoot))) continue
+
+    const steps = await fs.readdir(stepsRoot, { withFileTypes: true })
+    for (const stepEntry of steps) {
+      if (!stepEntry.isDirectory()) continue
+      const raw = await readJsonSafe<{ kind?: string; skills?: string[] }>(
+        join(stepsRoot, stepEntry.name, 'step.json'),
+      )
+      if (!raw || raw.kind !== 'worker') continue
+
+      const missing: string[] = []
+      for (const skillId of raw.skills ?? []) {
+        if (!(await pathExists(join(Paths.skills, skillId, 'skill.json')))) {
+          missing.push(skillId)
+        }
+      }
+      if (missing.length > 0) {
+        result.push({ stepId: stepEntry.name, workflowId: wfEntry.name, missingSkillIds: missing })
+      }
     }
   }
-
-  return out
+  return result
 }
 
 async function getSkill(skillId: string): Promise<SkillManifest | null> {
@@ -178,6 +209,42 @@ async function getSkill(skillId: string): Promise<SkillManifest | null> {
   return null
 }
 
+// ─── Context pack operations ──────────────────────────────────────────────────
+
+async function listContextFiles(projectName: string): Promise<string[]> {
+  const dir = join(projectDir(projectName), 'context')
+  if (!(await pathExists(dir))) return []
+  const entries = await fs.readdir(dir, { withFileTypes: true })
+  return entries
+    .filter((e) => e.isFile() && e.name.endsWith('.md'))
+    .map((e) => e.name)
+    .sort()
+}
+
+async function readContextFile(projectName: string, file: string): Promise<string> {
+  const safe = basename(file)
+  const p = join(projectDir(projectName), 'context', safe)
+  if (!(await pathExists(p))) return ''
+  return fs.readFile(p, 'utf-8')
+}
+
+async function writeContextFile(projectName: string, file: string, content: string): Promise<void> {
+  const safe = basename(file)
+  if (!safe.endsWith('.md')) throw new Error('Context files must have a .md extension')
+  const dir = join(projectDir(projectName), 'context')
+  await fs.mkdir(dir, { recursive: true })
+  const p = join(dir, safe)
+  const tmp = p + '.tmp'
+  await fs.writeFile(tmp, content, 'utf-8')
+  await fs.rename(tmp, p)
+}
+
+async function deleteContextFile(projectName: string, file: string): Promise<void> {
+  const safe = basename(file)
+  const p = join(projectDir(projectName), 'context', safe)
+  if (await pathExists(p)) await fs.unlink(p)
+}
+
 export const projectService = {
   listProjects,
   getProject,
@@ -188,6 +255,11 @@ export const projectService = {
   getStep,
   listSkills,
   getSkill,
+  checkProjectSkills,
+  listContextFiles,
+  readContextFile,
+  writeContextFile,
+  deleteContextFile,
   paths: {
     projectDir,
     workflowDir,

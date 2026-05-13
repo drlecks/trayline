@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Inbox, Cpu, AlertTriangle, RefreshCw, AlertCircle, Plus } from 'lucide-react'
+import { Inbox, Cpu, AlertTriangle, RefreshCw, AlertCircle, Plus, FileText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useProjectStore } from '@/stores/project-store'
 import AddTrayDialog from './AddTrayDialog'
@@ -7,6 +7,7 @@ import AddWorkerDialog from './AddWorkerDialog'
 import AddStepDialog from './AddStepDialog'
 import TrayDetailPanel from './TrayDetailPanel'
 import WorkerDetailPanel from './WorkerDetailPanel'
+import ContextPackEditor from './ContextPackEditor'
 import type { StepMeta } from '../../../shared/types'
 import type { CardCounts } from '../../../shared/card'
 import type { WorkerRunEvent, WorkerRunStatus } from '../../../shared/worker-run'
@@ -18,6 +19,7 @@ export default function ProjectScreen() {
   const selectedStepId = useProjectStore((s) => s.selectedStepId)
   const setSelectedStepId = useProjectStore((s) => s.setSelectedStepId)
   const unconfiguredMcps = useProjectStore((s) => s.unconfiguredMcps)
+  const missingSkillsByStep = useProjectStore((s) => s.missingSkillsByStep)
   const setScreen = useProjectStore((s) => s.setScreen)
   const setRegenerateOf = useProjectStore((s) => s.setRegenerateOf)
   const refreshSteps = useProjectStore((s) => s.refreshSteps)
@@ -25,6 +27,7 @@ export default function ProjectScreen() {
   const [pickOpen, setPickOpen] = useState(false)
   const [addTrayOpen, setAddTrayOpen] = useState(false)
   const [addWorkerOpen, setAddWorkerOpen] = useState(false)
+  const [showContextEditor, setShowContextEditor] = useState(false)
 
   // Refresh steps whenever the active project changes
   useEffect(() => {
@@ -67,8 +70,9 @@ export default function ProjectScreen() {
               <StepCard
                 key={step.id}
                 step={step}
-                selected={step.id === selectedStepId}
-                onClick={() => setSelectedStepId(step.id)}
+                selected={step.id === selectedStepId && !showContextEditor}
+                missingSkills={missingSkillsByStep[step.id] ?? []}
+                onClick={() => { setSelectedStepId(step.id); setShowContextEditor(false) }}
               />
             ))}
 
@@ -84,6 +88,19 @@ export default function ProjectScreen() {
           </div>
 
           <div className="mt-auto pt-4 border-t border-black/[0.06] dark:border-white/[0.06] px-2 flex flex-col gap-2">
+            <button
+              type="button"
+              onClick={() => { setShowContextEditor(true); setSelectedStepId(null) }}
+              className={`
+                flex items-center gap-2 w-full px-2 py-1.5 rounded text-[13px] text-left transition-colors
+                ${showContextEditor
+                  ? 'bg-neutral-100 dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200'
+                  : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-neutral-50 dark:hover:bg-neutral-900'}
+              `}
+            >
+              <FileText size={14} strokeWidth={1.75} />
+              Context files
+            </button>
             <Button
               variant="ghost"
               size="sm"
@@ -98,7 +115,9 @@ export default function ProjectScreen() {
 
         {/* Right canvas */}
         <section className="flex-1 min-w-0 overflow-hidden">
-          {selectedStep
+          {showContextEditor && active ? (
+            <ContextPackEditor project={active.name} />
+          ) : selectedStep
             ? (selectedStep.kind === 'worker'
                 ? <WorkerDetailPanel step={selectedStep} />
                 : <TrayDetailPanel step={selectedStep} />)
@@ -176,7 +195,7 @@ function WorkerStatusBubble({ status }: { status: WorkerRunStatus | 'idle' }) {
   )
 }
 
-function StepCard({ step, selected, onClick }: { step: StepMeta; selected: boolean; onClick: () => void }) {
+function StepCard({ step, selected, missingSkills, onClick }: { step: StepMeta; selected: boolean; missingSkills: string[]; onClick: () => void }) {
   const Icon = step.kind === 'tray'
     ? (step.id === '99-errors' ? AlertTriangle : Inbox)
     : Cpu
@@ -285,6 +304,11 @@ function StepCard({ step, selected, onClick }: { step: StepMeta; selected: boole
           {counts && counts.pending > 0 && step.kind === 'tray' && !isError && (
             <span className="shrink-0 inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-400 text-[11px] font-semibold">
               {counts.pending}
+            </span>
+          )}
+          {step.kind === 'worker' && missingSkills.length > 0 && (
+            <span title="Missing skill" className="shrink-0">
+              <AlertTriangle size={13} strokeWidth={2} className="text-amber-500" />
             </span>
           )}
           {step.kind === 'worker' && <WorkerStatusBubble status={workerStatus} />}

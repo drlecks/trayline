@@ -153,6 +153,67 @@ describe('projectService', () => {
     const dir = projectService.paths.stepDir('p', 'w', '01-x')
     expect(dir.endsWith(join('p', 'workflows', 'w', 'steps', '01-x'))).toBe(true)
   })
+
+  // ── Context pack CRUD ──────────────────────────────────────────────────────
+
+  it('listContextFiles returns [] when context/ does not exist', async () => {
+    await makeProject('ctx0')
+    expect(await projectService.listContextFiles('ctx0')).toEqual([])
+  })
+
+  it('writeContextFile creates the file and listContextFiles returns it', async () => {
+    await makeProject('ctx1')
+    await projectService.writeContextFile('ctx1', 'brand-voice.md', '# Brand\n\nFriendly.')
+    const files = await projectService.listContextFiles('ctx1')
+    expect(files).toEqual(['brand-voice.md'])
+  })
+
+  it('readContextFile returns the written content', async () => {
+    await makeProject('ctx2')
+    await projectService.writeContextFile('ctx2', 'guide.md', 'Hello context')
+    const content = await projectService.readContextFile('ctx2', 'guide.md')
+    expect(content).toBe('Hello context')
+  })
+
+  it('readContextFile returns "" for a missing file', async () => {
+    await makeProject('ctx3')
+    expect(await projectService.readContextFile('ctx3', 'nope.md')).toBe('')
+  })
+
+  it('writeContextFile rejects non-.md extensions', async () => {
+    await makeProject('ctx4')
+    await expect(projectService.writeContextFile('ctx4', 'secrets.txt', 'bad')).rejects.toThrow(/.md/)
+  })
+
+  it('deleteContextFile removes the file', async () => {
+    await makeProject('ctx5')
+    await projectService.writeContextFile('ctx5', 'temp.md', 'delete me')
+    await projectService.deleteContextFile('ctx5', 'temp.md')
+    expect(await projectService.listContextFiles('ctx5')).toEqual([])
+  })
+
+  it('deleteContextFile is a no-op for a missing file', async () => {
+    await makeProject('ctx6')
+    await expect(projectService.deleteContextFile('ctx6', 'ghost.md')).resolves.toBeUndefined()
+  })
+
+  it('writeContextFile prevents path traversal', async () => {
+    await makeProject('ctx7')
+    // basename() strips the traversal — file lands in context/ as-is
+    await projectService.writeContextFile('ctx7', '../../../evil.md', 'x')
+    const files = await projectService.listContextFiles('ctx7')
+    expect(files).toEqual(['evil.md'])
+  })
+
+  it('listContextFiles only returns .md files', async () => {
+    await makeProject('ctx8')
+    const contextDir = join(Paths.projects, 'ctx8', 'context')
+    await fs.mkdir(contextDir, { recursive: true })
+    await fs.writeFile(join(contextDir, 'valid.md'), 'ok', 'utf-8')
+    await fs.writeFile(join(contextDir, 'ignored.txt'), 'no', 'utf-8')
+    const files = await projectService.listContextFiles('ctx8')
+    expect(files).toEqual(['valid.md'])
+  })
 })
 
 async function exists(p: string): Promise<boolean> {
