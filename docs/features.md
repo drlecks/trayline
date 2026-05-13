@@ -39,7 +39,7 @@ Tabs: **Cards** / **Config** / **Schema**
 Tabs: **Config** / **Instructions** / **Runs** / **Skills, MCPs & Context**
 
 - **Config**: name, description, command (default `claude`), timeout, trigger mode, schedule cron (if scheduled)
-- **Instructions**: full-screen markdown editor for `process.md` with side preview. Token estimate displayed. Variables like `{{card.data}}` and `{{context.brand-voice}}` autocomplete.
+- **Instructions**: full-screen markdown editor for `process.md` with side preview. Token estimate displayed. Variables like `{{card.data}}` and `{{context._brand-voice}}` autocomplete.
 - **Runs**: history table, click for detail
 - **Skills, MCPs & Context**: three blocks:
 
@@ -54,7 +54,7 @@ Tabs: **Config** / **Instructions** / **Runs** / **Skills, MCPs & Context**
 │  ☐ Google Drive                                              │
 │                                                              │
 │  Context Packs                                                │
-│  ☑ company-info.md    ☐ brand-voice.md                       │
+│  ☑ company-info.md    ☐ _brand-voice.md (always included)    │
 └──────────────────────────────────────────────────────────────┘
 ```
 

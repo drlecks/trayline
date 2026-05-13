@@ -183,12 +183,12 @@ describe('workerRunner', () => {
     // Write a context file
     const contextDir = join(Paths.projects, project, 'context')
     await fs.mkdir(contextDir, { recursive: true })
-    await fs.writeFile(join(contextDir, 'brand-voice.md'), 'Be friendly and concise.', 'utf-8')
+    await fs.writeFile(join(contextDir, '_brand-voice.md'), 'Be friendly and concise.', 'utf-8')
 
     // Write process.md that references the context variable
     await fs.writeFile(
       join(stepsDir, '02-worker', 'process.md'),
-      '# Instructions\n\n{{context.brand-voice}}\n\nProcess: {{card.data}}',
+      '# Instructions\n\n{{context._brand-voice}}\n\nProcess: {{card.data}}',
       'utf-8',
     )
 
@@ -199,7 +199,7 @@ describe('workerRunner', () => {
     const runDir = join(stepsDir, '02-worker', 'runs', runId)
     const resolved = await fs.readFile(join(runDir, 'process.md'), 'utf-8')
     expect(resolved).toContain('Be friendly and concise.')
-    expect(resolved).not.toContain('{{context.brand-voice}}')
+    expect(resolved).not.toContain('{{context._brand-voice}}')
     // {{card.data}} should remain in the snapshot (adapter resolves it)
     expect(resolved).toContain('{{card.data}}')
   })
