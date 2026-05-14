@@ -108,30 +108,45 @@ export default function CardsTab({ step }: { step: StepMeta }) {
         </div>
       ) : (
         <div className="flex flex-col -mx-3 rounded-md overflow-hidden border border-neutral-200/70 dark:border-neutral-800/70">
-          {cards.map((c) => (
-            <button
-              key={c.id}
-              onClick={() => setOpenCardId(c.id)}
-              className="
-                group flex items-center gap-3 py-2.5 px-3
-                odd:bg-white even:bg-neutral-50/80
-                dark:odd:bg-neutral-950 dark:even:bg-neutral-900/40
-                hover:!bg-neutral-100 dark:hover:!bg-neutral-800/60
-                text-left transition-colors
-                border-b border-neutral-100 dark:border-neutral-900/60 last:border-b-0
-              "
-            >
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium truncate">
-                  {previewText(c)}
+          {cards.map((c) => {
+            const failEntry = isErrors ? lastRunFailed(c) : null
+            return (
+              <button
+                key={c.id}
+                onClick={() => setOpenCardId(c.id)}
+                className="
+                  group flex items-center gap-3 py-2.5 px-3
+                  odd:bg-white even:bg-neutral-50/80
+                  dark:odd:bg-neutral-950 dark:even:bg-neutral-900/40
+                  hover:!bg-neutral-100 dark:hover:!bg-neutral-800/60
+                  text-left transition-colors
+                  border-b border-neutral-100 dark:border-neutral-900/60 last:border-b-0
+                "
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium truncate">
+                    {previewText(c)}
+                  </div>
+                  {failEntry ? (
+                    <>
+                      <div className="text-[11px] text-red-600 dark:text-red-400 mt-0.5 truncate">
+                        {failEntry.note ?? 'Run failed'}
+                      </div>
+                      <div className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5 font-mono">
+                        {failEntry.step && <span className="mr-1">{failEntry.step} ·</span>}
+                        {timeAgo(failEntry.at)}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5 font-mono">
+                      {c.id} · {timeAgo(c.created_at)}
+                    </div>
+                  )}
                 </div>
-                <div className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5 font-mono">
-                  {c.id} · {timeAgo(c.created_at)}
-                </div>
-              </div>
-              <ChevronRight size={14} className="text-neutral-300 group-hover:text-neutral-500" strokeWidth={1.75} />
-            </button>
-          ))}
+                <ChevronRight size={14} className="text-neutral-300 group-hover:text-neutral-500" strokeWidth={1.75} />
+              </button>
+            )
+          })}
         </div>
       )}
 
@@ -145,6 +160,13 @@ export default function CardsTab({ step }: { step: StepMeta }) {
       )}
     </div>
   )
+}
+
+function lastRunFailed(card: Card) {
+  for (let i = card.history.length - 1; i >= 0; i--) {
+    if (card.history[i].event === 'run_failed') return card.history[i]
+  }
+  return null
 }
 
 function previewText(card: Card): string {

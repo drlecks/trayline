@@ -8,6 +8,8 @@ import type { Card, CardStatus, CardEvent } from '../../../shared/card'
 import type { StepMeta } from '../../../shared/types'
 import type { PlanFieldDef } from '../../../shared/workflow-plan'
 
+type ViewMode = 'view' | 'edit' | 'sendBack' | 'editAndRetry'
+
 type EventTone = 'error' | 'warning' | 'success' | 'neutral'
 
 function eventTone(event: CardEvent): EventTone {
@@ -56,8 +58,9 @@ export default function CardViewer({ project, workflow, stepId, cardId, step, on
   const [data, setData] = useState<{ card: Card; status: CardStatus } | null>(null)
   const [acting, setActing] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [mode, setMode] = useState<'view' | 'edit' | 'sendBack'>('view')
+  const [mode, setMode] = useState<ViewMode>('view')
   const [sendBackNote, setSendBackNote] = useState('')
+  const [sourceStepFields, setSourceStepFields] = useState<PlanFieldDef[]>([])
 
   useEffect(() => {
     let cancelled = false
@@ -117,6 +120,35 @@ export default function CardViewer({ project, workflow, stepId, cardId, step, on
     }
   }
 
+  async function handleEditAndRetry(values: Record<string, unknown>) {
+    setActing(true); setError(null)
+    try {
+      const ok = await useProviderGuard.getState().ensureReady()
+      if (!ok) { setActing(false); return }
+      // Edit in place (stepId = '99-errors'), then retry
+      await window.trayline.card.edit(project, workflow, stepId, cardId, values, false)
+      await window.trayline.card.retry(project, workflow, cardId)
+      onBack()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+      setActing(false)
+    }
+  }
+
+  async function enterEditAndRetry() {
+    if (!data) return
+    const sourceStep = data.card.source_step
+    try {
+      const allSteps = await window.trayline.project.listSteps(project, workflow)
+      const src = allSteps.find((s) => s.id === sourceStep)
+      const f = (src?.raw?.input_schema as { fields?: PlanFieldDef[] } | undefined)?.fields ?? []
+      setSourceStepFields(f)
+    } catch {
+      setSourceStepFields([])
+    }
+    setMode('editAndRetry')
+  }
+
   async function handleSendBack() {
     setActing(true); setError(null)
     try {
@@ -137,6 +169,48 @@ export default function CardViewer({ project, workflow, stepId, cardId, step, on
   const fields = (step?.raw?.input_schema as { fields?: PlanFieldDef[] } | undefined)?.fields ?? []
   const hasFields = fields.length > 0
   const isManual = !isErrorTray && ((step?.raw?.approval_mode as string | undefined) ?? 'manual') === 'manual'
+
+  // ── Edit-and-retry mode (error tray only) ─────────────────────────────────
+
+  if (mode === 'editAndRetry') {
+    return (
+      <div className="px-6 py-4 max-w-3xl">
+        <button
+          onClick={() => setMode('view')}
+          className="flex items-center gap-1 text-xs text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200 mb-4"
+        >
+          <ArrowLeft size={13} strokeWidth={1.75} /> Back
+        </button>
+        <h2 className="text-sm font-semibold mb-1">Edit card and retry</h2>
+        <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-4">
+          Modify the card's fields, then retry the worker that failed.
+        </p>
+        {error && <div className="text-xs text-red-600 dark:text-red-400 mb-3">{error}</div>}
+        {sourceStepFields.length > 0 ? (
+          <DynamicForm
+            fields={sourceStepFields}
+            defaultValues={card.data as Record<string, unknown>}
+            submitting={acting}
+            submitLabel={acting ? 'Working…' : 'Save and retry'}
+            onCancel={() => setMode('view')}
+            onSubmit={(values) => void handleEditAndRetry(values)}
+          />
+        ) : (
+          <div className="flex flex-col gap-3">
+            <p className="text-xs text-neutral-500 dark:text-neutral-400">
+              This card's source tray has no defined fields. The card will be retried with its existing data.
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button size="sm" variant="ghost" onClick={() => setMode('view')} disabled={acting}>Cancel</Button>
+              <Button size="sm" onClick={() => void handleEditAndRetry(card.data as Record<string, unknown>)} disabled={acting}>
+                {acting ? 'Working…' : 'Retry'}
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
 
   // ── Edit mode ──────────────────────────────────────────────────────────────
 
@@ -298,6 +372,9 @@ export default function CardViewer({ project, workflow, stepId, cardId, step, on
           <>
             <Button size="sm" variant="ghost" onClick={handleArchive} disabled={acting}>
               <Archive size={13} strokeWidth={1.75} /> Archive
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => void enterEditAndRetry()} disabled={acting}>
+              <Pencil size={13} strokeWidth={1.75} /> Edit and retry
             </Button>
             <Button size="sm" onClick={handleRetry} disabled={acting}>
               <RotateCcw size={13} strokeWidth={1.75} /> {acting ? 'Working…' : 'Retry'}
