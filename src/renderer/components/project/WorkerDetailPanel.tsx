@@ -314,6 +314,8 @@ interface WorkerStepRaw {
   context_packs?: string[]
   execution?: { command?: string; args?: string[]; timeout_seconds?: number; retry_attempts?: number; adapter?: string }
   trigger?: { mode?: 'on_ready' | 'scheduled' | 'manual'; schedule_cron?: string | null }
+  batch_mode?: boolean
+  batch_max?: number | null
 }
 
 function ConfigTab({ project, workflow, step }: { project: string; workflow: string; step: StepMeta }) {
@@ -329,6 +331,8 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
     trigger.mode === 'scheduled' ? 'scheduled' : trigger.mode === 'manual' ? 'manual' : 'on_ready',
   )
   const [scheduleCron, setScheduleCron] = useState<string>(trigger.schedule_cron ?? '0 * * * *')
+  const [batchMode, setBatchMode] = useState(raw.batch_mode ?? false)
+  const [batchMax, setBatchMax] = useState<number | ''>(raw.batch_max ?? '')
   const [busy, setBusy] = useState(false)
 
   // Skills + context packs
@@ -355,8 +359,15 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
     setRetries(exec.retry_attempts ?? 1)
     setTriggerMode(trigger.mode === 'scheduled' ? 'scheduled' : trigger.mode === 'manual' ? 'manual' : 'on_ready')
     setScheduleCron(trigger.schedule_cron ?? '0 * * * *')
+    setBatchMode(raw.batch_mode ?? false)
+    setBatchMax(raw.batch_max ?? '')
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step.id])
+
+  function handleBatchModeToggle(newValue: boolean) {
+    setBatchMode(newValue)
+    if (newValue && triggerMode === 'on_ready') setTriggerMode('manual')
+  }
 
   function addSkill(id: string) {
     if (!id || selectedSkills.includes(id)) return
@@ -394,6 +405,8 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
           },
           skills: selectedSkills,
           context_packs: selectedContextPacks,
+          batch_mode: batchMode,
+          batch_max: typeof batchMax === 'number' ? batchMax : null,
         } as Record<string, unknown>,
       })
       await refreshSteps()
@@ -456,21 +469,25 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
         <div className="flex flex-col gap-1.5">
           <label className="text-xs text-neutral-500">Trigger mode</label>
           <div className="flex gap-2">
-            {TRIGGER_OPTIONS.map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => setTriggerMode(opt.value)}
-                className={`flex-1 px-3 py-2 rounded-md border text-left text-xs ${
-                  triggerMode === opt.value
-                    ? 'border-neutral-900 dark:border-neutral-100 bg-neutral-50 dark:bg-neutral-900'
-                    : 'border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-900'
-                }`}
-              >
-                <div className="font-medium">{opt.label}</div>
-                <div className="text-neutral-500 mt-0.5">{opt.desc}</div>
-              </button>
-            ))}
+            {TRIGGER_OPTIONS.map((opt) => {
+              const isDisabled = opt.value === 'on_ready' && batchMode
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => !isDisabled && setTriggerMode(opt.value)}
+                  disabled={isDisabled}
+                  className={`flex-1 px-3 py-2 rounded-md border text-left text-xs transition-opacity ${
+                    triggerMode === opt.value
+                      ? 'border-neutral-900 dark:border-neutral-100 bg-neutral-50 dark:bg-neutral-900'
+                      : 'border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-900'
+                  } ${isDisabled ? 'opacity-35 cursor-not-allowed' : ''}`}
+                >
+                  <div className="font-medium">{opt.label}</div>
+                  <div className="text-neutral-500 mt-0.5">{opt.desc}</div>
+                </button>
+              )
+            })}
           </div>
         </div>
 
@@ -480,6 +497,43 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
             <NextRunTime expr={scheduleCron} />
           </>
         )}
+
+        {/* Batch mode */}
+        <div className="flex flex-col gap-3 rounded-md border border-neutral-200 dark:border-neutral-800 p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex flex-col gap-0.5">
+              <div className="text-xs font-medium text-neutral-700 dark:text-neutral-300">Batch mode</div>
+              <div className="text-xs text-neutral-500">Process all ready cards at once and produce one output card. Good for digests and summaries.</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => handleBatchModeToggle(!batchMode)}
+              className={`shrink-0 relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                batchMode ? 'bg-neutral-900 dark:bg-neutral-100' : 'bg-neutral-200 dark:bg-neutral-700'
+              }`}
+              aria-checked={batchMode}
+              role="switch"
+            >
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white dark:bg-neutral-900 transition-transform ${
+                batchMode ? 'translate-x-4' : 'translate-x-0.5'
+              }`} />
+            </button>
+          </div>
+          {batchMode && (
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs text-neutral-500">Max cards per run</label>
+              <input
+                type="number"
+                min={1}
+                value={batchMax}
+                onChange={(e) => setBatchMax(e.target.value ? parseInt(e.target.value, 10) : '')}
+                placeholder="No limit"
+                className="rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-3 py-1.5 text-xs w-32"
+              />
+              <p className="text-xs text-neutral-400">Leave blank for no limit.</p>
+            </div>
+          )}
+        </div>
 
         {/* Skills */}
         <div className="flex flex-col gap-2">

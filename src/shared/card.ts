@@ -3,7 +3,7 @@
 
 export type CardStatus = 'pending' | 'ready' | 'archived'
 
-export type CardCreatedBy = 'manual' | 'webhook' | 'worker'
+export type CardCreatedBy = 'manual' | 'webhook' | 'worker' | 'source'
 
 export type CardEvent =
   | 'created'

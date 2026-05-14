@@ -19,6 +19,8 @@
     "mode": "on_ready",
     "schedule_cron": null
   },
+  "batch_mode": false,
+  "batch_max": null,
   "on_success": "advance",
   "on_failure": "send_to_errors"
 }

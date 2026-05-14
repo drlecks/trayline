@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { Sparkles, ArrowRight, ArrowLeft } from 'lucide-react'
+import { Sparkles, ArrowRight, ArrowLeft, Rss } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CopyButton } from '@/components/ui/copy-button'
 import { useProjectStore } from '@/stores/project-store'
-import type { ProjectCreateOutcome } from '../../../shared/types'
+import type { ProjectCreateOutcome, ProjectCreateSuccess } from '../../../shared/types'
 
 const EXAMPLES = [
   'Read incoming sales emails and qualify leads.',
@@ -11,6 +11,8 @@ const EXAMPLES = [
   'Process PDF invoices and post them to my accounting tool.',
   'Triage support tickets and draft responses.',
   'Read meeting transcripts and extract action items.',
+  'Poll Instagram comments every hour and draft a reply for each new one.',
+  'Fetch the top Hacker News stories every 30 minutes and send a daily digest.',
 ]
 
 const LOADING_MESSAGES = [
@@ -18,6 +20,9 @@ const LOADING_MESSAGES = [
   'Sketching out the trays…',
   'Wiring up the workers…',
   'Picking the right skills…',
+  'Setting up your data source…',
+  'Configuring the schedule…',
+  'Wiring up deduplication…',
   'Almost there…',
 ]
 
@@ -36,6 +41,7 @@ export default function WorkflowAuthorScreen() {
   const [description, setDescription] = useState(existing?.description ?? '')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<{ message: string; raw?: string } | null>(null)
+  const [postGenOutcome, setPostGenOutcome] = useState<ProjectCreateSuccess | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
@@ -68,10 +74,21 @@ export default function WorkflowAuthorScreen() {
     }
     await refreshProjects()
     setUnconfiguredMcps(outcome.unconfiguredMcps)
-    setActive(outcome.project)
+
+    if (outcome.hasSourceStep) {
+      setPostGenOutcome(outcome)
+    } else {
+      setActive(outcome.project)
+    }
+  }
+
+  function openProject() {
+    if (!postGenOutcome) return
+    setActive(postGenOutcome.project)
   }
 
   if (busy) return <LoadingPanel />
+  if (postGenOutcome) return <PostGenBanner outcome={postGenOutcome} onOpen={openProject} />
 
   return (
     <div className="flex flex-col items-center justify-center w-full max-w-2xl mx-auto px-8">
@@ -188,6 +205,35 @@ function LoadingPanel() {
       <div className="text-sm text-neutral-600 dark:text-neutral-400 transition-opacity">
         {LOADING_MESSAGES[idx]}
       </div>
+    </div>
+  )
+}
+
+function PostGenBanner({ outcome, onOpen }: { outcome: ProjectCreateSuccess; onOpen: () => void }) {
+  const hasMcps = outcome.unconfiguredMcps.length > 0
+  const mcpName = hasMcps ? outcome.unconfiguredMcps[0] : null
+
+  const title = "Here's a starting point."
+  const body = hasMcps && mcpName
+    ? `Set up ${mcpName} and write your fetch instructions to get started.`
+    : "Your source step is ready — click it to write your fetch instructions and set your schedule."
+
+  return (
+    <div className="flex flex-col items-center justify-center w-full max-w-lg mx-auto px-8 text-center">
+      <div className="w-14 h-14 rounded-2xl bg-emerald-500 flex items-center justify-center mb-6">
+        <Rss size={28} strokeWidth={1.75} className="text-white" />
+      </div>
+      <h2 className="text-xl font-semibold tracking-tight mb-2">{title}</h2>
+      <p className="text-sm text-neutral-500 dark:text-neutral-400 mb-8 leading-relaxed">{body}</p>
+      {hasMcps && (
+        <div className="w-full rounded-lg border border-amber-200 dark:border-amber-800/40 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 mb-6 text-xs text-amber-800 dark:text-amber-300 text-left">
+          <strong>MCPs needed:</strong> {outcome.unconfiguredMcps.join(', ')} — set them up in Settings → MCPs before running.
+        </div>
+      )}
+      <Button size="lg" onClick={onOpen}>
+        Open project
+        <ArrowRight size={14} strokeWidth={1.75} />
+      </Button>
     </div>
   )
 }

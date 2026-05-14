@@ -1,11 +1,11 @@
 // Adds/updates step folders inside an existing project.
-// Phase 3 only needs trays; workers come in Phase 4.
 
 import { join } from 'path'
 import fs from 'fs/promises'
 import { fsService } from './fs-service'
 import { projectService } from './project-service'
 import type { PlanFieldDef, PlanTrayStep, PlanWorkerStep } from '../../shared/workflow-plan'
+import type { SourceStepConfig } from '../../shared/types'
 
 interface AddTrayInput {
   project: string
@@ -221,15 +221,7 @@ interface UpdateStepConfigInput {
   project: string
   workflow: string
   stepId: string
-  patch: {
-    name?: string
-    description?: string
-    color?: string
-    icon?: string
-    approval_mode?: 'manual' | 'auto'
-    allow_manual_create?: boolean
-    input_schema?: { fields: PlanFieldDef[] }
-  }
+  patch: Record<string, unknown>
 }
 
 async function updateStep(input: UpdateStepConfigInput): Promise<void> {
@@ -290,11 +282,131 @@ async function readWorkerProcess(
   return fs.readFile(path, 'utf-8')
 }
 
+// ── Source steps ──────────────────────────────────────────────────────────────
+
+interface AddSourceInput {
+  project: string
+  workflow: string
+  name: string
+  description?: string
+  schedule_cron?: string
+  dedup_key?: string
+}
+
+const DEFAULT_SOURCE_MD = `# Source Instructions
+
+Write instructions for what the AI should fetch. Be specific about:
+- Where to find the data (API, URL, file, etc.)
+- What the unique ID field is for deduplication
+- Any filtering or transformation to apply
+
+## Output Format
+
+Reply with **only** a JSON array. Each element must have a unique ID field.
+Do not include any prose or explanation — only the raw JSON array.
+
+\`\`\`json
+[
+  {
+    "id": "<unique-identifier>",
+    "title": "<item title>",
+    "summary": "<brief description>"
+  }
+]
+\`\`\`
+`
+
+async function addSource(input: AddSourceInput): Promise<SourceStepConfig & { id: string }> {
+  // Source steps always go at position 0 — before all other steps
+  const stepsRoot = join(projectService.paths.workflowDir(input.project, input.workflow), 'steps')
+  if (!(await pathExists(stepsRoot))) await fs.mkdir(stepsRoot, { recursive: true })
+
+  const id = `00-${slugify(input.name) || 'source'}`
+  const stepDir = projectService.paths.stepDir(input.project, input.workflow, id)
+
+  if (await pathExists(stepDir)) {
+    throw new Error(`Step already exists: ${id}`)
+  }
+
+  await fs.mkdir(stepDir, { recursive: true })
+  await fs.mkdir(join(stepDir, 'state'), { recursive: true })
+  await fs.mkdir(join(stepDir, 'cards', 'ready'), { recursive: true })
+  await fs.mkdir(join(stepDir, 'cards', 'archived'), { recursive: true })
+  await fs.mkdir(join(stepDir, 'runs'), { recursive: true })
+
+  const stepJson: SourceStepConfig = {
+    id,
+    kind: 'source',
+    name: input.name,
+    description: input.description ?? '',
+    color: '#4CB87E',
+    icon: 'rss',
+    schedule_cron: input.schedule_cron ?? '0 * * * *',
+    dedup: {
+      key: input.dedup_key ?? 'id',
+      max_memory: 10000,
+      first_run: 'skip_existing',
+    },
+    execution: {
+      timeout_seconds: 60,
+      adapter: 'claude-code',
+    },
+    paused: false,
+  }
+
+  await fsService.writeJsonAtomic(join(stepDir, 'step.json'), stepJson)
+  await fs.writeFile(join(stepDir, 'source.md'), DEFAULT_SOURCE_MD, 'utf-8')
+  await fsService.writeJsonAtomic(join(stepDir, 'state', 'counters.json'), {
+    runs_total: 0,
+    items_found: 0,
+    items_new: 0,
+    last_run_at: null,
+  })
+
+  // Insert at position 0 in workflow.json (before all other steps)
+  await insertSourceIntoWorkflow(input.project, input.workflow, id)
+
+  return { ...stepJson, id }
+}
+
+async function insertSourceIntoWorkflow(project: string, workflow: string, sourceId: string): Promise<void> {
+  const wfPath = join(projectService.paths.workflowDir(project, workflow), 'workflow.json')
+  const wf = await fsService.readJson<{ id: string; name: string; display_name: string; step_ids: string[] }>(wfPath)
+
+  const existing = wf.step_ids.filter((id) => id !== sourceId)
+  // Source always first, before all other steps including 99-errors
+  await fsService.writeJsonAtomic(wfPath, { ...wf, step_ids: [sourceId, ...existing] })
+}
+
+interface UpdateSourceInstructionsInput {
+  project: string
+  workflow: string
+  stepId: string
+  content: string
+}
+
+async function updateSourceInstructions(input: UpdateSourceInstructionsInput): Promise<void> {
+  const path = join(
+    projectService.paths.stepDir(input.project, input.workflow, input.stepId),
+    'source.md',
+  )
+  await fs.writeFile(path, input.content, 'utf-8')
+}
+
+async function readSourceInstructions(project: string, workflow: string, stepId: string): Promise<string> {
+  const path = join(projectService.paths.stepDir(project, workflow, stepId), 'source.md')
+  if (!(await pathExists(path))) return ''
+  return fs.readFile(path, 'utf-8')
+}
+
 export const stepService = {
   addTray,
   addWorker,
+  addSource,
   updateStep,
   updateWorkerProcess,
   readWorkerProcess,
+  updateSourceInstructions,
+  readSourceInstructions,
   deleteStep,
 }

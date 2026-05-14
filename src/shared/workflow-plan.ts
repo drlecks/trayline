@@ -3,7 +3,7 @@
 // renderer (for previews) and the main process (for scaffolding) can validate
 // against the same shape.
 
-export type StepKind = 'tray' | 'worker'
+export type StepKind = 'tray' | 'worker' | 'source'
 
 export interface PlanFieldDef {
   id: string
@@ -36,9 +36,27 @@ export interface PlanWorkerStep {
   mcps?: string[]
   context_packs?: string[]
   process_md: string
+  batch_mode?: boolean
+  batch_max?: number | null
 }
 
-export type PlanStep = PlanTrayStep | PlanWorkerStep
+export interface PlanSourceStep {
+  kind: 'source'
+  id: string
+  name: string
+  description?: string
+  icon?: string
+  schedule_cron: string
+  dedup: {
+    key: string
+    max_memory: number
+    first_run: 'skip_existing' | 'process_all' | 'process_last_n'
+    first_run_n?: number
+  }
+  source_md?: string
+}
+
+export type PlanStep = PlanTrayStep | PlanWorkerStep | PlanSourceStep
 
 export interface WorkflowPlan {
   project: {
