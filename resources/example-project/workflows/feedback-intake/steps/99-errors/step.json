@@ -1,0 +1,9 @@
+{
+  "id": "99-errors",
+  "kind": "tray",
+  "name": "Errors",
+  "description": "Cards that failed processing land here for manual inspection.",
+  "approval_mode": "manual",
+  "fields": [],
+  "allow_manual_create": false
+}

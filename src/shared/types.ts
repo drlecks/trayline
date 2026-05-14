@@ -220,3 +220,24 @@ export interface MissingSkillsEntry {
   workflowId: string
   missingSkillIds: string[]
 }
+
+// ── Import / Export (Phase 11) ────────────────────────────────────────────────
+
+export interface ExportOptions {
+  /** When true, card files (pending/ready/archived) are included. Default: false. */
+  includeCards: boolean
+}
+
+export interface ExportManifest {
+  trayline_version: string
+  exported_at: string
+  skills: Array<{ id: string; version: string }>
+  mcps: string[]
+}
+
+export interface ImportResult {
+  ok: true
+  projectName: string
+  /** Skills referenced in the manifest that are not installed on this machine. */
+  missingSkills: Array<{ id: string; version: string }>
+}

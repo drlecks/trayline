@@ -1,7 +1,10 @@
-import { useEffect } from 'react'
-import { AlertTriangle, Plus, Trash2 } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { AlertTriangle, Plus, Trash2, Upload, Download } from 'lucide-react'
 import { useProjectStore } from '@/stores/project-store'
 import type { ProjectMeta, ProjectStatus } from '../../../shared/types'
+import type { ImportResult } from '../../../shared/types'
+import ExportProjectDialog from './ExportProjectDialog'
+import ImportMissingSkillsDialog from './ImportMissingSkillsDialog'
 
 function formatRelative(iso: string): string {
   const then = new Date(iso).getTime()
@@ -22,6 +25,11 @@ export default function ProjectListScreen() {
   const setScreen = useProjectStore((s) => s.setScreen)
   const refreshProjects = useProjectStore((s) => s.refreshProjects)
 
+  const [exportTarget, setExportTarget] = useState<ProjectMeta | null>(null)
+  const [importResult, setImportResult] = useState<ImportResult | null>(null)
+  const [importError, setImportError] = useState<string | null>(null)
+  const [importing, setImporting] = useState(false)
+
   useEffect(() => {
     void refreshProjects()
   }, [refreshProjects])
@@ -38,12 +46,41 @@ export default function ProjectListScreen() {
     await refreshProjects()
   }
 
+  async function handleImport() {
+    setImportError(null)
+    setImporting(true)
+    try {
+      const result = await window.trayline.project.import()
+      if ('canceled' in result) return
+      await refreshProjects()
+      if (result.missingSkills.length > 0) {
+        setImportResult(result)
+      }
+    } catch (e) {
+      setImportError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  function handleImportDone() {
+    setImportResult(null)
+    void refreshProjects()
+  }
+
   return (
     <div className="flex flex-col items-center w-full max-w-2xl mx-auto px-8">
       <h1 className="text-2xl font-semibold tracking-tight mb-2">Your projects</h1>
       <p className="text-sm text-neutral-500 dark:text-neutral-400 text-center max-w-md mb-8 leading-relaxed">
         Pick a project to open, or create a new one. Click the status dot to toggle a project active or inactive.
       </p>
+
+      {importError && (
+        <div className="w-full mb-4 flex gap-2 px-3 py-2.5 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/40">
+          <AlertTriangle size={14} strokeWidth={1.75} className="text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+          <p className="text-xs text-red-700 dark:text-red-300">{importError}</p>
+        </div>
+      )}
 
       <ul className="w-full space-y-2">
         <li>
@@ -65,6 +102,31 @@ export default function ProjectListScreen() {
             </span>
             <span className="flex-1 text-sm font-medium text-neutral-700 dark:text-neutral-300">
               Create new project
+            </span>
+          </button>
+        </li>
+
+        <li>
+          <button
+            onClick={handleImport}
+            disabled={importing}
+            className="
+              group w-full flex items-center gap-3
+              rounded-full border border-dashed
+              border-neutral-300 dark:border-neutral-700
+              hover:border-neutral-400 dark:hover:border-neutral-600
+              bg-transparent
+              px-4 py-3
+              text-left
+              transition-colors
+              disabled:opacity-50
+            "
+          >
+            <span className="flex items-center justify-center w-6 h-6 rounded-full bg-neutral-100 dark:bg-neutral-900 text-neutral-600 dark:text-neutral-400">
+              <Download size={14} strokeWidth={2} />
+            </span>
+            <span className="flex-1 text-sm font-medium text-neutral-700 dark:text-neutral-300">
+              {importing ? 'Importing…' : 'Import project from zip'}
             </span>
           </button>
         </li>
@@ -125,6 +187,20 @@ export default function ProjectListScreen() {
               </button>
 
               <button
+                onClick={(e) => { e.stopPropagation(); setExportTarget(p) }}
+                className="
+                  shrink-0 opacity-0 group-hover:opacity-100
+                  p-1.5 rounded-full
+                  text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200
+                  hover:bg-neutral-100 dark:hover:bg-neutral-800
+                  transition-opacity
+                "
+                title="Export project"
+              >
+                <Upload size={14} strokeWidth={1.75} />
+              </button>
+
+              <button
                 onClick={(e) => { e.stopPropagation(); void handleDelete(p) }}
                 className="
                   shrink-0 opacity-0 group-hover:opacity-100
@@ -141,6 +217,25 @@ export default function ProjectListScreen() {
           </li>
         ))}
       </ul>
+
+      {exportTarget && (
+        <ExportProjectDialog
+          projectName={exportTarget.name}
+          displayName={exportTarget.display_name}
+          open={!!exportTarget}
+          onOpenChange={(o) => { if (!o) setExportTarget(null) }}
+        />
+      )}
+
+      {importResult && (
+        <ImportMissingSkillsDialog
+          projectName={importResult.projectName}
+          missingSkills={importResult.missingSkills}
+          open={!!importResult}
+          onOpenChange={(o) => { if (!o) setImportResult(null) }}
+          onDone={handleImportDone}
+        />
+      )}
     </div>
   )
 }

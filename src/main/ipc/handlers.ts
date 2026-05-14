@@ -1,4 +1,4 @@
-import { IpcMain, nativeTheme, BrowserWindow } from 'electron'
+import { IpcMain, nativeTheme, BrowserWindow, dialog } from 'electron'
 import { settingsStore, Settings } from '../services/settings-store'
 import { auditDb } from '../services/audit-db'
 import { projectService } from '../services/project-service'
@@ -12,7 +12,8 @@ import { watcherService } from '../services/watcher-service'
 import { schedulerService } from '../services/scheduler-service'
 import { skillService } from '../services/skill-service'
 import { queueService } from '../services/queue-service'
-import type { BootstrapInfo, ProviderInstallSuggestion, ProviderReadyResult } from '../../shared/types'
+import { exportService } from '../services/export-service'
+import type { BootstrapInfo, ProviderInstallSuggestion, ProviderReadyResult, ExportOptions } from '../../shared/types'
 import type { CardStatus } from '../../shared/card'
 
 export type { BootstrapInfo }
@@ -121,6 +122,50 @@ export function registerIpcHandlers(
       await queueService.unmountWorkflow(name, w.name)
     }
     await projectCreateService.deleteProject(name)
+  })
+
+  // ── Import / Export ───────────────────────────────────────────────────────
+  ipcMain.handle('project:export', async (_: unknown, projectName: string, options: ExportOptions) => {
+    const { filePath, canceled } = await dialog.showSaveDialog({
+      title: 'Export project',
+      defaultPath: `${projectName}.zip`,
+      filters: [{ name: 'Trayline Project', extensions: ['zip'] }],
+    })
+    if (canceled || !filePath) return { canceled: true }
+    await exportService.exportProject(projectName, options, filePath)
+    return { ok: true, path: filePath }
+  })
+
+  ipcMain.handle('project:import', async () => {
+    const { filePaths, canceled } = await dialog.showOpenDialog({
+      title: 'Import project',
+      filters: [{ name: 'Trayline Project', extensions: ['zip'] }],
+      properties: ['openFile'],
+    })
+    if (canceled || filePaths.length === 0) return { canceled: true }
+    const result = await exportService.importProject(filePaths[0])
+    if (result.ok) {
+      const workflows = await projectService.listWorkflows(result.projectName).catch(() => [])
+      for (const w of workflows) {
+        await watcherService.mountWorkflow(result.projectName, w.name)
+        await schedulerService.mountWorkflow(result.projectName, w.name)
+        await queueService.mountWorkflow(result.projectName, w.name)
+      }
+    }
+    return result
+  })
+
+  ipcMain.handle('project:openExample', async () => {
+    const result = await exportService.openExampleProject()
+    if (result.ok) {
+      const workflows = await projectService.listWorkflows(result.projectName).catch(() => [])
+      for (const w of workflows) {
+        await watcherService.mountWorkflow(result.projectName, w.name)
+        await schedulerService.mountWorkflow(result.projectName, w.name)
+        await queueService.mountWorkflow(result.projectName, w.name)
+      }
+    }
+    return result
   })
 
   // ── Usage / rate-limit windows ────────────────────────────────────────────
