@@ -3,6 +3,8 @@ name: Release
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
     inputs:
       reason:
@@ -10,9 +12,11 @@ on:
         required: false
         default: 'manual trigger'
 
+# On PRs we cancel earlier in-progress runs of the same PR (saves CI minutes
+# when force-pushing). On main/dispatch we serialise to avoid publish races.
 concurrency:
-  group: release
-  cancel-in-progress: false
+  group: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'release' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
@@ -127,7 +131,7 @@ jobs:
           CSC_LINK: ${{ steps.win_signing.outputs.signing == 'true' && secrets.WIN_CSC_LINK || '' }}
           CSC_KEY_PASSWORD: ${{ steps.win_signing.outputs.signing == 'true' && secrets.WIN_CSC_KEY_PASSWORD || '' }}
           CSC_IDENTITY_AUTO_DISCOVERY: ${{ steps.win_signing.outputs.signing }}
-        run: npm run build && npx electron-builder --win --publish always
+        run: npm run build && npx electron-builder --win --publish ${{ github.event_name == 'pull_request' && 'never' || 'always' }}
 
       - name: Build (macOS)
         if: matrix.os == 'macos-latest'
@@ -142,16 +146,16 @@ jobs:
         run: |
           npm run build
           if [ "${{ steps.mac_signing.outputs.notarize }}" = "true" ]; then
-            npx electron-builder --mac --publish always --config.mac.notarize=true
+            npx electron-builder --mac --publish ${{ github.event_name == 'pull_request' && 'never' || 'always' }} --config.mac.notarize=true
           else
-            npx electron-builder --mac --publish always
+            npx electron-builder --mac --publish ${{ github.event_name == 'pull_request' && 'never' || 'always' }}
           fi
 
       - name: Build (Linux)
         if: matrix.os == 'ubuntu-latest'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm run build && npx electron-builder --linux --publish always
+        run: npm run build && npx electron-builder --linux --publish ${{ github.event_name == 'pull_request' && 'never' || 'always' }}
 
       # ── Always upload installer artifacts even on failure (debug aid) ──────
       - name: Upload installer artifacts
