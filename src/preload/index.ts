@@ -24,6 +24,7 @@ import type { Card, CardStatus, CardCounts } from '../shared/card'
 import type { QueueEntry } from '../shared/queue'
 import type { PlanFieldDef, PlanTrayStep, PlanWorkerStep } from '../shared/workflow-plan'
 import type { WorkerRun, WorkerRunEvent } from '../shared/worker-run'
+import type { SourceStepConfig, SourceState, SourceRunMeta, SourceRunEvent } from '../shared/types'
 
 const api = {
   settings: {
@@ -135,6 +136,15 @@ const api = {
       process_md?: string
     }): Promise<PlanWorkerStep & { id: string }> =>
       ipcRenderer.invoke(IPC.step.addWorker, input),
+    addSource: (input: {
+      project: string
+      workflow: string
+      name: string
+      description?: string
+      schedule_cron?: string
+      dedup_key?: string
+    }): Promise<SourceStepConfig & { id: string }> =>
+      ipcRenderer.invoke(IPC.step.addSource, input),
     readProcess: (project: string, workflow: string, stepId: string): Promise<string> =>
       ipcRenderer.invoke(IPC.step.readProcess, project, workflow, stepId),
     updateProcess: (input: {
@@ -206,6 +216,36 @@ const api = {
       const listener = (_e: unknown, entries: QueueEntry[]) => handler(entries)
       ipcRenderer.on(IPC.queue.onUpdate, listener)
       return () => ipcRenderer.off(IPC.queue.onUpdate, listener)
+    },
+  },
+  source: {
+    create: (input: {
+      project: string
+      workflow: string
+      name: string
+      description?: string
+      schedule_cron?: string
+      dedup_key?: string
+    }): Promise<SourceStepConfig & { id: string }> =>
+      ipcRenderer.invoke(IPC.source.create, input),
+    runNow: (project: string, workflow: string, stepId: string): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke(IPC.source.runNow, project, workflow, stepId),
+    pause: (project: string, workflow: string, stepId: string): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke(IPC.source.pause, project, workflow, stepId),
+    resume: (project: string, workflow: string, stepId: string): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke(IPC.source.resume, project, workflow, stepId),
+    getState: (project: string, workflow: string, stepId: string): Promise<SourceState> =>
+      ipcRenderer.invoke(IPC.source.getState, project, workflow, stepId),
+    readInstructions: (project: string, workflow: string, stepId: string): Promise<string> =>
+      ipcRenderer.invoke(IPC.source.readInstructions, project, workflow, stepId),
+    updateInstructions: (input: { project: string; workflow: string; stepId: string; content: string }): Promise<void> =>
+      ipcRenderer.invoke(IPC.source.updateInstructions, input),
+    listRuns: (project: string, workflow: string, stepId: string): Promise<SourceRunMeta[]> =>
+      ipcRenderer.invoke(IPC.source.listRuns, project, workflow, stepId),
+    onRunEvent: (handler: (event: SourceRunEvent) => void): (() => void) => {
+      const listener = (_e: unknown, ev: SourceRunEvent) => handler(ev)
+      ipcRenderer.on(IPC.source.onRunEvent, listener)
+      return () => ipcRenderer.off(IPC.source.onRunEvent, listener)
     },
   },
   platform: process.platform as NodeJS.Platform,

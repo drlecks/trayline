@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react'
-import { Inbox, Cpu, AlertTriangle, RefreshCw, AlertCircle, Plus, FileText, ChevronDown, ChevronRight } from 'lucide-react'
+import { Inbox, Cpu, AlertTriangle, RefreshCw, AlertCircle, Plus, FileText, ChevronDown, ChevronRight, Rss } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useProjectStore } from '@/stores/project-store'
 import AddTrayDialog from './AddTrayDialog'
 import AddWorkerDialog from './AddWorkerDialog'
+import AddSourceDialog from './AddSourceDialog'
 import AddStepDialog from './AddStepDialog'
 import TrayDetailPanel from './TrayDetailPanel'
 import WorkerDetailPanel from './WorkerDetailPanel'
+import SourceDetailPanel from './SourceDetailPanel'
 import ContextPackEditor from './ContextPackEditor'
-import type { StepMeta } from '../../../shared/types'
+import type { StepMeta, SourceRunEvent } from '../../../shared/types'
 import type { CardCounts } from '../../../shared/card'
 import type { WorkerRunEvent, WorkerRunStatus } from '../../../shared/worker-run'
 
@@ -27,6 +29,7 @@ export default function ProjectScreen() {
   const [pickOpen, setPickOpen] = useState(false)
   const [addTrayOpen, setAddTrayOpen] = useState(false)
   const [addWorkerOpen, setAddWorkerOpen] = useState(false)
+  const [addSourceOpen, setAddSourceOpen] = useState(false)
   const [showContextEditor, setShowContextEditor] = useState(false)
   const [errorsExpanded, setErrorsExpanded] = useState(false)
 
@@ -132,7 +135,9 @@ export default function ProjectScreen() {
           ) : selectedStep
             ? (selectedStep.kind === 'worker'
                 ? <WorkerDetailPanel step={selectedStep} />
-                : <TrayDetailPanel step={selectedStep} />)
+                : selectedStep.kind === 'source'
+                  ? <SourceDetailPanel step={selectedStep} />
+                  : <TrayDetailPanel step={selectedStep} />)
             : (
               <div className="h-full flex items-center justify-center text-sm text-neutral-400 dark:text-neutral-600">
                 Select a step on the left to see details
@@ -147,11 +152,13 @@ export default function ProjectScreen() {
         onPick={(kind) => {
           setPickOpen(false)
           if (kind === 'tray') setAddTrayOpen(true)
-          else setAddWorkerOpen(true)
+          else if (kind === 'worker') setAddWorkerOpen(true)
+          else setAddSourceOpen(true)
         }}
       />
       <AddTrayDialog open={addTrayOpen} onOpenChange={setAddTrayOpen} />
       <AddWorkerDialog open={addWorkerOpen} onOpenChange={setAddWorkerOpen} />
+      <AddSourceDialog open={addSourceOpen} onOpenChange={setAddSourceOpen} />
     </div>
   )
 }
@@ -268,18 +275,20 @@ function ErrorTraySection({
 }
 
 function StepCard({ step, selected, missingSkills, onClick }: { step: StepMeta; selected: boolean; missingSkills: string[]; onClick: () => void }) {
-  const Icon = step.kind === 'tray'
-    ? (step.id === '99-errors' ? AlertTriangle : Inbox)
-    : Cpu
+  const Icon = step.kind === 'source'
+    ? Rss
+    : step.kind === 'tray'
+      ? (step.id === '99-errors' ? AlertTriangle : Inbox)
+      : Cpu
   const isError = step.id === '99-errors'
 
   const [counts, setCounts] = useState<CardCounts | null>(null)
   const [workerStatus, setWorkerStatus] = useState<WorkerRunStatus | 'idle'>('idle')
+  const [sourceRunning, setSourceRunning] = useState(false)
+  const [sourceCardCount, setSourceCardCount] = useState<number | null>(null)
   const active = useProjectStore((s) => s.active)
   const workflow = useProjectStore((s) => s.workflow)
 
-  // Live count, polled when this card is mounted. Cheap (FS readdir of three
-  // small folders); refresh on a 3 s tick so newly created cards appear soon.
   useEffect(() => {
     if (!active || !workflow || step.kind !== 'tray') return
     let cancelled = false
@@ -292,7 +301,6 @@ function StepCard({ step, selected, missingSkills, onClick }: { step: StepMeta; 
     return () => { cancelled = true; clearInterval(id) }
   }, [active, workflow, step.id, step.kind])
 
-  // Worker status pill — read latest run + listen for live events.
   useEffect(() => {
     if (!active || !workflow || step.kind !== 'worker') return
     let cancelled = false
@@ -308,10 +316,26 @@ function StepCard({ step, selected, missingSkills, onClick }: { step: StepMeta; 
     return () => { cancelled = true; off() }
   }, [active, workflow, step.id, step.kind])
 
+  // Source: poll card count + listen for run events
+  useEffect(() => {
+    if (!active || !workflow || step.kind !== 'source') return
+    let cancelled = false
+    async function tick() {
+      const c = await window.trayline.card.counts(active!.name, workflow!.name, step.id)
+      if (!cancelled) setSourceCardCount(c.ready)
+    }
+    void tick()
+    const id = setInterval(tick, 3000)
+    const off = window.trayline.source.onRunEvent((ev: SourceRunEvent) => {
+      if (ev.stepId !== step.id) return
+      if (ev.type === 'started') setSourceRunning(true)
+      if (ev.type === 'completed' || ev.type === 'failed') { setSourceRunning(false); void tick() }
+    })
+    return () => { cancelled = true; clearInterval(id); off() }
+  }, [active, workflow, step.id, step.kind])
+
   const total = counts ? counts.pending + counts.ready : 0
 
-  // Per-type color tokens. Source isn't wired yet but the palette is ready.
-  // strip = full-height colored band on the left; tint = card background wash.
   const palette = isError
     ? {
         strip: 'bg-error-strip',
@@ -327,6 +351,14 @@ function StepCard({ step, selected, missingSkills, onClick }: { step: StepMeta; 
         tint: 'bg-worker-light/50 dark:bg-violet-950/15',
         ring: 'ring-worker/40',
         label: 'Worker',
+      }
+    : step.kind === 'source'
+    ? {
+        strip: 'bg-emerald-500',
+        stripText: 'text-white',
+        tint: 'bg-emerald-50/50 dark:bg-emerald-950/15',
+        ring: 'ring-emerald-400/40',
+        label: 'Source',
       }
     : {
         strip: 'bg-tray-strip',
@@ -351,7 +383,6 @@ function StepCard({ step, selected, missingSkills, onClick }: { step: StepMeta; 
       `}
     >
       <div className={`flex items-stretch min-h-[60px] ${palette.tint}`}>
-        {/* Full-height colored strip with the type icon */}
         <div className={`
           shrink-0 w-11 flex items-center justify-center
           ${palette.strip} ${palette.stripText}
@@ -359,7 +390,6 @@ function StepCard({ step, selected, missingSkills, onClick }: { step: StepMeta; 
           <Icon size={18} strokeWidth={2} />
         </div>
 
-        {/* Content */}
         <div className="flex-1 min-w-0 flex items-start gap-2 px-3 py-2.5 bg-white/70 dark:bg-neutral-950/60">
           <div className="flex-1 min-w-0">
             <div className="text-sm font-medium truncate leading-tight">{step.name}</div>
@@ -370,6 +400,14 @@ function StepCard({ step, selected, missingSkills, onClick }: { step: StepMeta; 
               )}
               {step.kind === 'worker' && workerStatus !== 'idle' && (
                 <RailStatusPill status={workerStatus} />
+              )}
+              {step.kind === 'source' && sourceRunning && (
+                <span className="text-[10px] font-medium px-1.5 py-0 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 animate-pulse">
+                  Fetching
+                </span>
+              )}
+              {step.kind === 'source' && !sourceRunning && sourceCardCount !== null && sourceCardCount > 0 && (
+                <span>· {sourceCardCount} ready</span>
               )}
             </div>
           </div>
@@ -384,6 +422,9 @@ function StepCard({ step, selected, missingSkills, onClick }: { step: StepMeta; 
             </span>
           )}
           {step.kind === 'worker' && <WorkerStatusBubble status={workerStatus} />}
+          {step.kind === 'source' && sourceRunning && (
+            <span className="shrink-0 inline-block w-[11px] h-[11px] mt-1 rounded-full bg-emerald-500 animate-pulse" />
+          )}
         </div>
       </div>
     </button>

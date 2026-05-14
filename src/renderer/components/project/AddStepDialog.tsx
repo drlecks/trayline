@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Inbox, Cpu } from 'lucide-react'
+import { Inbox, Cpu, Rss } from 'lucide-react'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog'
@@ -8,11 +8,11 @@ import { Button } from '@/components/ui/button'
 interface AddStepDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onPick: (kind: 'tray' | 'worker') => void
+  onPick: (kind: 'tray' | 'worker' | 'source') => void
 }
 
 export default function AddStepDialog({ open, onOpenChange, onPick }: AddStepDialogProps) {
-  const [hovered, setHovered] = useState<'tray' | 'worker' | null>(null)
+  const [hovered, setHovered] = useState<'tray' | 'worker' | 'source' | null>(null)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -22,7 +22,23 @@ export default function AddStepDialog({ open, onOpenChange, onPick }: AddStepDia
           <DialogDescription>Pick the kind of step to add to this workflow.</DialogDescription>
         </DialogHeader>
 
-        <div className="grid grid-cols-2 gap-3 mt-2">
+        <div className="grid grid-cols-3 gap-3 mt-2">
+          <button
+            type="button"
+            onMouseEnter={() => setHovered('source')}
+            onMouseLeave={() => setHovered(null)}
+            onClick={() => onPick('source')}
+            className="text-left rounded-md border border-neutral-200 dark:border-neutral-800 hover:border-neutral-400 dark:hover:border-neutral-600 p-4 transition-colors"
+          >
+            <div className="w-9 h-9 rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mb-3">
+              <Rss size={16} strokeWidth={1.75} />
+            </div>
+            <div className="text-sm font-medium">Source</div>
+            <div className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
+              Fetches new data on a schedule and creates cards.
+            </div>
+          </button>
+
           <button
             type="button"
             onMouseEnter={() => setHovered('tray')}
@@ -59,7 +75,6 @@ export default function AddStepDialog({ open, onOpenChange, onPick }: AddStepDia
         <DialogFooter className="mt-4">
           <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>Cancel</Button>
         </DialogFooter>
-        {/* Hovered hint slot (currently unused but keeps the layout stable) */}
         <div className="sr-only">{hovered}</div>
       </DialogContent>
     </Dialog>
