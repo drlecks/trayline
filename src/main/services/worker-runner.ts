@@ -13,10 +13,11 @@
 import { join } from 'path'
 import fs from 'fs/promises'
 import { spawn as childSpawn } from 'child_process'
-import { shell, type BrowserWindow } from 'electron'
+import { shell, Notification, type BrowserWindow } from 'electron'
 import { fsService, Paths } from './fs-service'
 import { projectService } from './project-service'
 import { auditDb } from './audit-db'
+import { settingsStore } from './settings-store'
 import { adapterRegistry } from '../ai-terminals/registry'
 import { IPC } from '../../shared/ipc-channels'
 import type { AISession } from '../ai-terminals/adapter'
@@ -573,6 +574,13 @@ async function runInner(input: TriggerRunInput): Promise<TriggerRunResult> {
     status: succeeded ? 'succeeded' : 'failed',
     error: runError,
   })
+
+  if (!succeeded && settingsStore.get('notificationsEnabled') && Notification.isSupported()) {
+    new Notification({
+      title: 'Worker run failed',
+      body: `${worker.name}: ${runError ?? `exit ${exitCode}`}`,
+    }).show()
+  }
   // Tell the renderer to refresh footer usage values now that this run has
   // completed (the adapter may have moved within its rolling window).
   for (const win of broadcastTarget()) {

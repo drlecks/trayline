@@ -158,6 +158,36 @@ export default function SettingsScreen() {
         </div>
       </Section>
 
+      {/* Notifications */}
+      <Section title="Notifications" subtitle="System alerts for worker failures.">
+        <label className="flex items-center gap-3 cursor-pointer">
+          <div
+            role="checkbox"
+            aria-checked={settings.notificationsEnabled}
+            onClick={async () => {
+              const next = await window.trayline.settings.set('notificationsEnabled', !settings.notificationsEnabled)
+              setSettings(next)
+            }}
+            className={`
+              relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent
+              transition-colors duration-150 focus:outline-none
+              ${settings.notificationsEnabled
+                ? 'bg-neutral-900 dark:bg-neutral-100'
+                : 'bg-neutral-200 dark:bg-neutral-700'}
+            `}
+          >
+            <span
+              className={`
+                pointer-events-none inline-block h-4 w-4 rounded-full bg-white dark:bg-neutral-900 shadow
+                ring-0 transition-transform duration-150
+                ${settings.notificationsEnabled ? 'translate-x-4' : 'translate-x-0'}
+              `}
+            />
+          </div>
+          <span className="text-xs">Notify when a worker run fails</span>
+        </label>
+      </Section>
+
       {/* AI Terminal */}
       <Section title="AI Terminal" subtitle="Which CLI agent runs your workers, plus the model and effort it should use.">
         <div className="flex flex-col gap-2 mb-4">
