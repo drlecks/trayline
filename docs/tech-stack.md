@@ -28,7 +28,7 @@
 - **node-pty** — real PTY for spawning `claude` and other CLI agents
 - **chokidar** — file system watcher (detects new cards in trays)
 - **better-sqlite3** — local indexed cache for run history and audit log
-- **archiver / unzipper** — zip-based project import/export
+- **archiver / adm-zip** — zip-based project import/export (write / read)
 - **node-cron** — scheduler for workers that poll on an interval
 - **fast-glob** — folder scanning
 - **keytar** — OS keychain access for MCP credentials (Keychain on macOS, Credential Manager on Windows, libsecret on Linux)

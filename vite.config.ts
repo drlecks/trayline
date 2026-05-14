@@ -24,6 +24,7 @@ const mainExternals = [
   'node-pty',
   'node-cron',
   'cron-parser',
+  'archiver',
 ]
 
 export default defineConfig({

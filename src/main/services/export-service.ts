@@ -1,10 +1,10 @@
 import { join } from 'path'
 import { tmpdir } from 'os'
 import fs from 'fs/promises'
-import { createWriteStream, createReadStream } from 'fs'
+import { createWriteStream } from 'fs'
 import { app } from 'electron'
 import archiver from 'archiver'
-import * as unzipper from 'unzipper'
+import AdmZip from 'adm-zip'
 import { Paths } from './fs-service'
 import { projectService } from './project-service'
 import { auditProject } from './security-audit-service'
@@ -147,12 +147,8 @@ async function extractAndValidate(zipPath: string): Promise<{
   const tempDir = join(tmpdir(), `trayline-import-${Date.now()}`)
   await fs.mkdir(tempDir, { recursive: true })
 
-  await new Promise<void>((resolve, reject) => {
-    createReadStream(zipPath)
-      .pipe(unzipper.Extract({ path: tempDir }))
-      .on('close', resolve)
-      .on('error', reject)
-  })
+  const zip = new AdmZip(zipPath)
+  zip.extractAllTo(tempDir, true)
 
   // Read manifest.json from zip root (optional)
   let manifest: ExportManifest | null = null
