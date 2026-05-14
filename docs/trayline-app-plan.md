@@ -55,7 +55,7 @@ Everything lives on disk as folders and JSON files. A whole project is a zip you
 - **node-pty** — real PTY for spawning `claude` and other CLI agents
 - **chokidar** — file system watcher (detects new cards in trays)
 - **better-sqlite3** — local indexed cache for run history and audit log
-- **archiver / unzipper** — zip-based project import/export
+- **archiver / adm-zip** — zip-based project import/export (write / read)
 - **node-cron** — scheduler for workers that poll on an interval
 - **fast-glob** — folder scanning
 
@@ -109,7 +109,7 @@ The whole Trayline world lives in the user's Documents folder so it's discoverab
         │
         ├── context/                  # Context Packs
         │   ├── company-info.md
-        │   ├── brand-voice.md
+        │   ├── _brand-voice.md
         │   └── pricing.md
         │
         ├── workflows/
@@ -214,7 +214,7 @@ Each tray has its own `state/` subfolder for any persistent data the tray needs 
   "color": "#F7A14F",
   "icon": "cpu",
   "skills": ["pdf-reader", "csv-parser"],
-  "context_packs": ["company-info.md", "brand-voice.md"],
+  "context_packs": ["company-info.md"],
   "execution": {
     "command": "claude",
     "args": ["--no-color"],
@@ -384,7 +384,7 @@ In settings, the user picks a default adapter and can override it per-worker. If
 
 ### Color discipline
 - One accent color per project, set in project settings (default soft blue)
-- Trays = blue family / Workers = orange family / Errors = red — but desaturated, not vivid
+- Trays = blue family / Workers = violet family / Errors = red — but desaturated, not vivid (amber/red/green reserved for status)
 - Background: `#FAFAF9` (warm off-white) light, `#0F0F0F` dark
 - Generous whitespace — minimum 24px around content blocks
 
@@ -538,7 +538,7 @@ Tabs: **Cards** / **Config** / **Schema**
 ### 7.3 Worker Detail View (right panel)
 Tabs: **Config** / **Instructions** / **Runs** / **Skills & Context**
 - **Config**: name, description, command (default `claude`), timeout, trigger mode, schedule cron (if scheduled)
-- **Instructions**: full-screen markdown editor for `process.md`, with a side preview. Token estimate displayed. Variables like `{{card.data}}` and `{{context.brand-voice}}` autocomplete.
+- **Instructions**: full-screen markdown editor for `process.md`, with a side preview. Token estimate displayed. Variables like `{{card.data}}` and `{{context._brand-voice}}` autocomplete.
 - **Runs**: history table, click for detail
 - **Skills & Context**: checklist of installed skills + checklist of context pack files. What's checked gets injected into the prompt.
 
@@ -716,37 +716,32 @@ On first launch, the app needs to lay down the global folder structure and seed 
 - "Open in external terminal" button
 - Token estimate display
 
-### Phase 6 — Skills & Context Packs (1 week)
-- Global skills folder (already created in Phase 1, now with UI)
-- Skill picker in worker config
-- Skill `skill.md` injected into prompts
-- Context pack editor (simple file list + markdown editor)
-- Context pack picker in worker config
-- Variable resolution in `process.md` (`{{card.data}}`, `{{context.brand-voice}}`)
+### Phase 6 — Scheduller
+- Allow workers to run on a schedule instead of (or in addition to) being triggered by ready cards.
 
-### Phase 7 — Skill Finder (3 days)
+### Phase 7 — Terminal Configuration (3 days)
+- Settings screen with AI provider / model / effort pickers (each dropdown refreshes from the adapter when the prior selection changes)
+- Footer summary: `Provider · Model · Effort · 5h: <u/l> · Weekly: <u/l>`
+- Adapter API additions: `listModels`, `listEfforts`, `getUsage`, `clearContext`
+- Call `clearContext()` after every worker run (success or failure) to keep token usage down
+
+### Phase 8 — Skill Finder (3 days)
 - Settings → Skills tabs (Installed / Find)
 - Fetch remote index, cache locally
 - Install / uninstall / update flow
 - Loading + offline states
 
-### Phase 8 — Human Review Polish (3 days)
+### Phase 9 — Human Review Polish (3 days)
 - Card editor (not just viewer)
 - Send-back flow with note
 - "My Queue" global view in top bar
 - Notifications for items waiting on the user
 
-### Phase 9 — Run History & Audit Log UI (3 days)
-- Per-worker Runs tab
-- Global History view
-- Filters, search, CSV export
-- Click to expand run details modal
-
-### Phase 10 — Scheduler (3 days)
-- node-cron integration
-- Friendly cron picker UI
-- "Run now" manual trigger button
-- Show next scheduled run time
+### Phase 10 — Skills & Context Packs (1 week)
+- Global skills folder UI (already created in Phase 1)
+- Skill picker in worker config
+- Context pack editor + picker
+- Variable resolution in `process.md`
 
 ### Phase 11 — Import / Export (4 days)
 - Zip export with manifest
@@ -766,7 +761,13 @@ On first launch, the app needs to lay down the global folder structure and seed 
 - Bug bash
 - Build pipelines for macOS, Windows, Linux
 
-**Total MVP estimate: ~11–13 weeks for one full-time developer, faster with two.**
+### Phase N4.1 — Run History & Audit Log UI (3 days, post-MVP)
+- Per-worker Runs tab
+- Global History view
+- Filters, search, CSV export
+- Click to expand run details modal
+
+**Total MVP estimate: ~12–14 weeks for one full-time developer, faster with two.**
 
 ---
 

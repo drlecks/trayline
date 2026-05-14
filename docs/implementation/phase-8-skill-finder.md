@@ -1,4 +1,4 @@
-# Phase 7 — Skill Finder
+# Phase 8 — Skill Finder
 
 **Estimate:** 3 days
 
@@ -12,19 +12,19 @@ Allow users to discover and install skills from the remote catalog.
 
 ## Tasks
 
-- [ ] Skills screen → **+ Add skill** modal with two tabs: **Browse catalog** and **From URL**
-- [ ] **Browse catalog tab:**
+- [x] Skills screen → **+ Add skill** modal with two tabs: **Browse catalog** and **From URL**
+- [x] **Browse catalog tab:**
   - Fetch remote index from `https://raw.githubusercontent.com/[org]/trayline-skills/main/index.json`
   - Cache to `app-data/skills-index-cache.json`
   - Search box filters by name, description, tags
   - Each result: name, description, author, version, tags
   - **Install** button per skill — downloads and installs to `skills/<id>/`
-- [ ] **From URL tab:** (basic version; validation pipeline is N2.1)
+- [x] **From URL tab:** (basic version; validation pipeline is N2.1)
   - Paste URL field
   - Downloads and installs
-- [ ] Loading state during fetch; offline fallback to cache
-- [ ] Installed skills show **Update** / **Uninstall** actions
-- [ ] Uninstall disabled with tooltip if the skill is in use by any worker
+- [x] Loading state during fetch; offline fallback to cache
+- [x] Installed skills show **Update** / **Uninstall** actions
+- [x] Uninstall disabled with tooltip if the skill is in use by any worker
 
 ---
 

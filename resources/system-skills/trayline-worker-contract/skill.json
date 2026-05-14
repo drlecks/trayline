@@ -1,0 +1,6 @@
+{
+  "id": "trayline-worker-contract",
+  "name": "Trayline Worker Output Contract",
+  "version": "1.0.0",
+  "description": "Mandatory output protocol every Trayline worker must follow. Injected automatically into every worker run; do not list this skill manually."
+}

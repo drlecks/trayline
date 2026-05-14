@@ -1,0 +1,184 @@
+import { useEffect, useState } from 'react'
+import { Folder, Sparkles, FolderOpen, Package } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { useProjectStore } from '@/stores/project-store'
+import ImportMissingSkillsDialog from '../projects/ImportMissingSkillsDialog'
+import ImportSecurityAuditDialog from '../projects/ImportSecurityAuditDialog'
+import type { BootstrapInfo, ImportSuccess, ImportNeedsReview } from '../../../shared/types'
+
+export default function WelcomeSplash() {
+  const [info, setInfo] = useState<BootstrapInfo | null>(null)
+  const [importing, setImporting] = useState(false)
+  const [openingExample, setOpeningExample] = useState(false)
+  const [importResult, setImportResult] = useState<ImportSuccess | null>(null)
+  const [importAudit, setImportAudit] = useState<ImportNeedsReview | null>(null)
+  const setScreen = useProjectStore((s) => s.setScreen)
+  const setActive = useProjectStore((s) => s.setActive)
+  const refreshProjects = useProjectStore((s) => s.refreshProjects)
+
+  useEffect(() => {
+    window.trayline.app.bootstrapInfo().then(setInfo)
+  }, [])
+
+  async function openProject(projectName: string) {
+    const meta = await window.trayline.project.get(projectName)
+    if (meta) setActive(meta)
+  }
+
+  async function handleImport() {
+    setImporting(true)
+    try {
+      const result = await window.trayline.project.import()
+      if ('canceled' in result) return
+      await refreshProjects()
+      if (result.ok === 'needs_review') {
+        setImportAudit(result)
+      } else if (result.missingSkills.length > 0) {
+        setImportResult(result)
+      } else {
+        await openProject(result.projectName)
+      }
+    } catch (e) {
+      alert(e instanceof Error ? e.message : String(e))
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  async function handleOpenExample() {
+    setOpeningExample(true)
+    try {
+      const result = await window.trayline.project.openExample()
+      await refreshProjects()
+      if (result.missingSkills.length > 0) {
+        setImportResult(result)
+      } else {
+        await openProject(result.projectName)
+      }
+    } catch (e) {
+      alert(e instanceof Error ? e.message : String(e))
+    } finally {
+      setOpeningExample(false)
+    }
+  }
+
+  async function handleAuditCommit(token: string) {
+    const committed = await window.trayline.project.importCommit(token)
+    setImportAudit(null)
+    await refreshProjects()
+    if (committed.missingSkills.length > 0) {
+      setImportResult(committed)
+    } else {
+      await openProject(committed.projectName)
+    }
+  }
+
+  function handleAuditAbort(token: string) {
+    void window.trayline.project.importAbort(token)
+    setImportAudit(null)
+  }
+
+  async function handleMissingSkillsDone(projectName: string) {
+    setImportResult(null)
+    await refreshProjects()
+    await openProject(projectName)
+  }
+
+  return (
+    <div className="flex flex-col items-center justify-center w-full max-w-2xl mx-auto px-8">
+      <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-neutral-100 dark:bg-neutral-900 mb-6">
+        <Sparkles size={22} className="text-neutral-700 dark:text-neutral-300" strokeWidth={1.5} />
+      </div>
+
+      <h1 className="text-2xl font-semibold tracking-tight mb-2">Welcome to Trayline</h1>
+      <p className="text-sm text-neutral-500 dark:text-neutral-400 text-center max-w-md mb-10 leading-relaxed">
+        Visual AI workflow automation for people who work, not people who code.
+        Start by creating a new project, importing one, or opening the example.
+      </p>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full mb-12">
+        <Button variant="outline" size="lg" className="h-auto min-h-[112px] py-4 px-3 flex-col gap-2 items-center text-center whitespace-normal" onClick={() => setScreen('author')}>
+          <Sparkles size={18} strokeWidth={1.5} className="text-neutral-600 dark:text-neutral-400 shrink-0" />
+          <div className="w-full">
+            <div className="text-sm font-medium leading-tight break-words">Create new project</div>
+            <div className="text-xs text-neutral-500 dark:text-neutral-400 font-normal mt-1 leading-snug break-words">Describe a workflow in plain English</div>
+          </div>
+        </Button>
+
+        <Button
+          variant="outline"
+          size="lg"
+          className="h-auto min-h-[112px] py-4 px-3 flex-col gap-2 items-center text-center whitespace-normal"
+          onClick={handleImport}
+          disabled={importing || openingExample}
+        >
+          <FolderOpen size={18} strokeWidth={1.5} className="text-neutral-600 dark:text-neutral-400 shrink-0" />
+          <div className="w-full">
+            <div className="text-sm font-medium leading-tight break-words">
+              {importing ? 'Scanning…' : 'Import project'}
+            </div>
+            <div className="text-xs text-neutral-500 dark:text-neutral-400 font-normal mt-1 leading-snug break-words">Open a .zip from a colleague</div>
+          </div>
+        </Button>
+
+        <Button
+          variant="outline"
+          size="lg"
+          className="h-auto min-h-[112px] py-4 px-3 flex-col gap-2 items-center text-center whitespace-normal"
+          onClick={handleOpenExample}
+          disabled={importing || openingExample}
+        >
+          <Package size={18} strokeWidth={1.5} className="text-neutral-600 dark:text-neutral-400 shrink-0" />
+          <div className="w-full">
+            <div className="text-sm font-medium leading-tight break-words">
+              {openingExample ? 'Opening…' : 'Example project'}
+            </div>
+            <div className="text-xs text-neutral-500 dark:text-neutral-400 font-normal mt-1 leading-snug break-words">See what's possible</div>
+          </div>
+        </Button>
+      </div>
+
+      {info && (
+        <div className="w-full rounded-lg border border-neutral-200 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-900/30 px-4 py-3 flex items-start gap-3">
+          <Folder size={14} className="text-neutral-500 mt-0.5 shrink-0" strokeWidth={1.75} />
+          <div className="flex-1 min-w-0">
+            <div className="text-xs font-medium text-neutral-700 dark:text-neutral-300">
+              Your data lives at
+            </div>
+            <div className="text-xs text-neutral-500 dark:text-neutral-400 font-mono truncate mt-0.5" data-selectable>
+              {info.dataDir}
+            </div>
+            {info.systemSkillsRestored.length > 0 && (
+              <div className="text-xs text-neutral-500 dark:text-neutral-400 mt-1.5">
+                Restored system skills: {info.systemSkillsRestored.join(', ')}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {importAudit && (
+        <ImportSecurityAuditDialog
+          token={importAudit.token}
+          projectName={importAudit.projectName}
+          securityFindings={importAudit.securityFindings}
+          projectSummary={importAudit.projectSummary}
+          open={!!importAudit}
+          onOpenChange={(o) => { if (!o) handleAuditAbort(importAudit.token) }}
+          onCommit={handleAuditCommit}
+          onAbort={handleAuditAbort}
+        />
+      )}
+
+      {importResult && (
+        <ImportMissingSkillsDialog
+          projectName={importResult.projectName}
+          missingSkills={importResult.missingSkills}
+          open={!!importResult}
+          onOpenChange={(o) => { if (!o) setImportResult(null) }}
+          onDone={() => void handleMissingSkillsDone(importResult.projectName)}
+        />
+      )}
+    </div>
+  )
+}

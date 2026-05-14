@@ -1,0 +1,9 @@
+{
+  "id": "feedback-collector-demo",
+  "name": "feedback-collector-demo",
+  "display_name": "Feedback Collector (Demo)",
+  "description": "An example workflow that collects customer feedback, summarizes it with AI, and tags it by sentiment.",
+  "created_at": "2026-01-01T00:00:00.000Z",
+  "updated_at": "2026-01-01T00:00:00.000Z",
+  "status": "active"
+}

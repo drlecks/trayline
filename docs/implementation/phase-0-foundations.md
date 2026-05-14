@@ -12,15 +12,15 @@ Establish the Electron + React + TypeScript project scaffold and wire up the min
 
 ## Tasks
 
-- [ ] Electron + Vite + React + TypeScript scaffold
-- [ ] Tailwind CSS configured
-- [ ] shadcn/ui set up (button, dialog, form primitives)
-- [ ] Window chrome, top bar shell (placeholder tabs)
-- [ ] Dark / light theme toggle (stored in electron-store)
-- [ ] Settings store (`electron-store` or equivalent) — user prefs, default CLI command
-- [ ] File system service module — read, write, watch via chokidar
-- [ ] SQLite init via `better-sqlite3` — audit log schema, simple insert/query API
-- [ ] IPC bridge between main and renderer processes typed with TypeScript
+- [x] Electron + Vite + React + TypeScript scaffold
+- [x] Tailwind CSS configured
+- [x] shadcn/ui set up (button, dialog, form primitives)
+- [x] Window chrome, top bar shell (placeholder tabs)
+- [x] Dark / light theme toggle (stored in electron-store)
+- [x] Settings store (`electron-store` or equivalent) — user prefs, default CLI command
+- [x] File system service module — read, write, watch via chokidar
+- [x] SQLite init via `better-sqlite3` — audit log schema, simple insert/query API
+- [x] IPC bridge between main and renderer processes typed with TypeScript
 
 ---
 

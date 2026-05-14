@@ -2,6 +2,18 @@
 
 ---
 
+## 7.0 Project List Screen
+
+The default landing screen on launch when at least one project exists on disk. (When the projects folder is empty, the app opens the Workflow Author flow directly instead.)
+
+- Pill list, ordered by `project.json:updated_at` descending — most recently changed project first.
+- The first row is always a dashed **+ Create new project** pill that opens the Workflow Author flow.
+- Each project pill shows: status dot · display name · description · relative timestamp · delete (on hover).
+- The status dot is **green** for `active`, **red** for `inactive`, and clickable to toggle. Toggling persists `status` and bumps `updated_at` in the project's `project.json`. The status field is a forward-looking hook — it does not gate execution today.
+- Clicking the pill body opens the project. The top-bar project switcher exposes an **All projects** entry that returns to this screen.
+
+---
+
 ## 7.1 Linear Workflow Editor (Left Rail)
 
 - Vertical stack of step cards, drag-to-reorder
@@ -27,7 +39,7 @@ Tabs: **Cards** / **Config** / **Schema**
 Tabs: **Config** / **Instructions** / **Runs** / **Skills, MCPs & Context**
 
 - **Config**: name, description, command (default `claude`), timeout, trigger mode, schedule cron (if scheduled)
-- **Instructions**: full-screen markdown editor for `process.md` with side preview. Token estimate displayed. Variables like `{{card.data}}` and `{{context.brand-voice}}` autocomplete.
+- **Instructions**: full-screen markdown editor for `process.md` with side preview. Token estimate displayed. Variables like `{{card.data}}` and `{{context._brand-voice}}` autocomplete.
 - **Runs**: history table, click for detail
 - **Skills, MCPs & Context**: three blocks:
 
@@ -42,7 +54,7 @@ Tabs: **Config** / **Instructions** / **Runs** / **Skills, MCPs & Context**
 │  ☐ Google Drive                                              │
 │                                                              │
 │  Context Packs                                                │
-│  ☑ company-info.md    ☐ brand-voice.md                       │
+│  ☑ company-info.md    ☐ _brand-voice.md (always included)    │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -83,11 +95,24 @@ A tray with `approval_mode: "manual"`. Card sits in `pending/` until a person ac
 
 ## 7.7 Error Tray (`99-errors/`)
 
-Auto-created with every workflow. Hidden by default at the bottom of the left rail under a "View errors (2)" link.
+Auto-created with every workflow. Hidden by default at the bottom of the left rail under a collapsible **"View errors (N)"** link. The link shows a red count badge when there are pending error cards; clicking it expands to reveal the error tray step card.
 
-- Lists failed runs with the original card and error message
-- Each row: **Retry** / **Edit card and retry** / **Archive**
-- Errors don't advance — they're a parking lot
+**Card list** shows for each failed card:
+- Original card summary (first field value)
+- Error message (from the `run_failed` history entry's note)
+- Which worker failed (step id from that history entry)
+- How long ago it failed
+
+**Actions on each pending error card:**
+- **Retry** — moves the card back into the tray feeding the worker that failed; the watcher re-triggers the run automatically
+- **Edit and retry** — opens the card in an editor using the source tray's field schema, lets the user modify values, then retries
+- **Archive** — parks the card permanently, removes it from the error count
+
+Cards in the error tray are only ever **pending** (waiting for the user) or **archived** (parked permanently) — there is no `ready` state, since errors do not advance on their own.
+
+The card viewer's history timeline is colour-coded by tone: red for `run_failed`, amber for `sent_back`, green for `run_completed` / `marked_ready`, neutral grey for routine events. This mirrors the project-wide colour discipline in `design-principles.md`.
+
+**Failure notifications** — when a run fails, an OS notification is shown (if the platform supports it). This can be toggled in Settings → Notifications.
 
 ---
 
@@ -132,9 +157,9 @@ Cron shown as a friendly picker: "Every hour", "Every weekday at 9am", "Custom (
 
 **Layer 3 — Embedded terminal**
 - xterm.js panel with saved `terminal.log` (replay for completed runs, live stream for active)
-- Scroll, search, copy
-- **Open in interactive mode** — lets the user type into the running process (only enabled if awaiting input)
-- **Open in external terminal** — detach to the OS terminal
+- Scroll, search (Ctrl/Cmd+F), copy
+- **Interactive typing** — keystrokes flow straight into the running PTY whenever the run is `running` or `awaiting_input`; the panel is read-only after the run ends
+- **Open in external terminal** — launches the OS terminal (Windows Terminal / Terminal.app / x-terminal-emulator) in the run directory so the user can re-execute by hand
 
 The user never has to open the terminal to use Trayline. But it's always one click away.
 
@@ -142,11 +167,17 @@ The user never has to open the terminal to use Trayline. But it's always one cli
 
 ## 7.11 Skill Finder
 
-- Top bar → **Skills** → **+ Add skill** → **Browse catalog** tab
-- Fetches `https://raw.githubusercontent.com/[org]/trayline-skills/main/index.json`
-- Index: list of `{id, name, description, version, download_url, tags}`
-- Offline-friendly: if the index can't be fetched, the cached version is used
-- **Installed** section shows installed skills with **Update** / **Uninstall**
+- Top bar → **Skills** (lucide `Package` icon) → opens the Skills screen
+- **Installed** section lists installed user skills (not `_system`) with **Update** / **Uninstall**
+  - **Uninstall** is disabled with a tooltip naming the workers when any worker still references the skill in its `step.json` → `skills: []`
+  - **Update** is shown for skills installed from the catalog or a URL
+- **+ Add skill** opens a modal with two tabs
+  - **Browse catalog** — fetches `https://raw.githubusercontent.com/trayline/trayline-skills/main/index.json`, falls back to the cached copy at `app-data/skills-index-cache.json` when offline. Search box filters across name, description, and tags
+  - **From URL** — pastes a base URL containing `skill.json` and `skill.md`; phase 8 only accepts those two files, full validation (executable rejection, multi-file skills) lands in N2.1
+- Catalog entry shape used by phase 8:
+  - `{ id, name, version, description, author?, tags?, base_url, files? }`
+  - `base_url` is a directory URL (trailing slash optional); `files` defaults to `["skill.json", "skill.md"]`
+- Installed `skill.json` records the install source in `_trayline.source` (`catalog` / `url` / `system` / `local`) and `_trayline.source_url` so **Update** knows where to re-fetch from
 
 ---
 
@@ -179,3 +210,176 @@ Two skills ship with the app. Restored from bundled app resources on every launc
 
 - **`trayline-author`** — takes a free-text description, returns a structured workflow plan (JSON: ordered steps, schemas, recommended skills and MCPs per worker, draft `process.md` per worker)
 - **`trayline-scaffold`** — takes a workflow plan and writes it to disk using bundled JSON/MD templates; can be overridden by power users to add custom defaults to every project
+
+---
+
+## 7.15 Persistent Footer
+
+A thin strip rendered at the bottom of every screen, always visible. The right side shows live AI usage indicators that refresh on a 10-second poll.
+
+**What it shows (right side):**
+- **5h window** — percentage of the active AI agent's 5-hour rolling rate-limit window consumed
+- **Weekly window** — percentage of the agent's weekly rate-limit window consumed
+
+**Behaviour:**
+- Polls the main process every 10 seconds via the `usage:get` IPC channel
+- Values ≥ 80 % render in amber to flag impending throttling
+- When usage data is unavailable (no agent installed, fetch failed, MVP placeholder mode), each indicator shows `—`
+- Hovering the indicators shows a tooltip with the data source (`claude-code` / `placeholder` / `unavailable`) and the timestamp of the last snapshot
+
+**Data source:**
+- The footer queries `usageService.getSnapshot()` in the main process.
+- **Currently:** returns `{ fiveHourPct: null, weeklyPct: null, source: 'unavailable' }` — Claude Code does not surface window state through any non-interactive entry point, so we render `—` instead of fabricating numbers.
+- **Phase 4 plan:** as the worker engine spawns Claude Code runs, accumulate the per-call token usage from the CLI's JSON envelope (`usage.input_tokens` + `output_tokens`) into rolling 5-hour and 7-day buckets. This gives a lower bound that's accurate for Trayline-spawned work; usage from the user's other Claude Code sessions remains invisible.
+- **Long-term:** if Anthropic ships a CLI flag or subcommand that prints true window state, swap that in.
+
+**Left half:** currently empty, reserved for future use (project breadcrumbs, sync status, version, etc.).
+
+See `docs/design-principles.md` → **Footer** for visual specification.
+
+---
+
+## 7.16 Source Step
+
+### Left Rail Card
+
+The Source step card in the left rail displays:
+
+```
+┌────────────┐
+│ ⌁ Comments │   ← name, rss icon
+│ 5 new · 23 seen │   ← after last run
+│ next: 3m   │   ← countdown to next scheduled run
+└────────────┘
+```
+
+Status states on the left rail card:
+
+| State | Display |
+|---|---|
+| Idle (scheduled) | countdown to next run: `next: 3m` |
+| Running | `⚙ Fetching...` — animated, accent color |
+| Done | `5 new · 23 seen` — green accent, fades to normal after 30s |
+| Failed | `⚠ Failed` — red triangle; last error shown in detail panel |
+| Never run | `Not run yet` — gray |
+
+### Source Detail Panel (Right Canvas)
+
+Two tabs: **Source** and **Config**.
+
+**Source tab** — full-screen markdown editor for `source.md`. Same editor as the Worker instructions editor (side preview, token estimate, variable autocomplete). The user writes what the AI should fetch and the exact JSON output format it must return.
+
+**Config tab:**
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│  Name          [Instagram Comments              ]            │
+│  Description   [Polls for new comments every 5 min]          │
+│                                                              │
+│  Schedule      [Every 5 minutes            ▼] [Custom...]   │
+│                cron: */5 * * * *                             │
+│                                                              │
+│  Dedup key     [id                          ]               │
+│  Max memory    [10000                       ]               │
+│                                                              │
+│  First run     ○ Skip existing (default)                     │
+│                ○ Process all                                 │
+│                ○ Process last N  [N: ___]                    │
+│                                                              │
+│  Adapter       [claude-code ▼]   Timeout [60s]              │
+│                                                              │
+│  [Run now]   [Pause schedule]                               │
+└──────────────────────────────────────────────────────────────┘
+```
+
+**Schedule picker** shows friendly labels ("Every 5 minutes", "Every hour", "Every day at 9am", "Custom") and renders the resulting cron expression below the picker so users can verify it.
+
+**First run** mode only applies the very first time the source runs (when `seen-ids.json` is empty or absent). After the first run it has no effect.
+
+**Run now** fires the source immediately, outside the cron schedule. Useful for testing `source.md` before relying on the schedule.
+
+**Pause schedule** suspends the cron without deleting the step. The left rail card shows `⏸ Paused`.
+
+### Run History
+
+A **Runs** sub-tab (inside the Config tab, or a third top-level tab) shows a table of past source runs:
+
+| Column | Content |
+|---|---|
+| Time | ISO timestamp |
+| Duration | ms or seconds |
+| Items found | Total items the AI returned |
+| Items new | Cards created this run |
+| Status | ✓ / ⚠ |
+
+Clicking a row shows the raw AI output, the list of new IDs found, and any error detail.
+
+---
+
+## 7.17 Batch Worker Mode
+
+Workers have an optional **Batch mode** toggle in their Config tab. When enabled:
+
+- The worker receives **all** cards currently in the previous step's `ready/` folder as a JSON array (up to `batch_max` items).
+- It produces **one** output card.
+- All input cards are archived after the batch run completes successfully.
+- The trigger must be `scheduled` or `manual` — batch workers do not fire on individual card arrivals.
+
+### Config Tab (Batch toggle)
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│  Batch mode    [●  On]                                        │
+│  Max cards     [50    ]   (leave blank for no limit)          │
+└──────────────────────────────────────────────────────────────┘
+```
+
+When batch mode is on, the left rail card shows a stacked-cards icon to distinguish it visually from a single-card worker.
+
+### Typical use case
+
+A Source step polls Hackernews every 30 minutes and creates one card per new story. A Batch Worker runs once a day on a schedule, picks up all accumulated story cards, and produces a single digest email card. The digest worker's `process.md` receives the full array and summarises everything into one output.
+
+### Input format
+
+The batch worker's AI receives a JSON object:
+
+```json
+{
+  "cards": [
+    { "id": "card_001", "data": { ... } },
+    { "id": "card_002", "data": { ... } }
+  ],
+  "count": 2
+}
+```
+
+The `process.md` instructs the AI how to synthesise the array into one output.
+
+---
+
+## 7.18 Onboarding Tour
+
+A one-time guided tour that runs the first time the user launches the app. Implemented as an overlay with a dimmed backdrop and a highlight ring around the currently-described region.
+
+- Walks through: the welcome screen, the top bar, the left rail of workflow steps, the right detail panel, and a closing card.
+- The tour reads `data-tour="..."` attributes on key DOM regions (`topbar`, `left-rail`, `detail-panel`) so its position adapts to the current screen.
+- "Skip tour" and the final "Done" button both flip `settings.onboardingComplete` to `true`. The tour will not auto-launch again.
+- A **Run onboarding tour** button under **Settings → Help** re-triggers it whenever the user wants a refresher.
+
+---
+
+## 7.19 Keyboard Shortcuts
+
+A small set of global shortcuts wired through `useGlobalShortcuts`. They are skipped while the user is typing in an input or contenteditable element, with the deliberate exception of the command palette (which uses the same global shortcut convention as Slack, VS Code, etc.).
+
+| Shortcut | Action |
+|---|---|
+| ⌘/Ctrl+N | New card in the selected tray |
+| ⌘/Ctrl+, | Open Settings |
+| ⌘/Ctrl+K | Open the command palette |
+| ⌘/Ctrl+/ | Open the keyboard-shortcuts reference dialog |
+
+The **command palette** (⌘/Ctrl+K) is a quick-jump search: type to filter steps in the current workflow, other projects, and the Settings / Skills / Shortcuts screens. ↑/↓ navigate, Enter activates.
+
+A **Keyboard shortcuts** button under **Settings → Help** opens the same reference dialog as ⌘/Ctrl+/.

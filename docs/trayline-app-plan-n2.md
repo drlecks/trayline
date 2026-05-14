@@ -367,7 +367,7 @@ La pestaña **Skills & Context** del worker pasa a llamarse **Skills, MCPs & Con
 │  Context Packs                                                │
 │  ───────────────────────────────────                         │
 │  ☑ company-info.md                                           │
-│  ☐ brand-voice.md                                            │
+│  ☑ _brand-voice.md (always included)                        │
 └──────────────────────────────────────────────────────────────┘
 ```
 
