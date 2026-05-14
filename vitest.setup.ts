@@ -16,10 +16,13 @@ vi.mock('electron', () => ({
   app: {
     getPath: (key: string) => {
       if (key === 'documents') return process.env.__TRAYLINE_TEST_DOCS__!
-      // userData isn't used in tests, but return a usable path just in case
       return process.env.__TRAYLINE_TEST_DOCS__!
     },
     isPackaged: false,
     getAppPath: () => process.cwd(),
+  },
+  Notification: class {
+    static isSupported() { return false }
+    show() {}
   },
 }))

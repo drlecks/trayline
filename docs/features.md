@@ -95,12 +95,24 @@ A tray with `approval_mode: "manual"`. Card sits in `pending/` until a person ac
 
 ## 7.7 Error Tray (`99-errors/`)
 
-Auto-created with every workflow. Hidden by default at the bottom of the left rail under a "View errors (2)" link.
+Auto-created with every workflow. Hidden by default at the bottom of the left rail under a collapsible **"View errors (N)"** link. The link shows a red count badge when there are pending error cards; clicking it expands to reveal the error tray step card.
 
-- Lists failed runs with the original card and error message
-- Cards in the error tray are only ever **pending** (waiting for the user) or **archived** (parked permanently) — there is no `ready` state, since errors do not advance on their own
-- Each pending card offers two actions: **Retry** (moves the card back into the tray feeding the worker that failed, re-triggering the run via the watcher) and **Archive**
-- The card viewer's history timeline is colour-coded by tone: red for `run_failed`, amber for `sent_back`, green for `run_completed` / `marked_ready`, neutral grey for routine events. This mirrors the project-wide colour discipline in `design-principles.md`.
+**Card list** shows for each failed card:
+- Original card summary (first field value)
+- Error message (from the `run_failed` history entry's note)
+- Which worker failed (step id from that history entry)
+- How long ago it failed
+
+**Actions on each pending error card:**
+- **Retry** — moves the card back into the tray feeding the worker that failed; the watcher re-triggers the run automatically
+- **Edit and retry** — opens the card in an editor using the source tray's field schema, lets the user modify values, then retries
+- **Archive** — parks the card permanently, removes it from the error count
+
+Cards in the error tray are only ever **pending** (waiting for the user) or **archived** (parked permanently) — there is no `ready` state, since errors do not advance on their own.
+
+The card viewer's history timeline is colour-coded by tone: red for `run_failed`, amber for `sent_back`, green for `run_completed` / `marked_ready`, neutral grey for routine events. This mirrors the project-wide colour discipline in `design-principles.md`.
+
+**Failure notifications** — when a run fails, an OS notification is shown (if the platform supports it). This can be toggled in Settings → Notifications.
 
 ---
 
