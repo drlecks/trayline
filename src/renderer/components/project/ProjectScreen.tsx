@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Inbox, Cpu, AlertTriangle, RefreshCw, AlertCircle, Plus, FileText, ChevronDown, ChevronRight, Rss } from 'lucide-react'
+import { Inbox, Cpu, AlertTriangle, RefreshCw, AlertCircle, Plus, FileText, ChevronDown, ChevronRight, Rss, Layers } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useProjectStore } from '@/stores/project-store'
 import AddTrayDialog from './AddTrayDialog'
@@ -275,15 +275,17 @@ function ErrorTraySection({
 }
 
 function StepCard({ step, selected, missingSkills, onClick }: { step: StepMeta; selected: boolean; missingSkills: string[]; onClick: () => void }) {
+  const isBatch = step.kind === 'worker' && !!(step.raw as { batch_mode?: boolean }).batch_mode
   const Icon = step.kind === 'source'
     ? Rss
     : step.kind === 'tray'
       ? (step.id === '99-errors' ? AlertTriangle : Inbox)
-      : Cpu
+      : isBatch ? Layers : Cpu
   const isError = step.id === '99-errors'
 
   const [counts, setCounts] = useState<CardCounts | null>(null)
   const [workerStatus, setWorkerStatus] = useState<WorkerRunStatus | 'idle'>('idle')
+  const [lastBatchCount, setLastBatchCount] = useState<number | null>(null)
   const [sourceRunning, setSourceRunning] = useState(false)
   const [sourceCardCount, setSourceCardCount] = useState<number | null>(null)
   const active = useProjectStore((s) => s.active)
@@ -311,7 +313,10 @@ function StepCard({ step, selected, missingSkills, onClick }: { step: StepMeta; 
     const off = window.trayline.worker.onRunEvent((ev: WorkerRunEvent) => {
       if (ev.stepId !== step.id) return
       if (ev.type === 'started') setWorkerStatus('running')
-      if (ev.type === 'finished') setWorkerStatus(ev.status)
+      if (ev.type === 'finished') {
+        setWorkerStatus(ev.status)
+        if (ev.batchCardCount != null) setLastBatchCount(ev.batchCardCount)
+      }
     })
     return () => { cancelled = true; off() }
   }, [active, workflow, step.id, step.kind])
@@ -400,6 +405,9 @@ function StepCard({ step, selected, missingSkills, onClick }: { step: StepMeta; 
               )}
               {step.kind === 'worker' && workerStatus !== 'idle' && (
                 <RailStatusPill status={workerStatus} />
+              )}
+              {isBatch && workerStatus === 'succeeded' && lastBatchCount !== null && (
+                <span className="text-[10px] text-neutral-400">batch: {lastBatchCount}</span>
               )}
               {step.kind === 'source' && sourceRunning && (
                 <span className="text-[10px] font-medium px-1.5 py-0 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 animate-pulse">
