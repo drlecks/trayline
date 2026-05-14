@@ -12,6 +12,7 @@ const defaults: Settings = {
   defaultEffortByAdapter: {},
   notificationsEnabled: true,
   lastOpenedProject: null,
+  onboardingComplete: false,
 }
 
 // Settings live alongside the rest of Trayline's data under

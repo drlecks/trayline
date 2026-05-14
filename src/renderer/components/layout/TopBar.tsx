@@ -5,6 +5,7 @@ import WindowControls from './WindowControls'
 import ProjectSwitcher from './ProjectSwitcher'
 import QueueBadge from './QueueBadge'
 import type { Settings } from '../../../shared/types'
+import iconUrl from '../../../../resources/icon-128.png'
 
 const THEME_CYCLE: Settings['theme'][] = ['system', 'light', 'dark']
 
@@ -26,7 +27,7 @@ export default function TopBar() {
   const Icon = THEME_ICON[theme]
 
   return (
-    <header className="
+    <header data-tour="topbar" className="
       flex items-center justify-between
       h-11 shrink-0
       border-b border-black/[0.06] dark:border-white/[0.06]
@@ -35,6 +36,12 @@ export default function TopBar() {
     ">
       {/* Logo + project switcher */}
       <div className="flex items-center gap-3 px-4">
+        <img
+          src={iconUrl}
+          alt=""
+          className="w-5 h-5 rounded select-none no-drag"
+          draggable={false}
+        />
         <span className="font-semibold text-sm tracking-tight select-none no-drag">
           Trayline
         </span>
