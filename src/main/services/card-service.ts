@@ -329,6 +329,107 @@ async function retryFromErrors(
   return { card: updated, targetStepId }
 }
 
+async function editCard(
+  project: string,
+  workflow: string,
+  stepId: string,
+  cardId: string,
+  data: Record<string, unknown>,
+  opts: { andMarkReady?: boolean } = {},
+): Promise<Card> {
+  let currentStatus: CardStatus | null = null
+  for (const status of ['pending', 'ready', 'archived'] as CardStatus[]) {
+    const p = join(statusDir(project, workflow, stepId, status), `${cardId}.json`)
+    if (await pathExists(p)) { currentStatus = status; break }
+  }
+  if (!currentStatus) throw new Error(`Card not found: ${cardId}`)
+
+  const fromPath = join(statusDir(project, workflow, stepId, currentStatus), `${cardId}.json`)
+  const card = await fsService.readJson<Card>(fromPath)
+  const now = new Date().toISOString()
+
+  const historyEntries: CardHistoryEntry[] = [
+    { at: now, step: stepId, event: 'edited', by: 'user' },
+  ]
+
+  const targetStatus = opts.andMarkReady && currentStatus !== 'ready' ? 'ready' : currentStatus
+
+  if (targetStatus === 'ready' && currentStatus !== 'ready') {
+    auditDb.insert({
+      project_id: project,
+      workflow_id: workflow,
+      step_id: stepId,
+      card_id: cardId,
+      event: 'card_marked_ready',
+      actor: 'user',
+      details_json: JSON.stringify({ from: currentStatus, to: 'ready', via: 'edit' }),
+    })
+    historyEntries.push({ at: now, step: stepId, event: 'marked_ready', by: 'user' })
+  }
+
+  auditDb.insert({
+    project_id: project,
+    workflow_id: workflow,
+    step_id: stepId,
+    card_id: cardId,
+    event: 'card_edited',
+    actor: 'user',
+    details_json: JSON.stringify({ andMarkReady: opts.andMarkReady ?? false }),
+  })
+
+  const updated: Card = { ...card, data, history: [...card.history, ...historyEntries] }
+  const toDir = statusDir(project, workflow, stepId, targetStatus)
+  await fs.mkdir(toDir, { recursive: true })
+  const toPath = join(toDir, `${cardId}.json`)
+  await fsService.writeJsonAtomic(toPath, updated)
+  if (targetStatus !== currentStatus) await fs.unlink(fromPath)
+  return updated
+}
+
+async function sendBackCard(
+  project: string,
+  workflow: string,
+  stepId: string,
+  cardId: string,
+  note?: string,
+): Promise<{ card: Card; targetStepId: string }> {
+  const fromPath = join(statusDir(project, workflow, stepId, 'pending'), `${cardId}.json`)
+  if (!(await pathExists(fromPath))) {
+    throw new Error(`Card not found in pending: ${cardId}`)
+  }
+
+  const wf = await fsService.readJson<{ step_ids: string[] }>(
+    join(projectService.paths.workflowDir(project, workflow), 'workflow.json'),
+  )
+  const idx = wf.step_ids.indexOf(stepId)
+  if (idx <= 0) throw new Error(`No previous step before ${stepId}`)
+  const targetStepId = wf.step_ids[idx - 1]
+
+  const card = await fsService.readJson<Card>(fromPath)
+  const now = new Date().toISOString()
+  const history: CardHistoryEntry = { at: now, step: targetStepId, event: 'sent_back', by: 'user' }
+  if (note) history.note = note
+  const updated: Card = { ...card, history: [...card.history, history] }
+
+  const targetDir = statusDir(project, workflow, targetStepId, 'pending')
+  await fs.mkdir(targetDir, { recursive: true })
+  const targetPath = join(targetDir, `${cardId}.json`)
+
+  auditDb.insert({
+    project_id: project,
+    workflow_id: workflow,
+    step_id: targetStepId,
+    card_id: cardId,
+    event: 'card_sent_back',
+    actor: 'user',
+    details_json: JSON.stringify({ from: stepId, to: targetStepId, note: note ?? null }),
+  })
+
+  await fsService.writeJsonAtomic(targetPath, updated)
+  await fs.unlink(fromPath)
+  return { card: updated, targetStepId }
+}
+
 export const cardService = {
   listCards,
   getCard,
@@ -338,4 +439,6 @@ export const cardService = {
   markReady,
   archiveCard,
   retryFromErrors,
+  editCard,
+  sendBackCard,
 }

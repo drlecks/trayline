@@ -25,12 +25,15 @@ interface ProjectStoreState {
   projectsWithMissingSkills: Set<string>
   /** When set, the author screen treats Generate as a regenerate of this project. */
   regenerateOf: string | null
+  /** When set, CardsTab opens this card directly after mounting. */
+  jumpTarget: { stepId: string; cardId: string } | null
 
   setScreen: (s: Screen) => void
   setActive: (p: ProjectMeta | null) => void
   setSelectedStepId: (id: string | null) => void
   setUnconfiguredMcps: (ids: string[]) => void
   setRegenerateOf: (name: string | null) => void
+  setJumpTarget: (target: { stepId: string; cardId: string } | null) => void
   refreshProjects: () => Promise<void>
   refreshSteps: () => Promise<void>
 }
@@ -46,6 +49,7 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
   missingSkillsByStep: {},
   projectsWithMissingSkills: new Set(),
   regenerateOf: null,
+  jumpTarget: null,
 
   setScreen: (s) => set({ screen: s }),
   setActive: (p) => {
@@ -55,6 +59,7 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
   setSelectedStepId: (id) => set({ selectedStepId: id }),
   setUnconfiguredMcps: (ids) => set({ unconfiguredMcps: ids }),
   setRegenerateOf: (name) => set({ regenerateOf: name }),
+  setJumpTarget: (target) => set({ jumpTarget: target }),
 
   refreshProjects: async () => {
     const all = await window.trayline.project.list()

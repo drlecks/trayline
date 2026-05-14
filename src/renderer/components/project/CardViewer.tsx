@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Check, Archive, FileText, RotateCcw } from 'lucide-react'
+import { ArrowLeft, Check, Archive, FileText, RotateCcw, Pencil, CornerDownLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
 import { useProviderGuard } from '@/stores/provider-guard-store'
+import DynamicForm from '../card/DynamicForm'
 import type { Card, CardStatus, CardEvent } from '../../../shared/card'
+import type { StepMeta } from '../../../shared/types'
+import type { PlanFieldDef } from '../../../shared/workflow-plan'
 
-// Map a history event to a tone so the timeline visually echoes the project's
-// global color system (red = error, amber = warning, green = success, neutral
-// for routine state changes). Mirrors the palette in docs/design-principles.md.
 type EventTone = 'error' | 'warning' | 'success' | 'neutral'
 
 function eventTone(event: CardEvent): EventTone {
@@ -47,13 +48,16 @@ interface CardViewerProps {
   workflow: string
   stepId: string
   cardId: string
+  step?: StepMeta
   onBack: () => void
 }
 
-export default function CardViewer({ project, workflow, stepId, cardId, onBack }: CardViewerProps) {
+export default function CardViewer({ project, workflow, stepId, cardId, step, onBack }: CardViewerProps) {
   const [data, setData] = useState<{ card: Card; status: CardStatus } | null>(null)
   const [acting, setActing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [mode, setMode] = useState<'view' | 'edit' | 'sendBack'>('view')
+  const [sendBackNote, setSendBackNote] = useState('')
 
   useEffect(() => {
     let cancelled = false
@@ -69,7 +73,7 @@ export default function CardViewer({ project, workflow, stepId, cardId, onBack }
     setActing(true); setError(null)
     try {
       await window.trayline.card.markReady(project, workflow, stepId, cardId)
-      onBack() // back to list refreshes; the card is now in ready/
+      onBack()
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
       setActing(false)
@@ -102,12 +106,105 @@ export default function CardViewer({ project, workflow, stepId, cardId, onBack }
     }
   }
 
+  async function handleEdit(values: Record<string, unknown>, andMarkReady: boolean) {
+    setActing(true); setError(null)
+    try {
+      await window.trayline.card.edit(project, workflow, stepId, cardId, values, andMarkReady)
+      onBack()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+      setActing(false)
+    }
+  }
+
+  async function handleSendBack() {
+    setActing(true); setError(null)
+    try {
+      await window.trayline.card.sendBack(project, workflow, stepId, cardId, sendBackNote.trim() || undefined)
+      onBack()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+      setActing(false)
+    }
+  }
+
   if (!data) {
     return <div className="px-6 py-8 text-xs text-neutral-400">Loading card…</div>
   }
 
   const { card, status } = data
   const isErrorTray = stepId === '99-errors'
+  const fields = (step?.raw?.input_schema as { fields?: PlanFieldDef[] } | undefined)?.fields ?? []
+  const hasFields = fields.length > 0
+  const isManual = !isErrorTray && ((step?.raw?.approval_mode as string | undefined) ?? 'manual') === 'manual'
+
+  // ── Edit mode ──────────────────────────────────────────────────────────────
+
+  if (mode === 'edit' && hasFields) {
+    return (
+      <div className="px-6 py-4 max-w-3xl">
+        <button
+          onClick={() => setMode('view')}
+          className="flex items-center gap-1 text-xs text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200 mb-4"
+        >
+          <ArrowLeft size={13} strokeWidth={1.75} /> Back
+        </button>
+        <h2 className="text-sm font-semibold mb-4">Edit card</h2>
+        {error && <div className="text-xs text-red-600 dark:text-red-400 mb-3">{error}</div>}
+        <DynamicForm
+          fields={fields}
+          defaultValues={card.data as Record<string, unknown>}
+          submitting={acting}
+          submitLabel="Save"
+          onCancel={() => setMode('view')}
+          onSubmit={(values) => void handleEdit(values, false)}
+          secondarySubmit={status === 'pending' && !isErrorTray ? {
+            label: 'Save & mark ready',
+            onSubmit: (values) => void handleEdit(values, true),
+          } : undefined}
+        />
+      </div>
+    )
+  }
+
+  // ── Send-back mode ─────────────────────────────────────────────────────────
+
+  if (mode === 'sendBack') {
+    return (
+      <div className="px-6 py-4 max-w-3xl">
+        <button
+          onClick={() => setMode('view')}
+          className="flex items-center gap-1 text-xs text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200 mb-4"
+        >
+          <ArrowLeft size={13} strokeWidth={1.75} /> Back
+        </button>
+        <h2 className="text-sm font-semibold mb-1">Send card back</h2>
+        <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-4">
+          The card will be moved to the previous step's pending queue with this note appended to its history.
+        </p>
+        {error && <div className="text-xs text-red-600 dark:text-red-400 mb-3">{error}</div>}
+        <div className="flex flex-col gap-3">
+          <Textarea
+            rows={3}
+            placeholder="Add a note (optional)…"
+            value={sendBackNote}
+            onChange={(e) => setSendBackNote(e.target.value)}
+            disabled={acting}
+          />
+          <div className="flex justify-end gap-2">
+            <Button size="sm" variant="ghost" onClick={() => setMode('view')} disabled={acting}>
+              Cancel
+            </Button>
+            <Button size="sm" onClick={handleSendBack} disabled={acting}>
+              <CornerDownLeft size={13} strokeWidth={1.75} /> {acting ? 'Sending…' : 'Send back'}
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ── View mode (default) ────────────────────────────────────────────────────
 
   return (
     <div className="px-6 py-4 max-w-3xl">
@@ -129,6 +226,11 @@ export default function CardViewer({ project, workflow, stepId, cardId, onBack }
             </span>
           </div>
         </div>
+        {hasFields && !isErrorTray && (
+          <Button size="sm" variant="ghost" onClick={() => setMode('edit')}>
+            <Pencil size={13} strokeWidth={1.75} /> Edit
+          </Button>
+        )}
       </div>
 
       {/* Fields */}
@@ -148,7 +250,6 @@ export default function CardViewer({ project, workflow, stepId, cardId, onBack }
         </dl>
       </Section>
 
-      {/* Worker output (placeholder until Phase 4) */}
       {card.worker_output && (
         <Section title="Worker output">
           <pre className="text-xs font-mono bg-neutral-50 dark:bg-neutral-900/50 rounded p-3 overflow-auto" data-selectable>
@@ -208,6 +309,11 @@ export default function CardViewer({ project, workflow, stepId, cardId, onBack }
             <Button size="sm" variant="ghost" onClick={handleArchive} disabled={acting}>
               <Archive size={13} strokeWidth={1.75} /> Archive
             </Button>
+            {isManual && (
+              <Button size="sm" variant="ghost" onClick={() => { setSendBackNote(''); setMode('sendBack') }} disabled={acting}>
+                <CornerDownLeft size={13} strokeWidth={1.75} /> Send back
+              </Button>
+            )}
             <Button size="sm" onClick={handleMarkReady} disabled={acting}>
               <Check size={13} strokeWidth={1.75} /> {acting ? 'Working…' : 'Mark ready'}
             </Button>

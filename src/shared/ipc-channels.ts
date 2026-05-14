@@ -80,5 +80,11 @@ export const IPC = {
     markReady: 'card:markReady',
     archive: 'card:archive',
     retry: 'card:retry',
+    edit: 'card:edit',
+    sendBack: 'card:sendBack',
+  },
+  queue: {
+    getPending: 'queue:getPending',
+    onUpdate: 'queue:onUpdate',
   },
 } as const
