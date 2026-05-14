@@ -2,15 +2,87 @@ import { useEffect, useState } from 'react'
 import { Folder, Sparkles, FolderOpen, Package } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useProjectStore } from '@/stores/project-store'
-import type { BootstrapInfo } from '../../../shared/types'
+import ImportMissingSkillsDialog from '../projects/ImportMissingSkillsDialog'
+import ImportSecurityAuditDialog from '../projects/ImportSecurityAuditDialog'
+import type { BootstrapInfo, ImportSuccess, ImportNeedsReview } from '../../../shared/types'
 
 export default function WelcomeSplash() {
   const [info, setInfo] = useState<BootstrapInfo | null>(null)
+  const [importing, setImporting] = useState(false)
+  const [openingExample, setOpeningExample] = useState(false)
+  const [importResult, setImportResult] = useState<ImportSuccess | null>(null)
+  const [importAudit, setImportAudit] = useState<ImportNeedsReview | null>(null)
   const setScreen = useProjectStore((s) => s.setScreen)
+  const setActive = useProjectStore((s) => s.setActive)
+  const refreshProjects = useProjectStore((s) => s.refreshProjects)
 
   useEffect(() => {
     window.trayline.app.bootstrapInfo().then(setInfo)
   }, [])
+
+  async function openProject(projectName: string) {
+    const meta = await window.trayline.project.get(projectName)
+    if (meta) setActive(meta)
+  }
+
+  async function handleImport() {
+    setImporting(true)
+    try {
+      const result = await window.trayline.project.import()
+      if ('canceled' in result) return
+      await refreshProjects()
+      if (result.ok === 'needs_review') {
+        setImportAudit(result)
+      } else if (result.missingSkills.length > 0) {
+        setImportResult(result)
+      } else {
+        await openProject(result.projectName)
+      }
+    } catch (e) {
+      alert(e instanceof Error ? e.message : String(e))
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  async function handleOpenExample() {
+    setOpeningExample(true)
+    try {
+      const result = await window.trayline.project.openExample()
+      await refreshProjects()
+      if (result.missingSkills.length > 0) {
+        setImportResult(result)
+      } else {
+        await openProject(result.projectName)
+      }
+    } catch (e) {
+      alert(e instanceof Error ? e.message : String(e))
+    } finally {
+      setOpeningExample(false)
+    }
+  }
+
+  async function handleAuditCommit(token: string) {
+    const committed = await window.trayline.project.importCommit(token)
+    setImportAudit(null)
+    await refreshProjects()
+    if (committed.missingSkills.length > 0) {
+      setImportResult(committed)
+    } else {
+      await openProject(committed.projectName)
+    }
+  }
+
+  function handleAuditAbort(token: string) {
+    void window.trayline.project.importAbort(token)
+    setImportAudit(null)
+  }
+
+  async function handleMissingSkillsDone(projectName: string) {
+    setImportResult(null)
+    await refreshProjects()
+    await openProject(projectName)
+  }
 
   return (
     <div className="flex flex-col items-center justify-center w-full max-w-2xl mx-auto px-8">
@@ -33,18 +105,34 @@ export default function WelcomeSplash() {
           </div>
         </Button>
 
-        <Button variant="outline" size="lg" className="h-auto min-h-[112px] py-4 px-3 flex-col gap-2 items-center text-center whitespace-normal" disabled title="Coming in Phase 11">
+        <Button
+          variant="outline"
+          size="lg"
+          className="h-auto min-h-[112px] py-4 px-3 flex-col gap-2 items-center text-center whitespace-normal"
+          onClick={handleImport}
+          disabled={importing || openingExample}
+        >
           <FolderOpen size={18} strokeWidth={1.5} className="text-neutral-600 dark:text-neutral-400 shrink-0" />
           <div className="w-full">
-            <div className="text-sm font-medium leading-tight break-words">Import project</div>
+            <div className="text-sm font-medium leading-tight break-words">
+              {importing ? 'Scanning…' : 'Import project'}
+            </div>
             <div className="text-xs text-neutral-500 dark:text-neutral-400 font-normal mt-1 leading-snug break-words">Open a .zip from a colleague</div>
           </div>
         </Button>
 
-        <Button variant="outline" size="lg" className="h-auto min-h-[112px] py-4 px-3 flex-col gap-2 items-center text-center whitespace-normal" disabled title="Coming in Phase 11">
+        <Button
+          variant="outline"
+          size="lg"
+          className="h-auto min-h-[112px] py-4 px-3 flex-col gap-2 items-center text-center whitespace-normal"
+          onClick={handleOpenExample}
+          disabled={importing || openingExample}
+        >
           <Package size={18} strokeWidth={1.5} className="text-neutral-600 dark:text-neutral-400 shrink-0" />
           <div className="w-full">
-            <div className="text-sm font-medium leading-tight break-words">Example project</div>
+            <div className="text-sm font-medium leading-tight break-words">
+              {openingExample ? 'Opening…' : 'Example project'}
+            </div>
             <div className="text-xs text-neutral-500 dark:text-neutral-400 font-normal mt-1 leading-snug break-words">See what's possible</div>
           </div>
         </Button>
@@ -67,6 +155,29 @@ export default function WelcomeSplash() {
             )}
           </div>
         </div>
+      )}
+
+      {importAudit && (
+        <ImportSecurityAuditDialog
+          token={importAudit.token}
+          projectName={importAudit.projectName}
+          securityFindings={importAudit.securityFindings}
+          projectSummary={importAudit.projectSummary}
+          open={!!importAudit}
+          onOpenChange={(o) => { if (!o) handleAuditAbort(importAudit.token) }}
+          onCommit={handleAuditCommit}
+          onAbort={handleAuditAbort}
+        />
+      )}
+
+      {importResult && (
+        <ImportMissingSkillsDialog
+          projectName={importResult.projectName}
+          missingSkills={importResult.missingSkills}
+          open={!!importResult}
+          onOpenChange={(o) => { if (!o) setImportResult(null) }}
+          onDone={() => void handleMissingSkillsDone(importResult.projectName)}
+        />
       )}
     </div>
   )

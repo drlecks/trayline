@@ -220,3 +220,66 @@ export interface MissingSkillsEntry {
   workflowId: string
   missingSkillIds: string[]
 }
+
+// ── Import / Export (Phase 11) ────────────────────────────────────────────────
+
+export interface ExportOptions {
+  /** When true, card files (pending/ready/archived) are included. Default: false. */
+  includeCards: boolean
+}
+
+export interface ExportManifest {
+  trayline_version: string
+  exported_at: string
+  skills: Array<{ id: string; version: string }>
+  mcps: string[]
+}
+
+// ── Security audit ────────────────────────────────────────────────────────────
+
+export type SecurityFindingCategory =
+  | 'suspicious_file'
+  | 'exfiltration'
+  | 'system_access'
+  | 'obfuscation'
+  | 'prompt_injection'
+
+export interface SecurityFinding {
+  severity: 'critical' | 'warning'
+  category: SecurityFindingCategory
+  file: string
+  description: string
+  /** Truncated snippet of the offending text. */
+  match?: string
+}
+
+export interface ImportProjectSummary {
+  displayName: string
+  description: string
+  trays: number
+  workers: number
+  skillsRequired: string[]
+  /** First 300 chars of process.md per worker step. */
+  workerPreviews: Array<{ name: string; excerpt: string }>
+}
+
+/** Import completed — project is on disk and watchers are mounted. */
+export interface ImportSuccess {
+  ok: true
+  projectName: string
+  missingSkills: Array<{ id: string; version: string }>
+}
+
+/**
+ * Security scan found issues — project is held in a temp location.
+ * Call project:importCommit(token) to install or project:importAbort(token) to discard.
+ */
+export interface ImportNeedsReview {
+  ok: 'needs_review'
+  token: string
+  projectName: string
+  securityFindings: SecurityFinding[]
+  projectSummary: ImportProjectSummary
+}
+
+export type ImportResult = ImportSuccess | ImportNeedsReview
