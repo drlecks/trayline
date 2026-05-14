@@ -8,6 +8,7 @@ import { systemSkillsService } from './services/system-skills-service'
 import { workerRunner, setRunEventBroadcast } from './services/worker-runner'
 import { watcherService } from './services/watcher-service'
 import { schedulerService } from './services/scheduler-service'
+import { queueService } from './services/queue-service'
 import { registerIpcHandlers } from './ipc/handlers'
 import { dirnameFromMeta } from './util/paths'
 
@@ -169,6 +170,9 @@ app.whenReady().then(async () => {
     await schedulerService.mountAll()
     stage('schedulerService.mountAll done')
 
+    await queueService.mountAll()
+    stage('queueService.mountAll done')
+
     const theme = settingsStore.get('theme')
     if (theme === 'dark') nativeTheme.themeSource = 'dark'
     else if (theme === 'light') nativeTheme.themeSource = 'light'
@@ -193,5 +197,6 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   void watcherService.unmountAll()
+  void queueService.unmountAll()
   schedulerService.stopAll()
 })
