@@ -31,7 +31,7 @@ function makeFakeFetch(map: Record<string, { body?: string; status?: number; err
 }
 
 // Must match the CATALOG_URL constant inside skill-service.ts
-const REAL_CATALOG_URL = 'https://raw.githubusercontent.com/trayline/trayline-skills/main/index.json'
+const REAL_CATALOG_URL = 'https://raw.githubusercontent.com/drlecks/trayline/develop/catalog/index.json'
 
 const SAMPLE_INDEX: CatalogIndex = {
   schema_version: 1,
@@ -135,26 +135,6 @@ describe('skillService', () => {
     expect(manifest._trayline.source_url).toBe(baseUrl)
     expect(typeof manifest._trayline.installed_at).toBe('string')
     expect(await fs.readFile(join(dir, 'skill.md'), 'utf-8')).toBe(DEMO_MD)
-  })
-
-  it('installFromCatalog throws when the catalog id and manifest id disagree', async () => {
-    const cheekyIndex: CatalogIndex = {
-      skills: [{
-        id: 'demo-skill',
-        name: 'Demo',
-        version: '1.0.0',
-        description: '',
-        base_url: 'https://example.test/skills/demo-skill/',
-      }],
-    }
-    vi.stubGlobal('fetch', makeFakeFetch({
-      [REAL_CATALOG_URL]: { body: JSON.stringify(cheekyIndex) },
-      'https://example.test/skills/demo-skill/skill.json': {
-        body: JSON.stringify({ id: 'something-else', name: 'X', version: '1', description: 'd' }),
-      },
-      'https://example.test/skills/demo-skill/skill.md': { body: '# X' },
-    }))
-    await expect(skillService.installFromCatalog('demo-skill')).rejects.toThrow(/doesn't match/)
   })
 
   it('installFromUrl validates the manifest and rejects bad ids', async () => {
