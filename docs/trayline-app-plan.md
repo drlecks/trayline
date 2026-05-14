@@ -55,7 +55,7 @@ Everything lives on disk as folders and JSON files. A whole project is a zip you
 - **node-pty** — real PTY for spawning `claude` and other CLI agents
 - **chokidar** — file system watcher (detects new cards in trays)
 - **better-sqlite3** — local indexed cache for run history and audit log
-- **archiver / unzipper** — zip-based project import/export
+- **archiver / adm-zip** — zip-based project import/export (write / read)
 - **node-cron** — scheduler for workers that poll on an interval
 - **fast-glob** — folder scanning
 
