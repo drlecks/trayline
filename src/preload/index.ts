@@ -17,6 +17,7 @@ import type {
   InstalledSkillRow,
   ExportOptions,
   ImportResult,
+  ImportSuccess,
 } from '../shared/types'
 import type { MissingSkillsEntry } from '../shared/types'
 import type { Card, CardStatus, CardCounts } from '../shared/card'
@@ -76,7 +77,11 @@ const api = {
       ipcRenderer.invoke(IPC.project.export, name, options),
     import: (): Promise<ImportResult | { canceled: true }> =>
       ipcRenderer.invoke(IPC.project.import),
-    openExample: (): Promise<ImportResult> =>
+    importCommit: (token: string): Promise<ImportSuccess> =>
+      ipcRenderer.invoke(IPC.project.importCommit, token),
+    importAbort: (token: string): Promise<void> =>
+      ipcRenderer.invoke(IPC.project.importAbort, token),
+    openExample: (): Promise<ImportSuccess> =>
       ipcRenderer.invoke(IPC.project.openExample),
   },
   usage: {
