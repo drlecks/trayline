@@ -34,7 +34,7 @@ Each task corresponds to a phase file in this folder. Check off tasks as they ar
 - [x] [Phase 9 — Human Review Polish](./phase-9-human-review.md)
 - [x] [Phase 10 — Skills & Context Packs](./phase-10-skills.md)
 - [x] [Phase 11 — Import / Export](./phase-11-import-export.md)
-- [ ] [Phase 12 — Errors & Retry](./phase-12-errors.md)
+- [x] [Phase 12 — Errors & Retry](./phase-12-errors.md)
 - [ ] [Phase 13 — Polish & Beta](./phase-13-polish.md)
 
 ---
