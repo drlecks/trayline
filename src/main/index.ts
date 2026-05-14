@@ -9,6 +9,7 @@ import { workerRunner, setRunEventBroadcast } from './services/worker-runner'
 import { watcherService } from './services/watcher-service'
 import { schedulerService } from './services/scheduler-service'
 import { queueService } from './services/queue-service'
+import { setupAutoUpdater } from './services/auto-update-service'
 import { registerIpcHandlers } from './ipc/handlers'
 import { dirnameFromMeta } from './util/paths'
 
@@ -172,6 +173,8 @@ app.whenReady().then(async () => {
 
     await queueService.mountAll()
     stage('queueService.mountAll done')
+
+    setupAutoUpdater(stage)
 
     const theme = settingsStore.get('theme')
     if (theme === 'dark') nativeTheme.themeSource = 'dark'

@@ -30,11 +30,14 @@ Empty states, onboarding, keyboard shortcuts, and build pipelines.
   - Shortcuts reference accessible from Settings → Help
   - *Note: focused-card `Space` shortcut not wired in this phase — the CardViewer's existing "Mark ready" button handles that path; can be added later as a focused-element binding without protocol changes.*
 - [ ] Bug bash — end-to-end test of all core flows *(manual; runs as part of beta validation)*
-- [ ] **Build pipelines:** *(deferred — requires platform-specific signing certificates and CI secrets; will land in a dedicated build/release pass)*
-  - macOS (universal binary, signed)
-  - Windows (NSIS installer, signed if possible)
+- [x] **Build pipelines:** wired in `.github/workflows/release.yml`, documented in [`docs/release.md`](../release.md)
+  - macOS (arm64 + x64 DMGs, hardened runtime, notarize when Apple secrets present)
+  - Windows (NSIS installer, signs when `WIN_CSC_LINK` secret present, unsigned otherwise)
   - Linux (AppImage)
-  - CI config (GitHub Actions)
+  - CI: GitHub Actions, push-to-main + `workflow_dispatch`, concurrency-grouped, tests block builds
+  - Versioning: `1.0.${{ github.run_number }}` injected at build time; `package.json` floor stays at `1.0.0`
+  - Auto-update: `electron-updater` against the GitHub Releases feed, prerelease channel
+  - Releases marked `prerelease: true` while in beta
 
 ---
 

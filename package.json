@@ -1,6 +1,6 @@
 {
   "name": "trayline",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Visual AI workflow automation for people who work, not people who code.",
   "main": "dist-electron/main/index.js",
   "author": "drlecks",
@@ -45,6 +45,7 @@
     "clsx": "^2.1.1",
     "cron-parser": "^5.5.0",
     "electron-store": "^8.2.0",
+    "electron-updater": "^6.8.3",
     "fast-glob": "^3.3.2",
     "lucide-react": "^0.469.0",
     "node-cron": "^4.2.1",
@@ -108,13 +109,28 @@
         "to": "example-project"
       }
     ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "drlecks",
+        "repo": "trayline",
+        "releaseType": "prerelease"
+      }
+    ],
     "mac": {
       "icon": "resources/icon-fill-1024.png",
+      "category": "public.app-category.productivity",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "resources/entitlements.mac.plist",
+      "entitlementsInherit": "resources/entitlements.mac.plist",
+      "notarize": false,
       "target": [
         {
           "target": "dmg",
           "arch": [
-            "universal"
+            "arm64",
+            "x64"
           ]
         }
       ]
@@ -123,15 +139,27 @@
       "icon": "resources/icon-fill-1024.png",
       "target": [
         {
-          "target": "nsis"
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
         }
       ]
     },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true
+    },
     "linux": {
       "icon": "resources/icon-fill-1024.png",
+      "category": "Office",
       "target": [
         {
-          "target": "AppImage"
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
         }
       ]
     }
