@@ -4,22 +4,38 @@ Each task corresponds to a phase file in this folder. Check off tasks as they ar
 
 ---
 
+## How to work on a task
+
+> Full details are in the **Git Branching Workflow** section of `CLAUDE.md`. This is the short version.
+
+**Before starting any phase:**
+1. `git checkout develop && git pull origin develop`
+2. `git checkout -b phase/<phase-id>` (e.g. `phase/phase-0-foundations`)
+3. Read the phase file, implement, commit — including any doc updates.
+4. As each individual task inside the phase is completed, check it off in the phase file (`- [ ]` → `- [x]`) and commit.
+5. `git push -u origin phase/<phase-id>`
+6. Ask the user to review. **Do not merge until confirmed.**
+7. On approval: `git checkout develop && git merge --no-ff phase/<phase-id>` → push → delete branch.
+8. Check off the phase in the list below and commit directly on `develop`.
+
+---
+
 ## MVP Phases
 
-- [ ] [Phase 0 — Foundations](./phase-0-foundations.md)
-- [ ] [Phase 1 — Global App Skills & First-Run Bootstrap](./phase-1-bootstrap.md)
-- [ ] [Phase 2 — Projects & Workflow Author](./phase-2-workflow-author.md)
-- [ ] [Phase 3 — Trays + Manual Cards](./phase-3-trays.md)
-- [ ] [Phase 4 — Workers + CLI Execution](./phase-4-workers.md)
-- [ ] [Phase 5 — Terminal Integration](./phase-5-terminal.md)
-- [ ] [Phase 6 — Skills & Context Packs](./phase-6-skills.md)
-- [ ] [Phase 7 — Skill Finder](./phase-7-skill-finder.md)
-- [ ] [Phase 8 — Human Review Polish](./phase-8-human-review.md)
-- [ ] [Phase 9 — Run History & Audit Log UI](./phase-9-audit-log.md)
-- [ ] [Phase 10 — Scheduler](./phase-10-scheduler.md)
-- [ ] [Phase 11 — Import / Export](./phase-11-import-export.md)
-- [ ] [Phase 12 — Errors & Retry](./phase-12-errors.md)
-- [ ] [Phase 13 — Polish & Beta](./phase-13-polish.md)
+- [x] [Phase 0 — Foundations](./phase-0-foundations.md)
+- [x] [Phase 1 — Global App Skills & First-Run Bootstrap](./phase-1-bootstrap.md)
+- [x] [Phase 2 — Projects & Workflow Author](./phase-2-workflow-author.md)
+- [x] [Phase 3 — Trays + Manual Cards](./phase-3-trays.md)
+- [x] [Phase 4 — Workers + CLI Execution](./phase-4-workers.md)
+- [x] [Phase 5 — Terminal Integration](./phase-5-terminal.md)
+- [x] [Phase 6 — Scheduler](./phase-6-scheduler.md)
+- [x] [Phase 7 — Terminal Configuration](./phase-7-terminal-configuration.md)
+- [x] [Phase 8 — Skill Finder](./phase-8-skill-finder.md)
+- [x] [Phase 9 — Human Review Polish](./phase-9-human-review.md)
+- [x] [Phase 10 — Skills & Context Packs](./phase-10-skills.md)
+- [x] [Phase 11 — Import / Export](./phase-11-import-export.md)
+- [x] [Phase 12 — Errors & Retry](./phase-12-errors.md)
+- [x] [Phase 13 — Polish & Beta](./phase-13-polish.md)
 
 ---
 
@@ -36,12 +52,29 @@ Each task corresponds to a phase file in this folder. Check off tasks as they ar
 
 ---
 
+## N3 Phases (Sources & Batch Workers)
+
+- [ ] [Phase N3.1 — Source Engine](./phase-n3-1-source-engine.md)
+- [ ] [Phase N3.2 — Source Step UI](./phase-n3-2-source-ui.md)
+- [ ] [Phase N3.3 — Batch Worker Mode](./phase-n3-3-batch-worker.md)
+- [ ] [Phase N3.4 — Workflow Author Integration](./phase-n3-4-author-support.md)
+
+---
+
+## N4 Phases (Observability)
+
+- [ ] [Phase N4.1 — Run History & Audit Log UI](./phase-n4-1-audit-log.md)
+
+---
+
 ## Estimates
 
 | Block | Estimate |
 |---|---|
 | MVP (Phases 0–13) | ~11–13 weeks (1 developer) |
 | N2 (Phases N2.1–N2.8) | ~6–7 weeks (1 developer) |
-| **Total** | **~17–20 weeks** |
+| N3 (Phases N3.1–N3.4) | ~3–4 weeks (1 developer) |
+| N4 (Phase N4.1) | ~3 days (1 developer) |
+| **Total** | **~20–24 weeks** |
 
-Highest-risk areas: Phase N2.4 (OAuth in Electron has OS-specific quirks), Phase N2.5 (clean MCP integration into the adapter layer).
+Highest-risk areas: Phase N2.4 (OAuth in Electron has OS-specific quirks), Phase N2.5 (clean MCP integration into the adapter layer), Phase N3.1 (atomic dedup index under crash conditions).

@@ -1,0 +1,169 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Why are you running this manually?'
+        required: false
+        default: 'manual trigger'
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Typecheck + Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Tests
+        run: npm test
+
+  build:
+    name: Build (${{ matrix.os }})
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Cache Electron binaries
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+            ~/Library/Caches/electron
+            ~/Library/Caches/electron-builder
+            ~\AppData\Local\electron\Cache
+            ~\AppData\Local\electron-builder\Cache
+          key: electron-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Patch version to 1.0.<run_number> so each release is monotonic and
+      # uniquely tagged on GitHub. The package.json floor stays at 1.0.0; we
+      # only bump it manually for minor/major.
+      - name: Set release version
+        shell: bash
+        run: |
+          NEW_VERSION="1.0.${{ github.run_number }}"
+          echo "Setting version to ${NEW_VERSION}"
+          npm version --no-git-tag-version --allow-same-version "${NEW_VERSION}"
+          echo "RELEASE_VERSION=${NEW_VERSION}" >> "$GITHUB_ENV"
+
+      # ── Detect signing secrets ─────────────────────────────────────────────
+      # We don't fail when certs are missing — we just skip signing on that
+      # platform and emit a warning so the run remains green. End users will
+      # still get a usable (unsigned) build for testing.
+      - name: Check Windows signing secrets
+        id: win_signing
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        run: |
+          if [ -n "${{ secrets.WIN_CSC_LINK }}" ] && [ -n "${{ secrets.WIN_CSC_KEY_PASSWORD }}" ]; then
+            echo "::notice title=Windows signing::Authenticode certificate detected — signing enabled"
+            echo "signing=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning title=Windows signing skipped::No WIN_CSC_LINK/WIN_CSC_KEY_PASSWORD secrets — producing UNSIGNED Windows build"
+            echo "signing=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check macOS signing secrets
+        id: mac_signing
+        if: matrix.os == 'macos-latest'
+        shell: bash
+        run: |
+          if [ -n "${{ secrets.CSC_LINK }}" ] && [ -n "${{ secrets.CSC_KEY_PASSWORD }}" ]; then
+            echo "::notice title=macOS signing::Developer ID certificate detected — signing enabled"
+            echo "signing=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning title=macOS signing skipped::No CSC_LINK/CSC_KEY_PASSWORD secrets — producing UNSIGNED macOS build (Gatekeeper will block end users)"
+            echo "signing=false" >> "$GITHUB_OUTPUT"
+          fi
+          if [ -n "${{ secrets.APPLE_ID }}" ] && [ -n "${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}" ] && [ -n "${{ secrets.APPLE_TEAM_ID }}" ]; then
+            echo "::notice title=macOS notarization::Apple ID + team detected — notarization enabled"
+            echo "notarize=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning title=macOS notarization skipped::No APPLE_ID/APPLE_APP_SPECIFIC_PASSWORD/APPLE_TEAM_ID — notarization disabled"
+            echo "notarize=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # ── Build + publish to GitHub Releases ─────────────────────────────────
+
+      - name: Build (Windows)
+        if: matrix.os == 'windows-latest'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_LINK: ${{ steps.win_signing.outputs.signing == 'true' && secrets.WIN_CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ steps.win_signing.outputs.signing == 'true' && secrets.WIN_CSC_KEY_PASSWORD || '' }}
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ steps.win_signing.outputs.signing }}
+        run: npm run build && npx electron-builder --win --publish always
+
+      - name: Build (macOS)
+        if: matrix.os == 'macos-latest'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_LINK: ${{ steps.mac_signing.outputs.signing == 'true' && secrets.CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ steps.mac_signing.outputs.signing == 'true' && secrets.CSC_KEY_PASSWORD || '' }}
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ steps.mac_signing.outputs.signing }}
+          APPLE_ID: ${{ steps.mac_signing.outputs.notarize == 'true' && secrets.APPLE_ID || '' }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ steps.mac_signing.outputs.notarize == 'true' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ steps.mac_signing.outputs.notarize == 'true' && secrets.APPLE_TEAM_ID || '' }}
+        run: |
+          npm run build
+          if [ "${{ steps.mac_signing.outputs.notarize }}" = "true" ]; then
+            npx electron-builder --mac --publish always --config.mac.notarize=true
+          else
+            npx electron-builder --mac --publish always
+          fi
+
+      - name: Build (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run build && npx electron-builder --linux --publish always
+
+      # ── Always upload installer artifacts even on failure (debug aid) ──────
+      - name: Upload installer artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trayline-${{ runner.os }}-v${{ env.RELEASE_VERSION }}
+          path: |
+            release/*.exe
+            release/*.dmg
+            release/*.AppImage
+            release/*.blockmap
+            release/*.yml
+          if-no-files-found: ignore
+          retention-days: 14

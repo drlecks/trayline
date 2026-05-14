@@ -10,7 +10,7 @@ Everything is files. SQLite is just a fast index built from those files.
 ~/Documents/Trayline/
 │
 ├── app-data/
-│   ├── settings.json               # User prefs, theme, default CLI command
+│   ├── settings.json               # User prefs (theme, default adapter, last opened project, etc.)
 │   ├── skills-index-cache.json     # Last fetched skill catalog
 │   ├── mcps-index-cache.json       # Last fetched MCP registry
 │   ├── mcps-catalog.json           # Curated MCP list (bundled in app, copied on first launch)
@@ -50,7 +50,7 @@ Everything is files. SQLite is just a fast index built from those files.
         ├── README.md
         ├── context/
         │   ├── company-info.md
-        │   └── brand-voice.md
+        │   └── _brand-voice.md
         ├── workflows/
         │   └── new-client-intake/
         │       ├── workflow.json
@@ -70,6 +70,24 @@ Workflows are linear — the prefix encodes order on disk. Reordering the workfl
 ---
 
 ## File Shapes
+
+### Project (`project.json`)
+
+```json
+{
+  "id": "client-onboarding",
+  "name": "client-onboarding",
+  "display_name": "Client Onboarding",
+  "description": "Intake new clients and route their requests.",
+  "created_at": "2026-05-07T14:32:11Z",
+  "status": "active",
+  "updated_at": "2026-05-13T09:10:22Z"
+}
+```
+
+- `status` is `"active" | "inactive"`. It does not gate execution today; it's a hook for future scheduling/visibility features and drives the green/red dot on the Project List screen.
+- `updated_at` is bumped whenever the project is created, regenerated, or has its status toggled. The Project List screen sorts on this field, descending.
+- Both fields are optional on disk for backward compatibility — readers default missing `status` to `"active"` and missing `updated_at` to `created_at`.
 
 ### Card (`card_2026-05-07_001.json`)
 
@@ -129,7 +147,7 @@ Cards live in three subfolders: `pending/`, `ready/`, `archived/`.
   "icon": "cpu",
   "skills": ["pdf-reader", "csv-parser"],
   "mcps": ["gmail", "google-calendar"],
-  "context_packs": ["company-info.md", "brand-voice.md"],
+  "context_packs": ["company-info.md"],
   "execution": {
     "command": "claude",
     "args": ["--no-color"],
@@ -140,10 +158,48 @@ Cards live in three subfolders: `pending/`, `ready/`, `archived/`.
     "mode": "on_ready | scheduled | manual",
     "schedule_cron": null
   },
+  "batch_mode": false,
+  "batch_max": null,
   "on_success": "advance",
   "on_failure": "send_to_errors"
 }
 ```
+
+When `batch_mode` is `true`, the worker receives all cards currently in the previous step's `ready/` folder as a JSON array (up to `batch_max` items, default unlimited). It produces **one** output card. All source cards are archived after the batch run completes successfully. `batch_mode` is mutually exclusive with `trigger.mode: "on_ready"` — a batch worker must use `scheduled` or `manual` trigger.
+
+### Source `step.json`
+
+```json
+{
+  "id": "00-source",
+  "kind": "source",
+  "name": "Instagram Comments",
+  "description": "Polls for new comments every 5 minutes",
+  "icon": "rss",
+  "color": "#4CB87E",
+  "schedule_cron": "*/5 * * * *",
+  "dedup": {
+    "key": "id",
+    "max_memory": 10000,
+    "first_run": "skip_existing"
+  },
+  "execution": {
+    "command": "claude",
+    "timeout_seconds": 60,
+    "adapter": "claude-code"
+  }
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `kind` | Always `"source"` |
+| `schedule_cron` | Standard cron expression for how often the source runs |
+| `dedup.key` | The field name in each AI-returned JSON item used as the unique identifier |
+| `dedup.max_memory` | Maximum number of IDs stored in `seen-ids.json`; oldest entries pruned when exceeded |
+| `dedup.first_run` | What to do on the very first run: `skip_existing` (default — fetch but discard all, record IDs only), `process_all` (create cards for everything found), `process_last_n` (create cards for the N most recent) |
+
+A Source step is always the **first** step in a workflow. It has no preceding step to read cards from — it generates cards by polling the world.
 
 ### Skill `skill.json`
 
@@ -183,6 +239,30 @@ Cards live in three subfolders: `pending/`, `ready/`, `archived/`.
 
 **Credentials are never in `mcp.json`.** They live in the OS keychain (keytar). `state/status.json` only stores flags (`configured: true/false`), never the secret itself.
 
+### App settings (`app-data/settings.json`)
+
+User-level preferences shared across projects. Lives at `~/Documents/Trayline/app-data/settings.json` so the whole Trayline directory is self-contained — backing it up is a single folder copy.
+
+```json
+{
+  "theme": "system",
+  "defaultCliCommand": "claude",
+  "defaultAdapterId": "claude-code",
+  "notificationsEnabled": true,
+  "lastOpenedProject": "client-onboarding"
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `theme` | `light` / `dark` / `system`. Persists across launches. |
+| `defaultCliCommand` | The CLI binary the worker engine spawns by default. |
+| `defaultAdapterId` | Which AI Terminal Adapter is active by default. |
+| `notificationsEnabled` | Whether OS notifications fire on completed/failed runs. |
+| `lastOpenedProject` | Folder id of the project the user had open when the app last closed. On launch, the renderer reads this and reopens that project automatically (if it still exists on disk). `null` means the user was on the welcome screen. |
+
+The renderer writes `lastOpenedProject` whenever the active project changes (open / switch / close). When a project is deleted, the field is cleared.
+
 ---
 
 ## Step Folder Structure
@@ -221,6 +301,49 @@ Cards live in three subfolders: `pending/`, `ready/`, `archived/`.
         └── meta.json
 ```
 
+### Source
+
+```
+00-source/
+├── step.json
+├── source.md                  # AI instructions — what to fetch and how to format output
+├── state/
+│   ├── seen-ids.json          # [{id: "...", seen_at: "ISO"}], capped at dedup.max_memory
+│   └── counters.json          # {runs_total, items_found, items_new, last_run_at}
+└── cards/
+    ├── ready/                 # New deduplicated items, consumed by the next step
+    └── archived/              # Items already processed downstream
+```
+
+`source.md` instructs the AI what to fetch and specifies the exact JSON output format. It must include the field that matches `dedup.key`. Example:
+
+```markdown
+# Instagram Comments
+
+Use the Instagram MCP to read all comments on post {{config.post_url}}.
+
+For each comment, output a JSON array item with:
+- id: the comment's unique ID (string, used for deduplication)
+- author: username (string)
+- text: comment content (string)
+- posted_at: ISO 8601 timestamp
+
+Return ONLY the JSON array. No explanations, no markdown fences.
+```
+
+#### `seen-ids.json`
+
+```json
+[
+  { "id": "comment_12345", "seen_at": "2026-05-11T09:00:00Z" },
+  { "id": "comment_12346", "seen_at": "2026-05-11T09:00:00Z" }
+]
+```
+
+- Entries are appended after each run.
+- When the array length exceeds `dedup.max_memory`, the oldest entries (by `seen_at`) are pruned.
+- The file is written atomically: written to `seen-ids.json.tmp`, then renamed. This means a crash mid-write never corrupts the dedup index.
+
 ---
 
 ## Atomic Card Movement & Crash Safety
@@ -233,6 +356,28 @@ A card never gets moved partway. The rule: **a card only changes folders when th
 - On next launch, Trayline scans for orphaned `runs/*` folders without a `meta.json` marked `finished` and treats them as failed — the source card is still in `ready/`, untouched, ready to retry.
 
 **User-visible guarantee: closing the app while a worker is mid-process loses the run-in-progress, but never loses or duplicates a card.**
+
+---
+
+## Worker Output Contract
+
+Every worker run produces a single JSON object on stdout. The shape is decided by the worker's `process.md`, but Trayline reserves one top-level key, `trayline_error`, as the **failure envelope**:
+
+```json
+{
+  "trayline_error": {
+    "code": "<short_snake_case>",
+    "message": "<one-line human-readable explanation>",
+    "details": "<optional longer explanation>"
+  }
+}
+```
+
+When the parsed output contains `trayline_error`, the worker-runner treats the run as **failed** regardless of the process exit code: it writes a `run_failed` audit entry with `code: message` as the error note, leaves `output.json` unwritten, and moves the source card into the project's error tray (`99-errors/cards/pending/`). The error tray card preserves the original `card.data`; the failure note lives in `card.history`.
+
+Workers are taught this contract by the bundled `trayline-worker-contract` system skill, which the runner injects automatically into every worker prompt — per-worker `process.md` files only need to *remind* the agent to use the envelope when it cannot complete the task.
+
+Success replies must **not** include `trayline_error`. The contract is exclusive: either the worker returns its task-specific success shape, or it returns the failure envelope.
 
 ---
 
@@ -253,3 +398,14 @@ A card never gets moved partway. The rule: **a card only changes folders when th
 **Card events:** `card_created`, `card_marked_ready`, `run_started`, `run_completed`, `run_failed`, `card_approved`, `card_rejected`
 
 **MCP events:** `mcp_installed`, `mcp_uninstalled`, `mcp_configured`, `mcp_credentials_reset`, `mcp_health_check_failed`, `run_aborted_mcp_not_ready`
+
+**AI terminal events:** `ai_terminal_clear_failed` — written when the post-run `adapter.clearContext()` call throws. Non-fatal: the run's own outcome (`run_completed` / `run_failed`) is recorded separately and remains authoritative. The `details_json` carries `{ run_id, adapter, error }`.
+
+**Source events:** `source_run_started`, `source_run_completed`, `source_run_failed`, `source_item_new`
+
+| Event | `details_json` shape |
+|---|---|
+| `source_run_started` | `{ "schedule_cron": "*/5 * * * *" }` |
+| `source_run_completed` | `{ "items_found": 12, "items_new": 3, "duration_ms": 4210 }` |
+| `source_run_failed` | `{ "error": "AI returned invalid JSON", "duration_ms": 1100 }` |
+| `source_item_new` | `{ "item_id": "comment_12347", "card_id": "card_2026-05-11_007" }` — one row per new card created |

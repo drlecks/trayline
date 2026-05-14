@@ -1,0 +1,36 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+  /* Frameless window drag regions */
+  .app-drag    { -webkit-app-region: drag; }
+  .no-drag     { -webkit-app-region: no-drag; }
+}
+
+@layer base {
+  :root {
+    --bg: #FAFAF9;
+    --fg: #1a1a1a;
+  }
+
+  .dark {
+    --bg: #0F0F0F;
+    --fg: #f0f0f0;
+  }
+
+  html, body, #root {
+    @apply h-full;
+  }
+
+  body {
+    @apply bg-[var(--bg)] text-[var(--fg)] font-sans text-sm leading-relaxed antialiased;
+    /* Prevent text selection on UI chrome */
+    user-select: none;
+  }
+
+  /* Re-enable selection inside content areas */
+  input, textarea, [data-selectable] {
+    user-select: text;
+  }
+}

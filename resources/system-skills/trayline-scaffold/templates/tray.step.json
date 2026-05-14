@@ -1,0 +1,14 @@
+{
+  "id": "{{id}}",
+  "kind": "tray",
+  "name": "{{name}}",
+  "description": "{{description}}",
+  "color": "#4F8EF7",
+  "icon": "{{icon}}",
+  "approval_mode": "{{approval_mode}}",
+  "input_schema": {
+    "fields": []
+  },
+  "allow_manual_create": true,
+  "webhook_enabled": false
+}
