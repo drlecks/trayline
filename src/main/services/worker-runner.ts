@@ -62,6 +62,8 @@ interface WorkerStepJson {
     adapter?: string
   }
   trigger?: { mode?: 'on_ready' | 'scheduled' | 'manual'; schedule_cron?: string | null }
+  batch_mode?: boolean
+  batch_max?: number | null
   on_success?: 'advance'
   on_failure?: 'send_to_errors'
 }
@@ -254,6 +256,13 @@ export interface TriggerRunInput {
   cardId: string  // the source card (must be in prev step's ready/)
 }
 
+export interface TriggerBatchRunInput {
+  project: string
+  workflow: string
+  stepId: string
+  cardIds: string[]
+}
+
 export interface TriggerRunResult {
   runId: string
 }
@@ -261,6 +270,9 @@ export interface TriggerRunResult {
 const inFlight = new Set<string>()
 function inFlightKey(i: TriggerRunInput): string {
   return `${i.project}/${i.workflow}/${i.stepId}/${i.cardId}`
+}
+function batchInFlightKey(i: TriggerBatchRunInput): string {
+  return `${i.project}/${i.workflow}/${i.stepId}/batch`
 }
 
 // Map of runId → live AISession, used to forward interactive keystrokes from
@@ -590,14 +602,212 @@ async function runInner(input: TriggerRunInput): Promise<TriggerRunResult> {
   return { runId }
 }
 
+// ── Batch run ─────────────────────────────────────────────────────────────────
+
+async function triggerBatchRun(input: TriggerBatchRunInput): Promise<TriggerRunResult> {
+  const key = batchInFlightKey(input)
+  if (inFlight.has(key)) throw new Error(`Batch run already in-flight for ${key}`)
+  inFlight.add(key)
+  try {
+    return await runBatchInner(input)
+  } finally {
+    inFlight.delete(key)
+  }
+}
+
+async function runBatchInner(input: TriggerBatchRunInput): Promise<TriggerRunResult> {
+  const { project, workflow, stepId, cardIds } = input
+
+  const wf = await readWorkflow(project, workflow)
+  const worker = await readStepJson<WorkerStepJson>(project, workflow, stepId)
+  if (worker.kind !== 'worker') throw new Error(`Step ${stepId} is not a worker`)
+
+  const prevStepId = findPrevStep(wf, stepId)
+  if (!prevStepId) throw new Error(`Worker ${stepId} has no preceding step`)
+
+  // Read all input cards from prev step's ready/
+  const prevReadyDir = join(projectService.paths.stepDir(project, workflow, prevStepId), 'cards', 'ready')
+  const sourceCards: Array<{ id: string; card: Card }> = []
+  for (const cardId of cardIds) {
+    const cardPath = join(prevReadyDir, `${cardId}.json`)
+    if (!(await pathExists(cardPath))) continue
+    const card = await fsService.readJson<Card>(cardPath)
+    sourceCards.push({ id: cardId, card })
+  }
+  if (sourceCards.length === 0) return { runId: 'noop' }
+
+  const batchData = { cards: sourceCards.map(({ id, card }) => ({ id, data: card.data })), count: sourceCards.length }
+
+  // 1. Allocate run + write input.json, meta.json
+  const workerDir = projectService.paths.stepDir(project, workflow, stepId)
+  const runId = await nextRunId(workerDir)
+  const runDir = join(workerDir, 'runs', runId)
+  await fs.mkdir(runDir, { recursive: true })
+  await fsService.writeJsonAtomic(join(runDir, 'input.json'), batchData)
+
+  const startedAt = new Date().toISOString()
+  const meta: WorkerRunMeta = {
+    run_id: runId, worker_id: stepId, card_id: 'batch',
+    project, workflow, started_at: startedAt, status: 'running',
+    batch_card_count: sourceCards.length,
+  }
+  await fsService.writeJsonAtomic(join(runDir, 'meta.json'), meta)
+
+  auditDb.insert({
+    project_id: project, workflow_id: workflow, step_id: stepId, card_id: 'batch',
+    event: 'run_started', actor: 'system',
+    details_json: JSON.stringify({ run_id: runId, batch: true, card_count: sourceCards.length }),
+  })
+  emit({ type: 'started', project, workflow, stepId, runId, cardId: 'batch' })
+
+  // 2. Resolve skills + context packs
+  const workerSkillIds = ['trayline-worker-contract', ...(worker.skills ?? [])]
+  const skills = (await Promise.all(workerSkillIds.map(resolveSkill))).filter((s): s is { id: string; content: string } => s !== null)
+  const allContextFiles = await projectService.listContextFiles(project)
+  const baseContextPacks = (await Promise.all(
+    allContextFiles.filter((f) => f.startsWith('_')).map((f) => resolveContextPack(project, f)),
+  )).filter((c): c is string => c !== null)
+  const contextPacks = [
+    ...baseContextPacks,
+    ...(await Promise.all(
+      (worker.context_packs ?? []).filter((f) => !f.startsWith('_')).map((f) => resolveContextPack(project, f)),
+    )).filter((c): c is string => c !== null),
+  ]
+  const processFile = await resolveProcessVariables(join(workerDir, 'process.md'), project, runDir)
+
+  // 3. Spawn adapter
+  const adapterId = worker.execution?.adapter ?? 'claude-code'
+  const adapter = adapterRegistry.get(adapterId)
+  if (!adapter) throw new Error(`Adapter not found: ${adapterId}`)
+  if (adapter.kind === 'production' && !(await adapter.detectInstalled())) {
+    throw new Error(`AI provider "${adapter.displayName}" is not installed on this machine.`)
+  }
+
+  const timeoutMs = (worker.execution?.timeout_seconds ?? 180) * 1000
+  let exitCode = -1
+  let output: object | string | null = null
+  let runError: string | undefined
+
+  const sessionKey = runKey(project, workflow, stepId, runId)
+  let session: AISession | null = null
+  try {
+    session = await adapter.spawn({
+      processFile, cardData: batchData, skills, contextPacks, mcps: [],
+      workingDir: runDir, timeout: timeoutMs,
+      onAwaitingInputChange: (awaiting) => {
+        emit({ type: 'awaiting_input', project, workflow, stepId, runId, awaiting })
+      },
+    })
+    liveSessions.set(sessionKey, session)
+    void (async () => { try { for await (const chunk of session!.stdout) emit({ type: 'log', project, workflow, stepId, runId, chunk }) } catch { /* ignore */ } })()
+    void (async () => { try { for await (const chunk of session!.stderr) emit({ type: 'log', project, workflow, stepId, runId, chunk }) } catch { /* ignore */ } })()
+    const result = await session.result()
+    exitCode = result.exitCode
+    output = result.output
+  } catch (err) {
+    runError = err instanceof Error ? err.message : String(err)
+  } finally {
+    liveSessions.delete(sessionKey)
+    try { await adapter.clearContext() } catch { /* ignore */ }
+  }
+
+  const endedAt = new Date().toISOString()
+  const elapsedMs = Date.parse(endedAt) - Date.parse(startedAt)
+
+  const reportedError = extractTraylineError(output)
+  if (reportedError && runError === undefined) runError = reportedError
+
+  const succeeded = runError === undefined && exitCode === 0
+
+  if (succeeded && output !== null) {
+    const tmp = join(runDir, 'output.json.tmp')
+    await fs.writeFile(tmp, JSON.stringify(output, null, 2), 'utf-8')
+    await fs.rename(tmp, join(runDir, 'output.json'))
+  }
+
+  const nextStepId = findNextStep(wf, stepId)
+  let plannedNextCardId: string | undefined
+  if (succeeded && nextStepId) {
+    plannedNextCardId = await nextCardIdForStep(project, workflow, nextStepId)
+  }
+
+  const planMeta: WorkerRunMeta = {
+    ...meta, ended_at: endedAt, elapsed_ms: elapsedMs, exit_code: exitCode,
+    status: succeeded ? 'succeeded' : 'failed', error: runError,
+    next_step_id: succeeded ? (nextStepId ?? undefined) : undefined,
+    next_card_id: plannedNextCardId,
+    batch_card_count: sourceCards.length,
+  }
+  await fsService.writeJsonAtomic(join(runDir, 'meta.json'), planMeta)
+
+  if (succeeded) {
+    auditDb.insert({
+      project_id: project, workflow_id: workflow, step_id: stepId, card_id: 'batch',
+      event: 'run_completed', actor: 'system',
+      details_json: JSON.stringify({ run_id: runId, exit_code: exitCode, batch: true, card_count: sourceCards.length, elapsed_ms: elapsedMs }),
+    })
+  } else {
+    auditDb.insert({
+      project_id: project, workflow_id: workflow, step_id: stepId, card_id: 'batch',
+      event: 'run_failed', actor: 'system',
+      details_json: JSON.stringify({ run_id: runId, exit_code: exitCode, batch: true, card_count: sourceCards.length, error: runError, elapsed_ms: elapsedMs }),
+    })
+  }
+
+  if (succeeded && nextStepId && plannedNextCardId) {
+    const nextStep = await readStepJson<TrayStepJson | WorkerStepJson>(project, workflow, nextStepId)
+    const isAutoTray = nextStep.kind === 'tray' && (nextStep as TrayStepJson).approval_mode === 'auto'
+    const targetStatus = nextStep.kind === 'worker' || isAutoTray ? 'ready' : 'pending'
+    const targetCardDir = join(projectService.paths.stepDir(project, workflow, nextStepId), 'cards', targetStatus)
+    await fs.mkdir(targetCardDir, { recursive: true })
+
+    const producedCard: Card = {
+      id: plannedNextCardId, created_at: endedAt, created_by: 'worker', source_step: stepId,
+      data: typeof output === 'object' && output !== null ? (output as Record<string, unknown>) : { raw: output },
+      history: [
+        { at: endedAt, step: stepId, event: 'run_completed', by: 'worker', note: `batch of ${sourceCards.length} cards` },
+        { at: endedAt, step: nextStepId, event: 'created', by: 'worker' },
+      ],
+      worker_output: typeof output === 'object' && output !== null ? (output as Record<string, unknown>) : undefined,
+    }
+    await fsService.writeJsonAtomic(join(targetCardDir, `${plannedNextCardId}.json`), producedCard)
+
+    // Archive all input cards
+    await fs.mkdir(join(projectService.paths.stepDir(project, workflow, prevStepId), 'cards', 'archived'), { recursive: true })
+    for (const { id: cardId, card } of sourceCards) {
+      const srcPath = join(prevReadyDir, `${cardId}.json`)
+      const archivePath = join(projectService.paths.stepDir(project, workflow, prevStepId), 'cards', 'archived', `${cardId}.json`)
+      const archivedCard: Card = { ...card, history: [...card.history, { at: endedAt, step: stepId, event: 'run_completed', by: 'worker', note: 'batch' }] }
+      await fsService.writeJsonAtomic(archivePath, archivedCard)
+      if (await pathExists(srcPath)) await fs.unlink(srcPath)
+    }
+  }
+  // On failure: leave all input cards in ready/ (user retries the batch)
+
+  await bumpWorkerCounters(project, workflow, stepId, succeeded ? 'success' : 'failed')
+  emit({ type: 'finished', project, workflow, stepId, runId, status: succeeded ? 'succeeded' : 'failed', error: runError, batchCardCount: sourceCards.length })
+
+  if (!succeeded && settingsStore.get('notificationsEnabled') && Notification.isSupported()) {
+    new Notification({ title: 'Batch worker run failed', body: `${worker.name}: ${runError ?? `exit ${exitCode}`}` }).show()
+  }
+  for (const win of broadcastTarget()) {
+    if (!win.isDestroyed()) win.webContents.send(IPC.adapters.onUsageUpdate)
+  }
+
+  return { runId }
+}
+
 // ── Run now (manual trigger) ──────────────────────────────────────────────────
 
 /**
  * Trigger the worker on all cards currently in the previous tray's ready/.
+ * For batch workers: triggers one batch run covering all ready cards.
+ * For single-card workers: triggers one run per ready card.
  * Returns the number of runs started. Returns 0 if there are no ready cards.
  */
 async function runNow(project: string, workflow: string, stepId: string): Promise<{ triggered: number }> {
   const wf = await readWorkflow(project, workflow)
+  const worker = await readStepJson<WorkerStepJson>(project, workflow, stepId)
   const prevStepId = findPrevStep(wf, stepId)
   if (!prevStepId) return { triggered: 0 }
 
@@ -608,9 +818,21 @@ async function runNow(project: string, workflow: string, stepId: string): Promis
   let files: string[] = []
   try { files = await fs.readdir(readyDir) } catch { return { triggered: 0 } }
 
-  const cards = files.filter((f) => f.endsWith('.json') && !f.endsWith('.tmp'))
+  const cardFiles = files.filter((f) => f.endsWith('.json') && !f.endsWith('.tmp'))
+  if (cardFiles.length === 0) return { triggered: 0 }
+
+  if (worker.batch_mode) {
+    let cardIds = cardFiles.map((f) => f.replace(/\.json$/, '')).sort()
+    if (worker.batch_max && worker.batch_max > 0) cardIds = cardIds.slice(0, worker.batch_max)
+    void triggerBatchRun({ project, workflow, stepId, cardIds }).catch((err) => {
+      // eslint-disable-next-line no-console
+      console.error(`[runNow] triggerBatchRun failed:`, err)
+    })
+    return { triggered: 1 }
+  }
+
   let triggered = 0
-  for (const f of cards) {
+  for (const f of cardFiles) {
     const cardId = f.replace(/\.json$/, '')
     void triggerRun({ project, workflow, stepId, cardId }).catch((err) => {
       // eslint-disable-next-line no-console

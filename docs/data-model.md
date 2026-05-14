@@ -181,13 +181,14 @@ When `batch_mode` is `true`, the worker receives all cards currently in the prev
   "dedup": {
     "key": "id",
     "max_memory": 10000,
-    "first_run": "skip_existing"
+    "first_run": "skip_existing",
+    "first_run_n": 10
   },
   "execution": {
-    "command": "claude",
     "timeout_seconds": 60,
     "adapter": "claude-code"
-  }
+  },
+  "paused": false
 }
 ```
 
@@ -198,8 +199,29 @@ When `batch_mode` is `true`, the worker receives all cards currently in the prev
 | `dedup.key` | The field name in each AI-returned JSON item used as the unique identifier |
 | `dedup.max_memory` | Maximum number of IDs stored in `seen-ids.json`; oldest entries pruned when exceeded |
 | `dedup.first_run` | What to do on the very first run: `skip_existing` (default — fetch but discard all, record IDs only), `process_all` (create cards for everything found), `process_last_n` (create cards for the N most recent) |
+| `dedup.first_run_n` | Number of most-recent items to process when `first_run` is `"process_last_n"` |
+| `paused` | When `true`, the cron job is not registered at launch and `source:pause` / `source:resume` toggle it |
 
-A Source step is always the **first** step in a workflow. It has no preceding step to read cards from — it generates cards by polling the world.
+**Source step folder structure:**
+```
+00-source/
+├── step.json         # Config above
+├── source.md         # AI instructions: what to fetch, JSON array output format
+├── state/
+│   ├── seen-ids.json # [{ id, seen_at }] — deduplicated item IDs, pruned to max_memory
+│   └── counters.json # { runs_total, items_found, items_new, last_run_at }
+├── runs/
+│   └── run_YYYY-MM-DD_NNN/
+│       ├── meta.json   # { run_id, status, started_at, ended_at, items_found, items_new, error? }
+│       └── output.json # The raw JSON array returned by the AI (on success)
+└── cards/
+    ├── ready/          # New deduplicated cards, one per new item
+    └── archived/       # Cards that have moved downstream
+```
+
+A Source step is always the **first** step in a workflow (`00-<slug>`). It has no preceding step to read cards from — it generates cards by polling the world.
+
+**Atomic write protocol for `seen-ids.json`:** Write to `seen-ids.json.tmp` first, then rename to `seen-ids.json`. On app launch, any leftover `.tmp` file is discarded (the last complete `seen-ids.json` remains authoritative).
 
 ### Skill `skill.json`
 

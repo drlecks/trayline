@@ -8,12 +8,16 @@ import { adapterRegistry } from '../ai-terminals/registry'
 import { stepService } from '../services/step-service'
 import { cardService } from '../services/card-service'
 import { workerRunner } from '../services/worker-runner'
+import { sourceRunner } from '../services/source-runner'
+import { sourceScheduler } from '../services/source-scheduler'
 import { watcherService } from '../services/watcher-service'
 import { schedulerService } from '../services/scheduler-service'
 import { skillService } from '../services/skill-service'
 import { queueService } from '../services/queue-service'
 import { exportService } from '../services/export-service'
-import type { BootstrapInfo, ProviderInstallSuggestion, ProviderReadyResult, ExportOptions, ImportSuccess } from '../../shared/types'
+import { join } from 'path'
+import { fsService } from '../services/fs-service'
+import type { BootstrapInfo, ProviderInstallSuggestion, ProviderReadyResult, ExportOptions, ImportSuccess, SourceStepConfig } from '../../shared/types'
 import type { CardStatus } from '../../shared/card'
 
 export type { BootstrapInfo }
@@ -95,17 +99,17 @@ export function registerIpcHandlers(
       for (const w of oldWorkflows) {
         await watcherService.unmountWorkflow(opts.regenerateOf, w.name)
         schedulerService.unmountWorkflow(opts.regenerateOf, w.name)
+        sourceScheduler.unmountWorkflow(opts.regenerateOf, w.name)
         await queueService.unmountWorkflow(opts.regenerateOf, w.name)
       }
     }
     const result = await projectCreateService.createFromDescription(description, opts)
     if (result.ok) {
-      // Mount watchers + scheduler + queue for every workflow in the new project so
-      // `on_ready` cards trigger workers without needing an app restart.
       const workflows = await projectService.listWorkflows(result.project.name).catch(() => [])
       for (const w of workflows) {
         await watcherService.mountWorkflow(result.project.name, w.name)
         await schedulerService.mountWorkflow(result.project.name, w.name)
+        await sourceScheduler.mountWorkflow(result.project.name, w.name)
         await queueService.mountWorkflow(result.project.name, w.name)
       }
     }
@@ -119,6 +123,7 @@ export function registerIpcHandlers(
     for (const w of workflows) {
       await watcherService.unmountWorkflow(name, w.name)
       schedulerService.unmountWorkflow(name, w.name)
+      sourceScheduler.unmountWorkflow(name, w.name)
       await queueService.unmountWorkflow(name, w.name)
     }
     await projectCreateService.deleteProject(name)
@@ -161,6 +166,7 @@ export function registerIpcHandlers(
     for (const w of workflows) {
       await watcherService.mountWorkflow(projectName, w.name)
       await schedulerService.mountWorkflow(projectName, w.name)
+      await sourceScheduler.mountWorkflow(projectName, w.name)
       await queueService.mountWorkflow(projectName, w.name)
     }
   }
@@ -257,12 +263,13 @@ export function registerIpcHandlers(
     }
   })
 
-  // ── Steps (trays/workers) ─────────────────────────────────────────────────
+  // ── Steps (trays/workers/sources) ────────────────────────────────────────
   // Wrap mutating handlers so the workflow's watchers are re-mounted after
   // structural changes (added/removed step, new worker trigger config).
   const remount = async (i: { project: string; workflow: string }) => {
     await watcherService.remountWorkflow(i.project, i.workflow)
     await schedulerService.remountWorkflow(i.project, i.workflow)
+    await sourceScheduler.remountWorkflow(i.project, i.workflow)
     await queueService.remountWorkflow(i.project, i.workflow)
   }
 
@@ -273,6 +280,11 @@ export function registerIpcHandlers(
   })
   ipcMain.handle('step:addWorker', async (_: unknown, input: Parameters<typeof stepService.addWorker>[0]) => {
     const r = await stepService.addWorker(input)
+    await remount(input)
+    return r
+  })
+  ipcMain.handle('step:addSource', async (_: unknown, input: Parameters<typeof stepService.addSource>[0]) => {
+    const r = await stepService.addSource(input)
     await remount(input)
     return r
   })
@@ -289,6 +301,48 @@ export function registerIpcHandlers(
   )
   ipcMain.handle('step:updateProcess', (_: unknown, input: Parameters<typeof stepService.updateWorkerProcess>[0]) =>
     stepService.updateWorkerProcess(input),
+  )
+
+  // ── Source steps ──────────────────────────────────────────────────────────
+  ipcMain.handle('source:create', async (_: unknown, input: Parameters<typeof stepService.addSource>[0]) => {
+    const r = await stepService.addSource(input)
+    await remount(input)
+    return r
+  })
+  ipcMain.handle('source:run-now', async (_: unknown, project: string, workflow: string, stepId: string) => {
+    const stepDir = projectService.paths.stepDir(project, workflow, stepId)
+    const cfg = await fsService.readJson<SourceStepConfig>(join(stepDir, 'step.json'))
+    void sourceRunner.runSource({ project, workflow, stepId, stepConfig: cfg }).catch((e) => {
+      // eslint-disable-next-line no-console
+      console.error('[source:run-now] failed:', e)
+    })
+    return { ok: true }
+  })
+  ipcMain.handle('source:pause', async (_: unknown, project: string, workflow: string, stepId: string) => {
+    await stepService.updateStep({ project, workflow, stepId, patch: { paused: true } })
+    sourceScheduler.unmountWorkflow(project, workflow)
+    return { ok: true }
+  })
+  ipcMain.handle('source:resume', async (_: unknown, project: string, workflow: string, stepId: string) => {
+    await stepService.updateStep({ project, workflow, stepId, patch: { paused: false } })
+    await sourceScheduler.remountWorkflow(project, workflow)
+    return { ok: true }
+  })
+  ipcMain.handle('source:get-state', async (_: unknown, project: string, workflow: string, stepId: string) => {
+    const state = await sourceRunner.getState(project, workflow, stepId)
+    return {
+      ...state,
+      nextRunAt: sourceScheduler.getNextRunAt(project, workflow, stepId),
+    }
+  })
+  ipcMain.handle('source:read-instructions', (_: unknown, project: string, workflow: string, stepId: string) =>
+    stepService.readSourceInstructions(project, workflow, stepId),
+  )
+  ipcMain.handle('source:update-instructions', (_: unknown, input: Parameters<typeof stepService.updateSourceInstructions>[0]) =>
+    stepService.updateSourceInstructions(input),
+  )
+  ipcMain.handle('source:list-runs', (_: unknown, project: string, workflow: string, stepId: string) =>
+    sourceRunner.listRuns(project, workflow, stepId),
   )
 
   // ── Worker runs ───────────────────────────────────────────────────────────

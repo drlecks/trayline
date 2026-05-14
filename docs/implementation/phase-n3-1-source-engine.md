@@ -14,69 +14,69 @@ Build the complete backend for Source steps: scheduling, AI execution, JSON pars
 
 ### Data & Schema
 
-- [ ] Add `"kind": "source"` to the step discriminated union in `src/shared/worker-run.ts` (or equivalent shared types file)
-- [ ] Define TypeScript types for `SourceStepConfig`, `SeenIdsEntry`, `SourceCounters`, and `SourceRunMeta`
-- [ ] Add `source.step.json` template to `skills/_system/trayline-scaffold/templates/`
-- [ ] Add `source.md` starter template (blank with prompt hints) to `skills/_system/trayline-scaffold/templates/`
+- [x] Add `"kind": "source"` to the step discriminated union in `src/shared/worker-run.ts` (or equivalent shared types file)
+- [x] Define TypeScript types for `SourceStepConfig`, `SeenIdsEntry`, `SourceCounters`, and `SourceRunMeta`
+- [x] Add `source.step.json` template to `resources/system-skills/trayline-scaffold/templates/`
+- [x] Add `source.md` starter template (with prompt hints) to `resources/system-skills/trayline-scaffold/templates/`
 
 ### Scheduler Integration
 
-- [ ] Extend the existing scheduler service (or create `src/main/services/source-scheduler.ts`) to support Source step cron jobs
-- [ ] On app launch, scan all workflow step folders for `step.json` files with `"kind": "source"` and register their cron jobs
-- [ ] On Source step create/update/delete, dynamically add/remove/update the corresponding cron job without requiring a restart
-- [ ] Pause/resume API: `sourceScheduler.pause(stepId)` / `sourceScheduler.resume(stepId)` — persists paused state to `step.json` as `"paused": true`
-- [ ] Prevent overlapping runs: if a source run is still in progress when the next cron tick fires, skip that tick and log a warning to `state/counters.json`
+- [x] Extend the existing scheduler service (or create `src/main/services/source-scheduler.ts`) to support Source step cron jobs
+- [x] On app launch, scan all workflow step folders for `step.json` files with `"kind": "source"` and register their cron jobs
+- [x] On Source step create/update/delete, dynamically add/remove/update the corresponding cron job without requiring a restart
+- [x] Pause/resume API: `sourceScheduler.pause(stepId)` / `sourceScheduler.resume(stepId)` — persists paused state to `step.json` as `"paused": true`
+- [x] Prevent overlapping runs: if a source run is still in progress when the next cron tick fires, skip that tick and log a warning to `state/counters.json`
 
 ### Source Runner
 
-- [ ] Create `src/main/services/source-runner.ts`
-- [ ] `runSource(stepPath, stepConfig)` function:
-  - [ ] Read `state/seen-ids.json`; if absent, treat as empty (first run)
-  - [ ] Detect first-run state: `seen-ids.json` absent or empty → apply `dedup.first_run` policy
-  - [ ] Spawn AI adapter via the `AITerminalAdapter` interface with `source.md` as the instruction file and no card input
-  - [ ] Capture full stdout; on exit, attempt to parse as JSON array
-  - [ ] If parse fails: emit `source_run_failed`, write error to audit log, return early — do not mutate state
-  - [ ] Dedup loop: for each item, extract `item[dedup.key]`; skip if key already in seen set; create card for new items
-  - [ ] Card creation: write `card_<timestamp>_<n>.json` to `cards/ready/` using the standard card schema (`created_by: "source"`, `source_step: stepId`)
-  - [ ] `first_run: skip_existing` — add all item IDs to seen set but create no cards
-  - [ ] `first_run: process_all` — create cards for all items and add IDs to seen set
-  - [ ] `first_run: process_last_n` — sort items by their position in the array, take the last N, create cards for those only, add all IDs to seen set
-- [ ] Atomic seen-ids write: write to `seen-ids.json.tmp`, rename to `seen-ids.json`; prune to `dedup.max_memory` (oldest by `seen_at`) before writing
-- [ ] Update `state/counters.json` after each run: increment `runs_total`, update `items_found`, `items_new`, `last_run_at`
-- [ ] Emit IPC events to renderer: `source:run-started`, `source:run-completed`, `source:run-failed` (mirrors existing worker IPC pattern)
+- [x] Create `src/main/services/source-runner.ts`
+- [x] `runSource(stepPath, stepConfig)` function:
+  - [x] Read `state/seen-ids.json`; if absent, treat as empty (first run)
+  - [x] Detect first-run state: `seen-ids.json` absent or empty → apply `dedup.first_run` policy
+  - [x] Spawn AI adapter via the `AITerminalAdapter` interface with `source.md` as the instruction file and no card input
+  - [x] Capture full stdout; on exit, attempt to parse as JSON array
+  - [x] If parse fails: emit `source_run_failed`, write error to audit log, return early — do not mutate state
+  - [x] Dedup loop: for each item, extract `item[dedup.key]`; skip if key already in seen set; create card for new items
+  - [x] Card creation: write `card_<timestamp>_<n>.json` to `cards/ready/` using the standard card schema (`created_by: "source"`, `source_step: stepId`)
+  - [x] `first_run: skip_existing` — add all item IDs to seen set but create no cards
+  - [x] `first_run: process_all` — create cards for all items and add IDs to seen set
+  - [x] `first_run: process_last_n` — sort items by their position in the array, take the last N, create cards for those only, add all IDs to seen set
+- [x] Atomic seen-ids write: write to `seen-ids.json.tmp`, rename to `seen-ids.json`; prune to `dedup.max_memory` (oldest by `seen_at`) before writing
+- [x] Update `state/counters.json` after each run: increment `runs_total`, update `items_found`, `items_new`, `last_run_at`
+- [x] Emit IPC events to renderer: `source:run-started`, `source:run-completed`, `source:run-failed` (mirrors existing worker IPC pattern)
 
 ### Audit Log
 
-- [ ] Write `source_run_started` event at run start
-- [ ] Write `source_run_completed` event with `{ items_found, items_new, duration_ms }` on success
-- [ ] Write `source_run_failed` event with `{ error, duration_ms }` on failure
-- [ ] Write one `source_item_new` event per new card created, with `{ item_id, card_id }`
+- [x] Write `source_run_started` event at run start
+- [x] Write `source_run_completed` event with `{ items_found, items_new, duration_ms }` on success
+- [x] Write `source_run_failed` event with `{ error, duration_ms }` on failure
+- [x] Write one `source_item_new` event per new card created, with `{ item_id, card_id }`
 
 ### Crash Recovery
 
-- [ ] On app launch, for each Source step folder: check for `state/seen-ids.json.tmp`; if present, discard it (the rename never completed — the last good `seen-ids.json` is authoritative)
+- [x] On app launch, for each Source step folder: check for `state/seen-ids.json.tmp`; if present, discard it (the rename never completed — the last good `seen-ids.json` is authoritative)
 - [ ] Check for any cards in `cards/ready/` that have no corresponding `source_item_new` audit entry — log a warning but do not delete (at-least-once delivery is acceptable)
 
 ### IPC
 
-- [ ] Add IPC handlers in `src/main/ipc/handlers.ts`:
-  - [ ] `source:run-now` — trigger an immediate run outside the schedule
-  - [ ] `source:pause` — pause the cron job
-  - [ ] `source:resume` — resume the cron job
-  - [ ] `source:get-state` — return `{ counters, seenCount, paused, nextRunAt }`
-- [ ] Expose new channels in `src/preload/index.ts`
-- [ ] Add channel constants to `src/shared/ipc-channels.ts`
+- [x] Add IPC handlers in `src/main/ipc/handlers.ts`:
+  - [x] `source:run-now` — trigger an immediate run outside the schedule
+  - [x] `source:pause` — pause the cron job
+  - [x] `source:resume` — resume the cron job
+  - [x] `source:get-state` — return `{ counters, seenCount, paused, nextRunAt }`
+- [x] Expose new channels in `src/preload/index.ts`
+- [x] Add channel constants to `src/shared/ipc-channels.ts`
 
 ### Tests
 
-- [ ] Unit test: `runSource` with a mock adapter returning valid JSON array — assert correct cards created, seen-ids written, counters updated
-- [ ] Unit test: `runSource` with adapter returning invalid JSON — assert no state mutation, `source_run_failed` logged
-- [ ] Unit test: dedup logic — items already in seen set are skipped
-- [ ] Unit test: `max_memory` pruning — oldest entries evicted when limit exceeded
-- [ ] Unit test: `first_run: skip_existing` — no cards created, all IDs added to seen set
-- [ ] Unit test: `first_run: process_all` — all cards created
-- [ ] Unit test: `first_run: process_last_n` — correct N cards created
-- [ ] Unit test: crash recovery — `.tmp` file present on launch is discarded
+- [x] Unit test: `runSource` with a mock adapter returning valid JSON array — assert correct cards created, seen-ids written, counters updated
+- [x] Unit test: `runSource` with adapter returning invalid JSON — assert no state mutation, `source_run_failed` logged
+- [x] Unit test: dedup logic — items already in seen set are skipped
+- [x] Unit test: `max_memory` pruning — oldest entries evicted when limit exceeded
+- [x] Unit test: `first_run: skip_existing` — no cards created, all IDs added to seen set
+- [x] Unit test: `first_run: process_all` — all cards created
+- [x] Unit test: `first_run: process_last_n` — correct N cards created
+- [x] Unit test: crash recovery — `.tmp` file present on launch is discarded
 - [ ] Integration test: scheduler fires cron, source runner executes, cards appear in `ready/`
 
 ---

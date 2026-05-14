@@ -54,6 +54,7 @@ export const IPC = {
   step: {
     addTray: 'step:addTray',
     addWorker: 'step:addWorker',
+    addSource: 'step:addSource',
     update: 'step:update',
     delete: 'step:delete',
     readProcess: 'step:readProcess',
@@ -91,5 +92,16 @@ export const IPC = {
   queue: {
     getPending: 'queue:getPending',
     onUpdate: 'queue:onUpdate',
+  },
+  source: {
+    create: 'source:create',
+    runNow: 'source:run-now',
+    pause: 'source:pause',
+    resume: 'source:resume',
+    getState: 'source:get-state',
+    readInstructions: 'source:read-instructions',
+    updateInstructions: 'source:update-instructions',
+    listRuns: 'source:list-runs',
+    onRunEvent: 'source:run-event',
   },
 } as const

@@ -11,6 +11,7 @@ export type WorkerRunStatus =
 export interface WorkerRunMeta {
   run_id: string
   worker_id: string
+  /** The source card id for single-card runs; `'batch'` for batch runs. */
   card_id: string
   project: string
   workflow: string
@@ -28,6 +29,8 @@ export interface WorkerRunMeta {
   next_step_id?: string
   /** Planned destination card id (so a crashed write can be replayed). */
   next_card_id?: string
+  /** For batch runs: number of input cards consumed. */
+  batch_card_count?: number
 }
 
 export type WorkerRun = WorkerRunMeta
@@ -36,4 +39,4 @@ export type WorkerRunEvent =
   | { type: 'started'; project: string; workflow: string; stepId: string; runId: string; cardId: string }
   | { type: 'log'; project: string; workflow: string; stepId: string; runId: string; chunk: string }
   | { type: 'awaiting_input'; project: string; workflow: string; stepId: string; runId: string; awaiting: boolean }
-  | { type: 'finished'; project: string; workflow: string; stepId: string; runId: string; status: WorkerRunStatus; error?: string }
+  | { type: 'finished'; project: string; workflow: string; stepId: string; runId: string; status: WorkerRunStatus; error?: string; batchCardCount?: number }
