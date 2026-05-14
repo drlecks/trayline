@@ -15,6 +15,11 @@ interface DynamicFormProps {
   submitting?: boolean
   defaultValues?: Record<string, unknown>
   submitLabel?: string
+  /** Optional second submit button rendered next to the primary. */
+  secondarySubmit?: {
+    label: string
+    onSubmit: (values: Record<string, unknown>) => void | Promise<void>
+  }
 }
 
 function buildZodSchema(fields: PlanFieldDef[]) {
@@ -83,6 +88,7 @@ export default function DynamicForm({
   submitting = false,
   defaultValues = {},
   submitLabel = 'Submit',
+  secondarySubmit,
 }: DynamicFormProps) {
   const schema = useMemo(() => buildZodSchema(fields), [fields])
   const defaults = useMemo(() => buildDefaults(fields, defaultValues), [fields, defaultValues])
@@ -176,6 +182,16 @@ export default function DynamicForm({
         <Button type="submit" size="sm" disabled={submitting}>
           {submitting ? 'Saving…' : submitLabel}
         </Button>
+        {secondarySubmit && (
+          <Button
+            type="button"
+            size="sm"
+            disabled={submitting}
+            onClick={() => { void handleSubmit(secondarySubmit.onSubmit)() }}
+          >
+            {secondarySubmit.label}
+          </Button>
+        )}
       </div>
     </form>
   )

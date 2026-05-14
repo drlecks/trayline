@@ -228,4 +228,92 @@ describe('cardService', () => {
       cardService.retryFromErrors(project, 'wf', 'card_ghost'),
     ).rejects.toThrow(/not found in error tray/)
   })
+
+  it('editCard updates data and appends edited history without changing status', async () => {
+    const project = `cards-edit-${Date.now()}`
+    await buildWorkflow(project, 'wf', ['01-tray'])
+    const stepDir = await buildTray(project, 'wf', '01-tray')
+
+    const created = await cardService.createCard(project, 'wf', '01-tray', { foo: 'original' })
+    const updated = await cardService.editCard(project, 'wf', '01-tray', created.id, { foo: 'updated' })
+
+    expect(updated.data).toEqual({ foo: 'updated' })
+    expect(updated.history.at(-1)?.event).toBe('edited')
+    // Card should still be in pending/
+    expect(await pathExists(join(stepDir, 'cards', 'pending', `${created.id}.json`))).toBe(true)
+    expect(await pathExists(join(stepDir, 'cards', 'ready', `${created.id}.json`))).toBe(false)
+  })
+
+  it('editCard with andMarkReady moves card to ready/ and appends both edited and marked_ready history', async () => {
+    const project = `cards-edit-ready-${Date.now()}`
+    await buildWorkflow(project, 'wf', ['01-tray'])
+    const stepDir = await buildTray(project, 'wf', '01-tray')
+
+    const created = await cardService.createCard(project, 'wf', '01-tray', { x: 1 })
+    const updated = await cardService.editCard(project, 'wf', '01-tray', created.id, { x: 2 }, { andMarkReady: true })
+
+    expect(updated.data).toEqual({ x: 2 })
+    const events = updated.history.map((h) => h.event)
+    expect(events).toContain('edited')
+    expect(events).toContain('marked_ready')
+    expect(await pathExists(join(stepDir, 'cards', 'pending', `${created.id}.json`))).toBe(false)
+    expect(await pathExists(join(stepDir, 'cards', 'ready', `${created.id}.json`))).toBe(true)
+  })
+
+  it('editCard throws when the card is not found', async () => {
+    const project = `cards-edit-miss-${Date.now()}`
+    await buildWorkflow(project, 'wf', ['01-tray'])
+    await buildTray(project, 'wf', '01-tray')
+    await expect(
+      cardService.editCard(project, 'wf', '01-tray', 'card_ghost_001', {}),
+    ).rejects.toThrow(/Card not found/)
+  })
+
+  it('sendBackCard moves card to the previous step pending/ and appends sent_back history', async () => {
+    const project = `cards-sendback-${Date.now()}`
+    await buildWorkflow(project, 'wf', ['01-intake', '02-review'])
+    const intakeDir = await buildTray(project, 'wf', '01-intake')
+    const reviewDir = await buildTray(project, 'wf', '02-review')
+
+    // Seed a card in 02-review/pending/
+    const cardId = 'card_test_001'
+    await writeJson(join(reviewDir, 'cards', 'pending', `${cardId}.json`), {
+      id: cardId,
+      created_at: new Date().toISOString(),
+      created_by: 'manual',
+      source_step: '01-intake',
+      data: { note: 'hello' },
+      history: [{ at: new Date().toISOString(), step: '01-intake', event: 'created', by: 'user' }],
+    })
+
+    const { card, targetStepId } = await cardService.sendBackCard(project, 'wf', '02-review', cardId, 'Needs more work')
+    expect(targetStepId).toBe('01-intake')
+    expect(card.history.at(-1)?.event).toBe('sent_back')
+    expect(card.history.at(-1)?.note).toBe('Needs more work')
+    // Moved out of 02-review
+    expect(await pathExists(join(reviewDir, 'cards', 'pending', `${cardId}.json`))).toBe(false)
+    // Arrived in 01-intake/pending/
+    expect(await pathExists(join(intakeDir, 'cards', 'pending', `${cardId}.json`))).toBe(true)
+  })
+
+  it('sendBackCard throws when card is not in pending/', async () => {
+    const project = `cards-sendback-miss-${Date.now()}`
+    await buildWorkflow(project, 'wf', ['01-intake', '02-review'])
+    await buildTray(project, 'wf', '02-review')
+    await expect(
+      cardService.sendBackCard(project, 'wf', '02-review', 'card_ghost_001'),
+    ).rejects.toThrow(/Card not found in pending/)
+  })
+
+  it('sendBackCard throws when there is no previous step', async () => {
+    const project = `cards-sendback-first-${Date.now()}`
+    await buildWorkflow(project, 'wf', ['01-only'])
+    const stepDir = await buildTray(project, 'wf', '01-only')
+    const created = await cardService.createCard(project, 'wf', '01-only', { x: 1 })
+    // Make sure card exists in pending
+    expect(await pathExists(join(stepDir, 'cards', 'pending', `${created.id}.json`))).toBe(true)
+    await expect(
+      cardService.sendBackCard(project, 'wf', '01-only', created.id),
+    ).rejects.toThrow(/No previous step/)
+  })
 })
