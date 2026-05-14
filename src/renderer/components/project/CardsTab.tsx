@@ -30,6 +30,17 @@ export default function CardsTab({ step }: { step: StepMeta }) {
   const [loading, setLoading] = useState(false)
   const [showNew, setShowNew] = useState(false)
   const [openCardId, setOpenCardId] = useState<string | null>(null)
+  const jumpTarget = useProjectStore((s) => s.jumpTarget)
+  const setJumpTarget = useProjectStore((s) => s.setJumpTarget)
+
+  // If a jump target matches this step, auto-open the card and clear the target.
+  useEffect(() => {
+    if (jumpTarget && jumpTarget.stepId === step.id) {
+      setStatus('pending')
+      setOpenCardId(jumpTarget.cardId)
+      setJumpTarget(null)
+    }
+  }, [jumpTarget, step.id, setJumpTarget])
 
   const refresh = useCallback(async () => {
     if (!active || !workflow) return
@@ -52,6 +63,7 @@ export default function CardsTab({ step }: { step: StepMeta }) {
         workflow={workflow.name}
         stepId={step.id}
         cardId={openCardId}
+        step={step}
         onBack={() => { setOpenCardId(null); void refresh() }}
       />
     )

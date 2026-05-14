@@ -11,6 +11,7 @@ import { workerRunner } from '../services/worker-runner'
 import { watcherService } from '../services/watcher-service'
 import { schedulerService } from '../services/scheduler-service'
 import { skillService } from '../services/skill-service'
+import { queueService } from '../services/queue-service'
 import type { BootstrapInfo, ProviderInstallSuggestion, ProviderReadyResult } from '../../shared/types'
 import type { CardStatus } from '../../shared/card'
 
@@ -93,16 +94,18 @@ export function registerIpcHandlers(
       for (const w of oldWorkflows) {
         await watcherService.unmountWorkflow(opts.regenerateOf, w.name)
         schedulerService.unmountWorkflow(opts.regenerateOf, w.name)
+        await queueService.unmountWorkflow(opts.regenerateOf, w.name)
       }
     }
     const result = await projectCreateService.createFromDescription(description, opts)
     if (result.ok) {
-      // Mount watchers + scheduler for every workflow in the new project so
+      // Mount watchers + scheduler + queue for every workflow in the new project so
       // `on_ready` cards trigger workers without needing an app restart.
       const workflows = await projectService.listWorkflows(result.project.name).catch(() => [])
       for (const w of workflows) {
         await watcherService.mountWorkflow(result.project.name, w.name)
         await schedulerService.mountWorkflow(result.project.name, w.name)
+        await queueService.mountWorkflow(result.project.name, w.name)
       }
     }
     return result
@@ -115,6 +118,7 @@ export function registerIpcHandlers(
     for (const w of workflows) {
       await watcherService.unmountWorkflow(name, w.name)
       schedulerService.unmountWorkflow(name, w.name)
+      await queueService.unmountWorkflow(name, w.name)
     }
     await projectCreateService.deleteProject(name)
   })
@@ -201,6 +205,7 @@ export function registerIpcHandlers(
   const remount = async (i: { project: string; workflow: string }) => {
     await watcherService.remountWorkflow(i.project, i.workflow)
     await schedulerService.remountWorkflow(i.project, i.workflow)
+    await queueService.remountWorkflow(i.project, i.workflow)
   }
 
   ipcMain.handle('step:addTray', async (_: unknown, input: Parameters<typeof stepService.addTray>[0]) => {
@@ -289,4 +294,13 @@ export function registerIpcHandlers(
   ipcMain.handle('card:retry', (_: unknown, project: string, workflow: string, cardId: string) =>
     cardService.retryFromErrors(project, workflow, cardId),
   )
+  ipcMain.handle('card:edit', (_: unknown, project: string, workflow: string, stepId: string, cardId: string, data: Record<string, unknown>, andMarkReady: boolean) =>
+    cardService.editCard(project, workflow, stepId, cardId, data, { andMarkReady }),
+  )
+  ipcMain.handle('card:sendBack', (_: unknown, project: string, workflow: string, stepId: string, cardId: string, note?: string) =>
+    cardService.sendBackCard(project, workflow, stepId, cardId, note),
+  )
+
+  // ── Queue (My Queue) ──────────────────────────────────────────────────────
+  ipcMain.handle('queue:getPending', () => queueService.getPending())
 }

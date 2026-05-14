@@ -26,6 +26,8 @@ export interface Settings {
 export type AuditEvent =
   | 'card_created'
   | 'card_marked_ready'
+  | 'card_edited'
+  | 'card_sent_back'
   | 'card_retried'
   | 'card_approved'
   | 'card_rejected'

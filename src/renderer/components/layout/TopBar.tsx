@@ -3,6 +3,7 @@ import { useThemeStore } from '../../stores/theme-store'
 import { useProjectStore } from '../../stores/project-store'
 import WindowControls from './WindowControls'
 import ProjectSwitcher from './ProjectSwitcher'
+import QueueBadge from './QueueBadge'
 import type { Settings } from '../../../shared/types'
 
 const THEME_CYCLE: Settings['theme'][] = ['system', 'light', 'dark']
@@ -44,6 +45,7 @@ export default function TopBar() {
       {/* Right controls */}
       <div className="flex items-center">
         <div className="flex items-center gap-1 px-2 no-drag">
+          <QueueBadge />
           <button
             onClick={cycleTheme}
             title={`Theme: ${theme}`}

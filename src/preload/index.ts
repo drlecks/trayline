@@ -18,6 +18,7 @@ import type {
 } from '../shared/types'
 import type { MissingSkillsEntry } from '../shared/types'
 import type { Card, CardStatus, CardCounts } from '../shared/card'
+import type { QueueEntry } from '../shared/queue'
 import type { PlanFieldDef, PlanTrayStep, PlanWorkerStep } from '../shared/workflow-plan'
 import type { WorkerRun, WorkerRunEvent } from '../shared/worker-run'
 
@@ -180,6 +181,19 @@ const api = {
       ipcRenderer.invoke(IPC.card.archive, project, workflow, stepId, cardId, fromStatus),
     retry: (project: string, workflow: string, cardId: string): Promise<{ card: Card; targetStepId: string }> =>
       ipcRenderer.invoke(IPC.card.retry, project, workflow, cardId),
+    edit: (project: string, workflow: string, stepId: string, cardId: string, data: Record<string, unknown>, andMarkReady: boolean): Promise<Card> =>
+      ipcRenderer.invoke(IPC.card.edit, project, workflow, stepId, cardId, data, andMarkReady),
+    sendBack: (project: string, workflow: string, stepId: string, cardId: string, note?: string): Promise<{ card: Card; targetStepId: string }> =>
+      ipcRenderer.invoke(IPC.card.sendBack, project, workflow, stepId, cardId, note),
+  },
+  queue: {
+    getPending: (): Promise<QueueEntry[]> =>
+      ipcRenderer.invoke(IPC.queue.getPending),
+    onUpdate: (handler: (entries: QueueEntry[]) => void): (() => void) => {
+      const listener = (_e: unknown, entries: QueueEntry[]) => handler(entries)
+      ipcRenderer.on(IPC.queue.onUpdate, listener)
+      return () => ipcRenderer.off(IPC.queue.onUpdate, listener)
+    },
   },
   platform: process.platform as NodeJS.Platform,
 }
