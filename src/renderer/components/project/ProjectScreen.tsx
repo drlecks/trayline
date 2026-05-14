@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Inbox, Cpu, AlertTriangle, RefreshCw, AlertCircle, Plus, FileText } from 'lucide-react'
+import { Inbox, Cpu, AlertTriangle, RefreshCw, AlertCircle, Plus, FileText, ChevronDown, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useProjectStore } from '@/stores/project-store'
 import AddTrayDialog from './AddTrayDialog'
@@ -28,6 +28,7 @@ export default function ProjectScreen() {
   const [addTrayOpen, setAddTrayOpen] = useState(false)
   const [addWorkerOpen, setAddWorkerOpen] = useState(false)
   const [showContextEditor, setShowContextEditor] = useState(false)
+  const [errorsExpanded, setErrorsExpanded] = useState(false)
 
   // Refresh steps whenever the active project changes
   useEffect(() => {
@@ -66,7 +67,7 @@ export default function ProjectScreen() {
           </div>
 
           <div className="flex flex-col gap-2 flex-1">
-            {steps.map((step) => (
+            {steps.filter((s) => s.id !== '99-errors').map((step) => (
               <StepCard
                 key={step.id}
                 step={step}
@@ -85,6 +86,17 @@ export default function ProjectScreen() {
               <Plus size={14} strokeWidth={1.75} />
               Add step
             </Button>
+
+            {/* Error tray — collapsible, hidden by default */}
+            {steps.find((s) => s.id === '99-errors') && (
+              <ErrorTraySection
+                step={steps.find((s) => s.id === '99-errors')!}
+                expanded={errorsExpanded}
+                selected={selectedStepId === '99-errors' && !showContextEditor}
+                onToggle={() => setErrorsExpanded((v) => !v)}
+                onSelect={() => { setSelectedStepId('99-errors'); setShowContextEditor(false) }}
+              />
+            )}
           </div>
 
           <div className="mt-auto pt-4 border-t border-black/[0.06] dark:border-white/[0.06] px-2 flex flex-col gap-2">
@@ -192,6 +204,66 @@ function WorkerStatusBubble({ status }: { status: WorkerRunStatus | 'idle' }) {
       title={BUBBLE_TITLE[status as WorkerRunStatus]}
       className={`shrink-0 inline-block w-[11px] h-[11px] mt-1 rounded-full ${cls}`}
     />
+  )
+}
+
+function ErrorTraySection({
+  step, expanded, selected, onToggle, onSelect,
+}: {
+  step: StepMeta
+  expanded: boolean
+  selected: boolean
+  onToggle: () => void
+  onSelect: () => void
+}) {
+  const active = useProjectStore((s) => s.active)
+  const workflow = useProjectStore((s) => s.workflow)
+  const [pendingCount, setPendingCount] = useState(0)
+
+  useEffect(() => {
+    if (!active || !workflow) return
+    let cancelled = false
+    async function tick() {
+      const c = await window.trayline.card.counts(active!.name, workflow!.name, '99-errors')
+      if (!cancelled) setPendingCount(c.pending)
+    }
+    void tick()
+    const id = setInterval(tick, 3000)
+    return () => { cancelled = true; clearInterval(id) }
+  }, [active, workflow])
+
+  return (
+    <div className="mt-1">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex items-center gap-1.5 w-full px-2 py-1 text-[12px] text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 transition-colors"
+      >
+        {expanded
+          ? <ChevronDown size={12} strokeWidth={2} />
+          : <ChevronRight size={12} strokeWidth={2} />}
+        <span>
+          {pendingCount > 0
+            ? `View errors (${pendingCount})`
+            : 'View errors'}
+        </span>
+        {pendingCount > 0 && (
+          <span className="ml-auto shrink-0 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-400 text-[10px] font-semibold">
+            {pendingCount}
+          </span>
+        )}
+      </button>
+      {expanded && (
+        <div className="mt-1">
+          <StepCard
+            step={step}
+            selected={selected}
+            missingSkills={[]}
+            onClick={onSelect}
+          />
+        </div>
+      )}
+    </div>
   )
 }
 
