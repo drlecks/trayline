@@ -37,6 +37,7 @@ async function createFromDescription(
       ok: true,
       project: result.project,
       unconfiguredMcps: result.unconfiguredMcps,
+      hasSourceStep: result.hasSourceStep,
     }
   } catch (err) {
     return {

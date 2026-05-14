@@ -193,12 +193,17 @@ The user never has to open the terminal to use Trayline. But it's always one cli
 
 A first-class feature, not just a setup screen. Available whenever the user starts a new workflow.
 
-- Single big textarea, five rotating example chips (clicking fills the textbox)
+- Single big textarea, seven rotating example chips — two are source-first examples (clicking fills the textbox)
 - **Generate workflow** calls `trayline-author` via AI Terminal Adapter
-- During generation: centered loading circle with pre-written warm status messages
+- During generation: centered loading circle with pre-written warm status messages (pool includes source-aware messages: "Setting up your data source…", "Configuring the schedule…", "Wiring up deduplication…")
 - Output: JSON workflow plan materialized to disk by `trayline-scaffold`
+- **Post-generation banner**: when the plan includes a Source step, a banner is shown before navigating to the project — it tells the user to open the Source step and write their fetch instructions. If unconfigured MCPs are also required, the banner names them.
 - **Regenerate**: edit description and try again; previous version archived to `<project>/.history/<timestamp>/`
 - **Edit before scaffolding** (post-MVP): preview the proposed plan and tweak before files are written
+
+The `trayline-author` skill understands:
+- **Source steps** (`kind: "source"`): generated when the description involves polling, monitoring, or ingesting from an external source on a schedule. The plan includes `schedule_cron`, `dedup.key`, `dedup.first_run`, and a draft `source.md`.
+- **Batch workers** (`batch_mode: true`): generated when the description involves summarising or digesting many items into one output. The plan sets `batch_max` and coerces the trigger to `scheduled` or `manual`.
 
 The author skill is in `skills/_system/` — power users can edit the master prompt to bias it toward their domain.
 

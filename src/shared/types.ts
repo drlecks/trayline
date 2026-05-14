@@ -230,6 +230,8 @@ export interface ProjectCreateSuccess {
   project: ProjectMeta
   /** MCP ids referenced by the new project that aren't installed/configured yet. */
   unconfiguredMcps: string[]
+  /** True when the generated plan includes at least one Source step. */
+  hasSourceStep: boolean
 }
 
 export interface ProjectCreateError {

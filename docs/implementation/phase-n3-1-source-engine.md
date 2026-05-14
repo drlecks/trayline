@@ -16,8 +16,8 @@ Build the complete backend for Source steps: scheduling, AI execution, JSON pars
 
 - [x] Add `"kind": "source"` to the step discriminated union in `src/shared/worker-run.ts` (or equivalent shared types file)
 - [x] Define TypeScript types for `SourceStepConfig`, `SeenIdsEntry`, `SourceCounters`, and `SourceRunMeta`
-- [ ] Add `source.step.json` template to `skills/_system/trayline-scaffold/templates/`
-- [ ] Add `source.md` starter template (blank with prompt hints) to `skills/_system/trayline-scaffold/templates/`
+- [x] Add `source.step.json` template to `resources/system-skills/trayline-scaffold/templates/`
+- [x] Add `source.md` starter template (with prompt hints) to `resources/system-skills/trayline-scaffold/templates/`
 
 ### Scheduler Integration
 
