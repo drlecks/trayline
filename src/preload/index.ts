@@ -15,6 +15,9 @@ import type {
   ProviderReadyResult,
   SkillCatalogFetchResult,
   InstalledSkillRow,
+  ExportOptions,
+  ImportResult,
+  ImportSuccess,
 } from '../shared/types'
 import type { MissingSkillsEntry } from '../shared/types'
 import type { Card, CardStatus, CardCounts } from '../shared/card'
@@ -70,6 +73,16 @@ const api = {
     delete: (name: string): Promise<void> => ipcRenderer.invoke(IPC.project.delete, name),
     setStatus: (name: string, status: ProjectStatus): Promise<ProjectMeta> =>
       ipcRenderer.invoke(IPC.project.setStatus, name, status),
+    export: (name: string, options: ExportOptions): Promise<{ ok: true; path: string } | { canceled: true }> =>
+      ipcRenderer.invoke(IPC.project.export, name, options),
+    import: (): Promise<ImportResult | { canceled: true }> =>
+      ipcRenderer.invoke(IPC.project.import),
+    importCommit: (token: string): Promise<ImportSuccess> =>
+      ipcRenderer.invoke(IPC.project.importCommit, token),
+    importAbort: (token: string): Promise<void> =>
+      ipcRenderer.invoke(IPC.project.importAbort, token),
+    openExample: (): Promise<ImportSuccess> =>
+      ipcRenderer.invoke(IPC.project.openExample),
   },
   usage: {
     get: (): Promise<UsageSnapshot> => ipcRenderer.invoke(IPC.usage.get),

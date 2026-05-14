@@ -1,0 +1,22 @@
+{
+  "id": "01-new-feedback",
+  "kind": "tray",
+  "name": "New Feedback",
+  "description": "Raw customer feedback waiting to be reviewed and sent for AI summarization.",
+  "approval_mode": "manual",
+  "fields": [
+    {
+      "key": "source",
+      "label": "Source",
+      "type": "text",
+      "placeholder": "e.g. Support email, App review, NPS survey"
+    },
+    {
+      "key": "feedback_text",
+      "label": "Feedback",
+      "type": "textarea",
+      "placeholder": "Paste the customer's feedback here…"
+    }
+  ],
+  "allow_manual_create": true
+}

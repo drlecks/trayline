@@ -33,6 +33,11 @@ export const IPC = {
     readContextFile: 'project:readContextFile',
     writeContextFile: 'project:writeContextFile',
     deleteContextFile: 'project:deleteContextFile',
+    export: 'project:export',
+    import: 'project:import',
+    importCommit: 'project:importCommit',
+    importAbort: 'project:importAbort',
+    openExample: 'project:openExample',
   },
   usage: {
     get: 'usage:get',

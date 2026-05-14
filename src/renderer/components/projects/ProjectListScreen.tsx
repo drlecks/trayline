@@ -1,7 +1,10 @@
-import { useEffect } from 'react'
-import { AlertTriangle, Plus, Trash2 } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { AlertTriangle, Plus, Trash2, Upload, Download } from 'lucide-react'
 import { useProjectStore } from '@/stores/project-store'
-import type { ProjectMeta, ProjectStatus } from '../../../shared/types'
+import type { ProjectMeta, ProjectStatus, ImportSuccess, ImportNeedsReview } from '../../../shared/types'
+import ExportProjectDialog from './ExportProjectDialog'
+import ImportMissingSkillsDialog from './ImportMissingSkillsDialog'
+import ImportSecurityAuditDialog from './ImportSecurityAuditDialog'
 
 function formatRelative(iso: string): string {
   const then = new Date(iso).getTime()
@@ -22,6 +25,12 @@ export default function ProjectListScreen() {
   const setScreen = useProjectStore((s) => s.setScreen)
   const refreshProjects = useProjectStore((s) => s.refreshProjects)
 
+  const [exportTarget, setExportTarget] = useState<ProjectMeta | null>(null)
+  const [importResult, setImportResult] = useState<ImportSuccess | null>(null)
+  const [importAudit, setImportAudit] = useState<ImportNeedsReview | null>(null)
+  const [importError, setImportError] = useState<string | null>(null)
+  const [importing, setImporting] = useState(false)
+
   useEffect(() => {
     void refreshProjects()
   }, [refreshProjects])
@@ -38,12 +47,57 @@ export default function ProjectListScreen() {
     await refreshProjects()
   }
 
+  async function handleImport() {
+    setImportError(null)
+    setImporting(true)
+    try {
+      const result = await window.trayline.project.import()
+      if ('canceled' in result) return
+      await refreshProjects()
+      if (result.ok === 'needs_review') {
+        setImportAudit(result)
+      } else if (result.missingSkills.length > 0) {
+        setImportResult(result)
+      }
+    } catch (e) {
+      setImportError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  async function handleAuditCommit(token: string) {
+    const committed = await window.trayline.project.importCommit(token)
+    setImportAudit(null)
+    await refreshProjects()
+    if (committed.missingSkills.length > 0) {
+      setImportResult(committed)
+    }
+  }
+
+  function handleAuditAbort(token: string) {
+    void window.trayline.project.importAbort(token)
+    setImportAudit(null)
+  }
+
+  function handleMissingSkillsDone() {
+    setImportResult(null)
+    void refreshProjects()
+  }
+
   return (
     <div className="flex flex-col items-center w-full max-w-2xl mx-auto px-8">
       <h1 className="text-2xl font-semibold tracking-tight mb-2">Your projects</h1>
       <p className="text-sm text-neutral-500 dark:text-neutral-400 text-center max-w-md mb-8 leading-relaxed">
         Pick a project to open, or create a new one. Click the status dot to toggle a project active or inactive.
       </p>
+
+      {importError && (
+        <div className="w-full mb-4 flex gap-2 px-3 py-2.5 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/40">
+          <AlertTriangle size={14} strokeWidth={1.75} className="text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+          <p className="text-xs text-red-700 dark:text-red-300">{importError}</p>
+        </div>
+      )}
 
       <ul className="w-full space-y-2">
         <li>
@@ -54,10 +108,7 @@ export default function ProjectListScreen() {
               rounded-full border border-dashed
               border-neutral-300 dark:border-neutral-700
               hover:border-neutral-400 dark:hover:border-neutral-600
-              bg-transparent
-              px-4 py-3
-              text-left
-              transition-colors
+              bg-transparent px-4 py-3 text-left transition-colors
             "
           >
             <span className="flex items-center justify-center w-6 h-6 rounded-full bg-neutral-100 dark:bg-neutral-900 text-neutral-600 dark:text-neutral-400">
@@ -69,32 +120,49 @@ export default function ProjectListScreen() {
           </button>
         </li>
 
+        <li>
+          <button
+            onClick={handleImport}
+            disabled={importing}
+            className="
+              group w-full flex items-center gap-3
+              rounded-full border border-dashed
+              border-neutral-300 dark:border-neutral-700
+              hover:border-neutral-400 dark:hover:border-neutral-600
+              bg-transparent px-4 py-3 text-left transition-colors
+              disabled:opacity-50
+            "
+          >
+            <span className="flex items-center justify-center w-6 h-6 rounded-full bg-neutral-100 dark:bg-neutral-900 text-neutral-600 dark:text-neutral-400">
+              <Download size={14} strokeWidth={2} />
+            </span>
+            <span className="flex-1 text-sm font-medium text-neutral-700 dark:text-neutral-300">
+              {importing ? 'Scanning…' : 'Import project from zip'}
+            </span>
+          </button>
+        </li>
+
         {all.map((p) => (
           <li key={p.name}>
-            <div
-              className="
-                group w-full flex items-center gap-3
-                rounded-full border
-                border-neutral-200 dark:border-neutral-800
-                bg-white dark:bg-neutral-950
-                hover:bg-neutral-50 dark:hover:bg-neutral-900
-                px-4 py-3
-                transition-colors
-              "
-            >
+            <div className="
+              group w-full flex items-center gap-3
+              rounded-full border
+              border-neutral-200 dark:border-neutral-800
+              bg-white dark:bg-neutral-950
+              hover:bg-neutral-50 dark:hover:bg-neutral-900
+              px-4 py-3 transition-colors
+            ">
               <button
                 onClick={(e) => { e.stopPropagation(); void toggleStatus(p) }}
                 title={p.status === 'active' ? 'Active — click to deactivate' : 'Inactive — click to activate'}
                 className="shrink-0 p-1 -m-1 rounded-full"
               >
-                <span
-                  className={`
-                    block w-2.5 h-2.5 rounded-full
-                    ${p.status === 'active'
-                      ? 'bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.15)]'
-                      : 'bg-red-500 shadow-[0_0_0_3px_rgba(239,68,68,0.15)]'}
-                  `}
-                />
+                <span className={`
+                  block w-2.5 h-2.5 rounded-full
+                  ${p.status === 'active'
+                    ? 'bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.15)]'
+                    : 'bg-red-500 shadow-[0_0_0_3px_rgba(239,68,68,0.15)]'}
+                `} />
               </button>
 
               <button
@@ -125,6 +193,20 @@ export default function ProjectListScreen() {
               </button>
 
               <button
+                onClick={(e) => { e.stopPropagation(); setExportTarget(p) }}
+                className="
+                  shrink-0 opacity-0 group-hover:opacity-100
+                  p-1.5 rounded-full
+                  text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200
+                  hover:bg-neutral-100 dark:hover:bg-neutral-800
+                  transition-opacity
+                "
+                title="Export project"
+              >
+                <Upload size={14} strokeWidth={1.75} />
+              </button>
+
+              <button
                 onClick={(e) => { e.stopPropagation(); void handleDelete(p) }}
                 className="
                   shrink-0 opacity-0 group-hover:opacity-100
@@ -141,6 +223,38 @@ export default function ProjectListScreen() {
           </li>
         ))}
       </ul>
+
+      {exportTarget && (
+        <ExportProjectDialog
+          projectName={exportTarget.name}
+          displayName={exportTarget.display_name}
+          open={!!exportTarget}
+          onOpenChange={(o) => { if (!o) setExportTarget(null) }}
+        />
+      )}
+
+      {importAudit && (
+        <ImportSecurityAuditDialog
+          token={importAudit.token}
+          projectName={importAudit.projectName}
+          securityFindings={importAudit.securityFindings}
+          projectSummary={importAudit.projectSummary}
+          open={!!importAudit}
+          onOpenChange={(o) => { if (!o) handleAuditAbort(importAudit.token) }}
+          onCommit={handleAuditCommit}
+          onAbort={handleAuditAbort}
+        />
+      )}
+
+      {importResult && (
+        <ImportMissingSkillsDialog
+          projectName={importResult.projectName}
+          missingSkills={importResult.missingSkills}
+          open={!!importResult}
+          onOpenChange={(o) => { if (!o) setImportResult(null) }}
+          onDone={handleMissingSkillsDone}
+        />
+      )}
     </div>
   )
 }
