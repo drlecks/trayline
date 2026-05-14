@@ -825,8 +825,11 @@ function RunsTab({ project, workflow, stepId }: { project: string; workflow: str
 
   if (runs.length === 0) {
     return (
-      <div className="p-6 text-xs text-neutral-500 dark:text-neutral-400">
-        No runs yet. The worker will run automatically when a card is marked ready in the preceding tray.
+      <div className="p-10 flex flex-col items-center gap-1 text-center">
+        <p className="text-sm text-neutral-500 dark:text-neutral-400">This worker hasn't run yet.</p>
+        <p className="text-xs text-neutral-400 dark:text-neutral-500 max-w-sm">
+          It will run automatically when a card is marked ready in the preceding tray. You can also use <strong>Run now</strong> in the header.
+        </p>
       </div>
     )
   }

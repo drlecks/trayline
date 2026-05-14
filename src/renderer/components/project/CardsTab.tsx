@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { useProjectStore } from '@/stores/project-store'
 import NewCardDialog from './NewCardDialog'
 import CardViewer from './CardViewer'
+import { NEW_CARD_EVENT } from '../shortcuts/useGlobalShortcuts'
 import type { StepMeta } from '../../../shared/types'
 import type { Card, CardStatus } from '../../../shared/card'
 
@@ -56,6 +57,16 @@ export default function CardsTab({ step }: { step: StepMeta }) {
   const fields = (step.raw.input_schema as { fields?: unknown[] } | undefined)?.fields ?? []
   const hasSchema = fields.length > 0
 
+  // Global Cmd/Ctrl+N shortcut — open the new-card dialog if this tray accepts it.
+  useEffect(() => {
+    if (isErrors) return
+    function onTrigger() {
+      if (allowManualCreate && hasSchema) setShowNew(true)
+    }
+    window.addEventListener(NEW_CARD_EVENT, onTrigger)
+    return () => window.removeEventListener(NEW_CARD_EVENT, onTrigger)
+  }, [isErrors, allowManualCreate, hasSchema])
+
   if (openCardId && active && workflow) {
     return (
       <CardViewer
@@ -101,10 +112,17 @@ export default function CardsTab({ step }: { step: StepMeta }) {
       {loading ? (
         <div className="text-xs text-neutral-400">Loading…</div>
       ) : cards.length === 0 ? (
-        <div className="text-sm text-neutral-500 dark:text-neutral-400 py-12 text-center">
-          {status === 'pending' && (isErrors ? 'No failed cards. All clear.' : 'No cards waiting. Create one to get started.')}
-          {status === 'ready' && 'No cards are ready yet.'}
-          {status === 'archived' && 'No archived cards yet.'}
+        <div className="py-12 flex flex-col items-center gap-3">
+          <p className="text-sm text-neutral-500 dark:text-neutral-400 text-center">
+            {status === 'pending' && (isErrors ? 'No failed cards. All clear.' : 'No cards yet.')}
+            {status === 'ready' && 'No cards are ready yet.'}
+            {status === 'archived' && 'No archived cards yet.'}
+          </p>
+          {status === 'pending' && allowManualCreate && !isErrors && hasSchema && (
+            <Button size="sm" onClick={() => setShowNew(true)}>
+              <Plus size={13} strokeWidth={1.75} /> New card
+            </Button>
+          )}
         </div>
       ) : (
         <div className="flex flex-col -mx-3 rounded-md overflow-hidden border border-neutral-200/70 dark:border-neutral-800/70">

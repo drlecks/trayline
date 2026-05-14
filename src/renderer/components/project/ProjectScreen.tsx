@@ -58,7 +58,7 @@ export default function ProjectScreen() {
 
       <div className="flex flex-1 min-h-0">
         {/* Left rail */}
-        <aside className="w-72 shrink-0 border-r border-black/[0.06] dark:border-white/[0.06] overflow-y-auto py-5 px-3 flex flex-col">
+        <aside data-tour="left-rail" className="w-72 shrink-0 border-r border-black/[0.06] dark:border-white/[0.06] overflow-y-auto py-5 px-3 flex flex-col">
           <div className="px-2 mb-5">
             <div className="text-sm font-semibold tracking-tight">{active.display_name}</div>
             <div className="text-[13px] text-neutral-500 dark:text-neutral-400 mt-0.5">
@@ -126,7 +126,7 @@ export default function ProjectScreen() {
         </aside>
 
         {/* Right canvas */}
-        <section className="flex-1 min-w-0 overflow-hidden">
+        <section data-tour="detail-panel" className="flex-1 min-w-0 overflow-hidden">
           {showContextEditor && active ? (
             <ContextPackEditor project={active.name} />
           ) : selectedStep

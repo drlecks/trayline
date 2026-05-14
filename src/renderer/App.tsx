@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useThemeStore } from './stores/theme-store'
 import { useProjectStore } from './stores/project-store'
 import TopBar from './components/layout/TopBar'
@@ -10,6 +10,10 @@ import ProjectScreen from './components/project/ProjectScreen'
 import SettingsScreen from './components/settings/SettingsScreen'
 import SkillsScreen from './components/skills/SkillsScreen'
 import ProviderNotInstalledModal from './components/layout/ProviderNotInstalledModal'
+import OnboardingTour from './components/onboarding/OnboardingTour'
+import ShortcutsDialog from './components/shortcuts/ShortcutsDialog'
+import CommandPalette from './components/shortcuts/CommandPalette'
+import { useGlobalShortcuts } from './components/shortcuts/useGlobalShortcuts'
 
 function applyThemeClass(theme: 'light' | 'dark' | 'system') {
   const root = document.documentElement
@@ -29,6 +33,16 @@ export default function App() {
   const setActive = useProjectStore((s) => s.setActive)
   const setScreen = useProjectStore((s) => s.setScreen)
   const refreshProjects = useProjectStore((s) => s.refreshProjects)
+
+  const [tourOpen, setTourOpen] = useState(false)
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
+
+  useGlobalShortcuts({
+    openSettings: () => setScreen('settings'),
+    openPalette: () => setPaletteOpen(true),
+    openShortcuts: () => setShortcutsOpen(true),
+  })
 
   useEffect(() => {
     applyThemeClass(theme)
@@ -63,9 +77,22 @@ export default function App() {
       } else {
         setScreen('projectList')
       }
+      if (!settings.onboardingComplete) setTourOpen(true)
     })()
     return () => { cancelled = true }
   }, [setTheme, setActive, setScreen, refreshProjects])
+
+  // Allow other screens to re-trigger the tour (Help link in Settings).
+  useEffect(() => {
+    function open() { setTourOpen(true) }
+    window.addEventListener('trayline:open-tour', open)
+    return () => window.removeEventListener('trayline:open-tour', open)
+  }, [])
+
+  async function closeTour() {
+    setTourOpen(false)
+    await window.trayline!.settings.set('onboardingComplete', true)
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -100,6 +127,13 @@ export default function App() {
       </main>
       <Footer />
       <ProviderNotInstalledModal />
+      <OnboardingTour open={tourOpen} onClose={closeTour} />
+      <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
+      <CommandPalette
+        open={paletteOpen}
+        onOpenChange={setPaletteOpen}
+        onOpenShortcuts={() => setShortcutsOpen(true)}
+      />
     </div>
   )
 }
