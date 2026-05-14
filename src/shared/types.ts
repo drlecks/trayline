@@ -235,9 +235,51 @@ export interface ExportManifest {
   mcps: string[]
 }
 
-export interface ImportResult {
+// ── Security audit ────────────────────────────────────────────────────────────
+
+export type SecurityFindingCategory =
+  | 'suspicious_file'
+  | 'exfiltration'
+  | 'system_access'
+  | 'obfuscation'
+  | 'prompt_injection'
+
+export interface SecurityFinding {
+  severity: 'critical' | 'warning'
+  category: SecurityFindingCategory
+  file: string
+  description: string
+  /** Truncated snippet of the offending text. */
+  match?: string
+}
+
+export interface ImportProjectSummary {
+  displayName: string
+  description: string
+  trays: number
+  workers: number
+  skillsRequired: string[]
+  /** First 300 chars of process.md per worker step. */
+  workerPreviews: Array<{ name: string; excerpt: string }>
+}
+
+/** Import completed — project is on disk and watchers are mounted. */
+export interface ImportSuccess {
   ok: true
   projectName: string
-  /** Skills referenced in the manifest that are not installed on this machine. */
   missingSkills: Array<{ id: string; version: string }>
 }
+
+/**
+ * Security scan found issues — project is held in a temp location.
+ * Call project:importCommit(token) to install or project:importAbort(token) to discard.
+ */
+export interface ImportNeedsReview {
+  ok: 'needs_review'
+  token: string
+  projectName: string
+  securityFindings: SecurityFinding[]
+  projectSummary: ImportProjectSummary
+}
+
+export type ImportResult = ImportSuccess | ImportNeedsReview

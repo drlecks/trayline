@@ -7,13 +7,21 @@ import archiver from 'archiver'
 import * as unzipper from 'unzipper'
 import { Paths } from './fs-service'
 import { projectService } from './project-service'
-import type { ExportManifest, ExportOptions, ImportResult } from '../../shared/types'
+import { auditProject } from './security-audit-service'
+import type {
+  ExportManifest,
+  ExportOptions,
+  ImportResult,
+  ImportSuccess,
+  ImportNeedsReview,
+} from '../../shared/types'
 
 async function pathExists(p: string): Promise<boolean> {
   try { await fs.access(p); return true } catch { return false }
 }
 
-// Directories that are always excluded from exports (derived/runtime data)
+// ── Export ────────────────────────────────────────────────────────────────────
+
 const SKIP_DIRS = new Set(['runs', 'state', '.history'])
 
 async function addDirectory(
@@ -54,13 +62,15 @@ async function buildManifest(projectName: string): Promise<ExportManifest> {
     const wfs = await fs.readdir(wfRoot, { withFileTypes: true })
     for (const wf of wfs) {
       if (!wf.isDirectory()) continue
-      const stepsRoot = join(wfRoot, wf.name, 'steps')
+      const stepsRoot = join(wfRoot, wf.name as string, 'steps')
       if (!(await pathExists(stepsRoot))) continue
       const steps = await fs.readdir(stepsRoot, { withFileTypes: true })
       for (const step of steps) {
         if (!step.isDirectory()) continue
         try {
-          const raw = JSON.parse(await fs.readFile(join(stepsRoot, step.name, 'step.json'), 'utf-8')) as Record<string, unknown>
+          const raw = JSON.parse(
+            await fs.readFile(join(stepsRoot, step.name as string, 'step.json'), 'utf-8'),
+          ) as Record<string, unknown>
           if (raw.kind === 'worker' && Array.isArray(raw.skills)) {
             for (const id of raw.skills) {
               if (typeof id === 'string') skillIds.add(id)
@@ -112,65 +122,138 @@ async function exportProject(
   await finished
 }
 
-async function importProject(zipPath: string): Promise<ImportResult> {
+// ── Import — two-step: scan then commit/abort ─────────────────────────────────
+
+type PendingImport = {
+  tempDir: string
+  projectName: string
+  manifest: ExportManifest | null
+  extractedPath: string
+}
+
+// In-memory map of pending imports awaiting user confirmation
+const pendingImports = new Map<string, PendingImport>()
+
+function makeToken(): string {
+  return `import_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+}
+
+async function extractAndValidate(zipPath: string): Promise<{
+  tempDir: string
+  extractedPath: string
+  projectName: string
+  manifest: ExportManifest | null
+}> {
   const tempDir = join(tmpdir(), `trayline-import-${Date.now()}`)
   await fs.mkdir(tempDir, { recursive: true })
 
+  await new Promise<void>((resolve, reject) => {
+    createReadStream(zipPath)
+      .pipe(unzipper.Extract({ path: tempDir }))
+      .on('close', resolve)
+      .on('error', reject)
+  })
+
+  // Read manifest.json from zip root (optional)
+  let manifest: ExportManifest | null = null
   try {
-    await new Promise<void>((resolve, reject) => {
-      createReadStream(zipPath)
-        .pipe(unzipper.Extract({ path: tempDir }))
-        .on('close', resolve)
-        .on('error', reject)
-    })
+    manifest = JSON.parse(await fs.readFile(join(tempDir, 'manifest.json'), 'utf-8')) as ExportManifest
+  } catch { /* proceed without manifest */ }
 
-    // manifest.json is at the zip root
-    let manifest: ExportManifest | null = null
-    try {
-      const raw = await fs.readFile(join(tempDir, 'manifest.json'), 'utf-8')
-      manifest = JSON.parse(raw) as ExportManifest
-    } catch { /* proceed without manifest */ }
+  // Project folder is the first subdirectory in the zip root
+  const entries = await fs.readdir(tempDir, { withFileTypes: true })
+  const projectDirEntry = entries.find((e) => e.isDirectory())
+  if (!projectDirEntry) throw new Error('Invalid export: no project folder found in zip.')
 
-    // The project folder is the first (and only) subdirectory in the zip root
-    const entries = await fs.readdir(tempDir, { withFileTypes: true })
-    const projectDir = entries.find((e) => e.isDirectory())
-    if (!projectDir) throw new Error('Invalid export: no project folder found in zip.')
+  const extractedPath = join(tempDir, projectDirEntry.name as string)
 
-    const extractedPath = join(tempDir, projectDir.name)
+  const projectJsonPath = join(extractedPath, 'project.json')
+  if (!(await pathExists(projectJsonPath))) {
+    throw new Error('Invalid export: project.json not found.')
+  }
+  const projectJson = JSON.parse(await fs.readFile(projectJsonPath, 'utf-8')) as { name?: string }
+  const projectName = projectJson.name ?? (projectDirEntry.name as string)
 
-    // Validate project.json
-    const projectJsonPath = join(extractedPath, 'project.json')
-    if (!(await pathExists(projectJsonPath))) {
-      throw new Error('Invalid export: project.json not found.')
+  const targetPath = join(Paths.projects, projectName)
+  if (await pathExists(targetPath)) {
+    throw new Error(`A project named "${projectName}" already exists. Delete it first before importing.`)
+  }
+
+  return { tempDir, extractedPath, projectName, manifest }
+}
+
+async function resolveMissingSkills(manifest: ExportManifest | null): Promise<ImportSuccess['missingSkills']> {
+  if (!manifest) return []
+  const missing: ImportSuccess['missingSkills'] = []
+  for (const skill of manifest.skills) {
+    if (!(await pathExists(join(Paths.skills, skill.id, 'skill.json')))) {
+      missing.push(skill)
     }
-    const projectJson = JSON.parse(await fs.readFile(projectJsonPath, 'utf-8')) as { name?: string }
-    const projectName = projectJson.name ?? projectDir.name
+  }
+  return missing
+}
 
-    // Reject if project already exists
-    const targetPath = join(Paths.projects, projectName)
-    if (await pathExists(targetPath)) {
-      throw new Error(`A project named "${projectName}" already exists. Delete it first before importing.`)
-    }
+async function importProject(zipPath: string): Promise<ImportResult> {
+  const { tempDir, extractedPath, projectName, manifest } = await extractAndValidate(zipPath)
 
-    // Copy extracted project to projects folder
-    await fs.cp(extractedPath, targetPath, { recursive: true })
+  // cleanupTemp tracks whether we own the temp dir at the end of this call.
+  // Set to false when ownership is transferred to pendingImports.
+  let cleanupTemp = true
 
-    // Determine missing skills
-    const missingSkills: ImportResult['missingSkills'] = []
-    if (manifest) {
-      for (const skill of manifest.skills) {
-        const installed = await pathExists(join(Paths.skills, skill.id, 'skill.json'))
-        if (!installed) missingSkills.push(skill)
+  try {
+    const { findings, summary } = await auditProject(extractedPath)
+
+    if (findings.length > 0) {
+      const token = makeToken()
+      pendingImports.set(token, { tempDir, extractedPath, projectName, manifest })
+      cleanupTemp = false  // temp is now owned by pendingImports entry
+      const result: ImportNeedsReview = {
+        ok: 'needs_review',
+        token,
+        projectName,
+        securityFindings: findings,
+        projectSummary: summary,
       }
+      return result
     }
 
+    // Clean — commit immediately
+    await fs.cp(extractedPath, join(Paths.projects, projectName), { recursive: true })
+    const missingSkills = await resolveMissingSkills(manifest)
+    return { ok: true, projectName, missingSkills }
+  } finally {
+    if (cleanupTemp) {
+      await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {})
+    }
+  }
+}
+
+async function commitImport(token: string): Promise<ImportSuccess> {
+  const pending = pendingImports.get(token)
+  if (!pending) throw new Error('Import session expired or not found.')
+  pendingImports.delete(token)
+
+  const { tempDir, extractedPath, projectName, manifest } = pending
+
+  try {
+    await fs.cp(extractedPath, join(Paths.projects, projectName), { recursive: true })
+    const missingSkills = await resolveMissingSkills(manifest)
     return { ok: true, projectName, missingSkills }
   } finally {
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {})
   }
 }
 
-async function openExampleProject(): Promise<ImportResult> {
+async function abortImport(token: string): Promise<void> {
+  const pending = pendingImports.get(token)
+  if (!pending) return
+  pendingImports.delete(token)
+  await fs.rm(pending.tempDir, { recursive: true, force: true }).catch(() => {})
+}
+
+// ── Example project ───────────────────────────────────────────────────────────
+
+async function openExampleProject(): Promise<ImportSuccess> {
   const exampleSrc = join(app.getAppPath(), '..', 'resources', 'example-project')
   const fallback = join(process.resourcesPath ?? '', 'example-project')
 
@@ -178,13 +261,10 @@ async function openExampleProject(): Promise<ImportResult> {
   if (!src && (await pathExists(fallback))) src = fallback
   if (!src) throw new Error('Example project not found in app bundle.')
 
-  // Read project name from project.json
   const projectJson = JSON.parse(await fs.readFile(join(src, 'project.json'), 'utf-8')) as { name?: string }
   const projectName = projectJson.name ?? 'example-project'
 
   const targetPath = join(Paths.projects, projectName)
-
-  // If already imported, just return it
   if (await pathExists(targetPath)) {
     return { ok: true, projectName, missingSkills: [] }
   }
@@ -196,5 +276,7 @@ async function openExampleProject(): Promise<ImportResult> {
 export const exportService = {
   exportProject,
   importProject,
+  commitImport,
+  abortImport,
   openExampleProject,
 }

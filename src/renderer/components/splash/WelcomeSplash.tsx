@@ -3,13 +3,15 @@ import { Folder, Sparkles, FolderOpen, Package } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useProjectStore } from '@/stores/project-store'
 import ImportMissingSkillsDialog from '../projects/ImportMissingSkillsDialog'
-import type { BootstrapInfo, ImportResult } from '../../../shared/types'
+import ImportSecurityAuditDialog from '../projects/ImportSecurityAuditDialog'
+import type { BootstrapInfo, ImportSuccess, ImportNeedsReview } from '../../../shared/types'
 
 export default function WelcomeSplash() {
   const [info, setInfo] = useState<BootstrapInfo | null>(null)
   const [importing, setImporting] = useState(false)
   const [openingExample, setOpeningExample] = useState(false)
-  const [importResult, setImportResult] = useState<ImportResult | null>(null)
+  const [importResult, setImportResult] = useState<ImportSuccess | null>(null)
+  const [importAudit, setImportAudit] = useState<ImportNeedsReview | null>(null)
   const setScreen = useProjectStore((s) => s.setScreen)
   const setActive = useProjectStore((s) => s.setActive)
   const refreshProjects = useProjectStore((s) => s.refreshProjects)
@@ -29,7 +31,9 @@ export default function WelcomeSplash() {
       const result = await window.trayline.project.import()
       if ('canceled' in result) return
       await refreshProjects()
-      if (result.missingSkills.length > 0) {
+      if (result.ok === 'needs_review') {
+        setImportAudit(result)
+      } else if (result.missingSkills.length > 0) {
         setImportResult(result)
       } else {
         await openProject(result.projectName)
@@ -58,7 +62,23 @@ export default function WelcomeSplash() {
     }
   }
 
-  async function handleImportDone(projectName: string) {
+  async function handleAuditCommit(token: string) {
+    const committed = await window.trayline.project.importCommit(token)
+    setImportAudit(null)
+    await refreshProjects()
+    if (committed.missingSkills.length > 0) {
+      setImportResult(committed)
+    } else {
+      await openProject(committed.projectName)
+    }
+  }
+
+  function handleAuditAbort(token: string) {
+    void window.trayline.project.importAbort(token)
+    setImportAudit(null)
+  }
+
+  async function handleMissingSkillsDone(projectName: string) {
     setImportResult(null)
     await refreshProjects()
     await openProject(projectName)
@@ -95,7 +115,7 @@ export default function WelcomeSplash() {
           <FolderOpen size={18} strokeWidth={1.5} className="text-neutral-600 dark:text-neutral-400 shrink-0" />
           <div className="w-full">
             <div className="text-sm font-medium leading-tight break-words">
-              {importing ? 'Importing…' : 'Import project'}
+              {importing ? 'Scanning…' : 'Import project'}
             </div>
             <div className="text-xs text-neutral-500 dark:text-neutral-400 font-normal mt-1 leading-snug break-words">Open a .zip from a colleague</div>
           </div>
@@ -137,13 +157,26 @@ export default function WelcomeSplash() {
         </div>
       )}
 
+      {importAudit && (
+        <ImportSecurityAuditDialog
+          token={importAudit.token}
+          projectName={importAudit.projectName}
+          securityFindings={importAudit.securityFindings}
+          projectSummary={importAudit.projectSummary}
+          open={!!importAudit}
+          onOpenChange={(o) => { if (!o) handleAuditAbort(importAudit.token) }}
+          onCommit={handleAuditCommit}
+          onAbort={handleAuditAbort}
+        />
+      )}
+
       {importResult && (
         <ImportMissingSkillsDialog
           projectName={importResult.projectName}
           missingSkills={importResult.missingSkills}
           open={!!importResult}
-          onOpenChange={(o) => { if (!o) void handleImportDone(importResult.projectName) }}
-          onDone={() => void handleImportDone(importResult.projectName)}
+          onOpenChange={(o) => { if (!o) setImportResult(null) }}
+          onDone={() => void handleMissingSkillsDone(importResult.projectName)}
         />
       )}
     </div>

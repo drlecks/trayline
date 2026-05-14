@@ -13,7 +13,7 @@ import { schedulerService } from '../services/scheduler-service'
 import { skillService } from '../services/skill-service'
 import { queueService } from '../services/queue-service'
 import { exportService } from '../services/export-service'
-import type { BootstrapInfo, ProviderInstallSuggestion, ProviderReadyResult, ExportOptions } from '../../shared/types'
+import type { BootstrapInfo, ProviderInstallSuggestion, ProviderReadyResult, ExportOptions, ImportSuccess } from '../../shared/types'
 import type { CardStatus } from '../../shared/card'
 
 export type { BootstrapInfo }
@@ -144,7 +144,8 @@ export function registerIpcHandlers(
     })
     if (canceled || filePaths.length === 0) return { canceled: true }
     const result = await exportService.importProject(filePaths[0])
-    if (result.ok) {
+    // Only mount if immediately committed (clean scan); needs_review defers to importCommit
+    if (result.ok === true) {
       const workflows = await projectService.listWorkflows(result.projectName).catch(() => [])
       for (const w of workflows) {
         await watcherService.mountWorkflow(result.projectName, w.name)
@@ -155,16 +156,28 @@ export function registerIpcHandlers(
     return result
   })
 
+  const mountProject = async (projectName: string) => {
+    const workflows = await projectService.listWorkflows(projectName).catch(() => [])
+    for (const w of workflows) {
+      await watcherService.mountWorkflow(projectName, w.name)
+      await schedulerService.mountWorkflow(projectName, w.name)
+      await queueService.mountWorkflow(projectName, w.name)
+    }
+  }
+
+  ipcMain.handle('project:importCommit', async (_: unknown, token: string): Promise<ImportSuccess> => {
+    const result = await exportService.commitImport(token)
+    await mountProject(result.projectName)
+    return result
+  })
+
+  ipcMain.handle('project:importAbort', async (_: unknown, token: string): Promise<void> => {
+    await exportService.abortImport(token)
+  })
+
   ipcMain.handle('project:openExample', async () => {
     const result = await exportService.openExampleProject()
-    if (result.ok) {
-      const workflows = await projectService.listWorkflows(result.projectName).catch(() => [])
-      for (const w of workflows) {
-        await watcherService.mountWorkflow(result.projectName, w.name)
-        await schedulerService.mountWorkflow(result.projectName, w.name)
-        await queueService.mountWorkflow(result.projectName, w.name)
-      }
-    }
+    await mountProject(result.projectName)
     return result
   })
 
