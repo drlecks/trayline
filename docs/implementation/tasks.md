@@ -54,10 +54,10 @@ Each task corresponds to a phase file in this folder. Check off tasks as they ar
 
 ## N3 Phases (Sources & Batch Workers)
 
-- [ ] [Phase N3.1 — Source Engine](./phase-n3-1-source-engine.md)
-- [ ] [Phase N3.2 — Source Step UI](./phase-n3-2-source-ui.md)
-- [ ] [Phase N3.3 — Batch Worker Mode](./phase-n3-3-batch-worker.md)
-- [ ] [Phase N3.4 — Workflow Author Integration](./phase-n3-4-author-support.md)
+- [x] [Phase N3.1 — Source Engine](./phase-n3-1-source-engine.md)
+- [x] [Phase N3.2 — Source Step UI](./phase-n3-2-source-ui.md)
+- [x] [Phase N3.3 — Batch Worker Mode](./phase-n3-3-batch-worker.md)
+- [x] [Phase N3.4 — Workflow Author Integration](./phase-n3-4-author-support.md)
 
 ---
 
