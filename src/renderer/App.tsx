@@ -91,7 +91,7 @@ export default function App() {
 
   async function closeTour() {
     setTourOpen(false)
-    await window.trayline!.settings.set('onboardingComplete', true)
+    await window.trayline.settings.set('onboardingComplete', true)
   }
 
   return (

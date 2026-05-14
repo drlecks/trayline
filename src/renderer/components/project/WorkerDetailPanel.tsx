@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useCallback } from 'react'
-import cronParser from 'cron-parser'
+import { CronExpressionParser } from 'cron-parser'
 import { AlertTriangle, Cpu, Play, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CopyButton } from '@/components/ui/copy-button'
@@ -650,7 +650,7 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
 
 function getNextRunDate(expr: string): Date | null {
   try {
-    const interval = cronParser.parseExpression(expr)
+    const interval = CronExpressionParser.parse(expr)
     return interval.next().toDate()
   } catch {
     return null
