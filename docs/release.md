@@ -6,7 +6,7 @@ This doc describes the CI release pipeline, versioning, signing, and notarizatio
 
 ## TL;DR
 
-- **Trigger:** every push/merge to `main`, plus a `workflow_dispatch` manual button.
+- **Trigger:** every push/merge to `main`, every PR targeting `main` (dry-run — no publish), plus a `workflow_dispatch` manual button.
 - **Versioning:** `package.json` is the floor (currently `1.0.0`). CI sets the patch to `1.0.${run_number}` per build — monotonic, no commit-back loop. Bump minor/major manually when you want to mark a meaningful release.
 - **Output:** a GitHub Release (marked **pre-release** while in beta) containing installers for every platform whose build succeeded.
 - **Auto-update:** packaged builds check the GitHub Releases feed via `electron-updater` on startup.
@@ -25,7 +25,9 @@ test (ubuntu)          ← npm ci, typecheck, vitest
 
 The `build` matrix only runs after `test` is green. Each matrix leg uploads its installer to the same GitHub Release (electron-builder dedupes by version).
 
-`concurrency: { group: release, cancel-in-progress: false }` prevents two close merges from racing on the same release.
+**PR dry runs.** When the workflow fires on a PR targeting `main` instead of a push, every step runs exactly as it would on release **except** electron-builder is invoked with `--publish never` — no GitHub Release is created or modified. The matrix still produces real installers, uploaded as workflow artifacts (`trayline-{OS}-v{version}`) for 14 days so you can smoke-test them before approving the merge. This means you find platform-specific build failures (a Windows-only native-deps issue, a macOS entitlement typo) on the PR, not after a release goes out half-broken.
+
+**Concurrency.** Two groups: `pr-<number>` for PR runs (cancels stale in-progress runs on force-push) and `release` for push/dispatch (serialised so close merges don't race).
 
 ---
 

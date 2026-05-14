@@ -3,6 +3,8 @@ name: Release
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
     inputs:
       reason:
@@ -10,9 +12,11 @@ on:
         required: false
         default: 'manual trigger'
 
+# On PRs we cancel earlier in-progress runs of the same PR (saves CI minutes
+# when force-pushing). On main/dispatch we serialise to avoid publish races.
 concurrency:
-  group: release
-  cancel-in-progress: false
+  group: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'release' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
@@ -120,38 +124,57 @@ jobs:
 
       # ── Build + publish to GitHub Releases ─────────────────────────────────
 
+      # Note: we set CSC_* env vars from inside the shell (rather than the
+      # step `env:` block) because passing an empty CSC_LINK to electron-
+      # builder makes it try to resolve the empty string as a file path and
+      # crash. Setting the var only when signing is actually enabled keeps
+      # the unsigned path clean.
       - name: Build (Windows)
         if: matrix.os == 'windows-latest'
+        shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CSC_LINK: ${{ steps.win_signing.outputs.signing == 'true' && secrets.WIN_CSC_LINK || '' }}
-          CSC_KEY_PASSWORD: ${{ steps.win_signing.outputs.signing == 'true' && secrets.WIN_CSC_KEY_PASSWORD || '' }}
-          CSC_IDENTITY_AUTO_DISCOVERY: ${{ steps.win_signing.outputs.signing }}
-        run: npm run build && npx electron-builder --win --publish always
+        run: |
+          if ('${{ steps.win_signing.outputs.signing }}' -eq 'true') {
+            $env:CSC_LINK = '${{ secrets.WIN_CSC_LINK }}'
+            $env:CSC_KEY_PASSWORD = '${{ secrets.WIN_CSC_KEY_PASSWORD }}'
+            $env:CSC_IDENTITY_AUTO_DISCOVERY = 'true'
+          } else {
+            $env:CSC_IDENTITY_AUTO_DISCOVERY = 'false'
+          }
+          npm run build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npx electron-builder --win --publish ${{ github.event_name == 'pull_request' && 'never' || 'always' }}
 
       - name: Build (macOS)
         if: matrix.os == 'macos-latest'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CSC_LINK: ${{ steps.mac_signing.outputs.signing == 'true' && secrets.CSC_LINK || '' }}
-          CSC_KEY_PASSWORD: ${{ steps.mac_signing.outputs.signing == 'true' && secrets.CSC_KEY_PASSWORD || '' }}
-          CSC_IDENTITY_AUTO_DISCOVERY: ${{ steps.mac_signing.outputs.signing }}
-          APPLE_ID: ${{ steps.mac_signing.outputs.notarize == 'true' && secrets.APPLE_ID || '' }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ steps.mac_signing.outputs.notarize == 'true' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
-          APPLE_TEAM_ID: ${{ steps.mac_signing.outputs.notarize == 'true' && secrets.APPLE_TEAM_ID || '' }}
         run: |
+          if [ "${{ steps.mac_signing.outputs.signing }}" = "true" ]; then
+            export CSC_LINK="${{ secrets.CSC_LINK }}"
+            export CSC_KEY_PASSWORD="${{ secrets.CSC_KEY_PASSWORD }}"
+            export CSC_IDENTITY_AUTO_DISCOVERY=true
+          else
+            export CSC_IDENTITY_AUTO_DISCOVERY=false
+          fi
+          if [ "${{ steps.mac_signing.outputs.notarize }}" = "true" ]; then
+            export APPLE_ID="${{ secrets.APPLE_ID }}"
+            export APPLE_APP_SPECIFIC_PASSWORD="${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}"
+            export APPLE_TEAM_ID="${{ secrets.APPLE_TEAM_ID }}"
+          fi
           npm run build
           if [ "${{ steps.mac_signing.outputs.notarize }}" = "true" ]; then
-            npx electron-builder --mac --publish always --config.mac.notarize=true
+            npx electron-builder --mac --publish ${{ github.event_name == 'pull_request' && 'never' || 'always' }} --config.mac.notarize=true
           else
-            npx electron-builder --mac --publish always
+            npx electron-builder --mac --publish ${{ github.event_name == 'pull_request' && 'never' || 'always' }}
           fi
 
       - name: Build (Linux)
         if: matrix.os == 'ubuntu-latest'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm run build && npx electron-builder --linux --publish always
+        run: npm run build && npx electron-builder --linux --publish ${{ github.event_name == 'pull_request' && 'never' || 'always' }}
 
       # ── Always upload installer artifacts even on failure (debug aid) ──────
       - name: Upload installer artifacts
