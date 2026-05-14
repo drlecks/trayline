@@ -6,6 +6,8 @@ import { fsService, Paths } from './services/fs-service'
 import { auditDb } from './services/audit-db'
 import { systemSkillsService } from './services/system-skills-service'
 import { workerRunner, setRunEventBroadcast } from './services/worker-runner'
+import { sourceRunner, setSourceEventBroadcast } from './services/source-runner'
+import { sourceScheduler } from './services/source-scheduler'
 import { watcherService } from './services/watcher-service'
 import { schedulerService } from './services/scheduler-service'
 import { queueService } from './services/queue-service'
@@ -156,7 +158,11 @@ app.whenReady().then(async () => {
     const { recovered } = await workerRunner.recoverOrphanedRuns()
     stage(`workerRunner.recoverOrphanedRuns done (recovered=${recovered})`)
 
+    const { recovered: sourceRecovered } = await sourceRunner.recoverOrphanedRuns()
+    stage(`sourceRunner.recoverOrphanedRuns done (recovered=${sourceRecovered})`)
+
     setRunEventBroadcast(() => BrowserWindow.getAllWindows())
+    setSourceEventBroadcast(() => BrowserWindow.getAllWindows())
 
     bootstrapInfo = { dataDir: Paths.root, systemSkillsRestored: restored }
     registerIpcHandlers(ipcMain, () => bootstrapInfo)
@@ -170,6 +176,9 @@ app.whenReady().then(async () => {
 
     await schedulerService.mountAll()
     stage('schedulerService.mountAll done')
+
+    await sourceScheduler.mountAll()
+    stage('sourceScheduler.mountAll done')
 
     await queueService.mountAll()
     stage('queueService.mountAll done')
@@ -202,4 +211,5 @@ app.on('before-quit', () => {
   void watcherService.unmountAll()
   void queueService.unmountAll()
   schedulerService.stopAll()
+  sourceScheduler.stopAll()
 })

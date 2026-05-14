@@ -47,6 +47,10 @@ export type AuditEvent =
   | 'mcp_credentials_reset'
   | 'mcp_health_check_failed'
   | 'ai_terminal_clear_failed'
+  | 'source_run_started'
+  | 'source_run_completed'
+  | 'source_run_failed'
+  | 'source_item_new'
 
 export interface AuditRow {
   id: string
@@ -97,7 +101,7 @@ export interface WorkflowMeta {
   step_ids: string[]
 }
 
-export type StepKind = 'tray' | 'worker'
+export type StepKind = 'tray' | 'worker' | 'source'
 
 export interface StepMeta {
   id: string
@@ -106,6 +110,72 @@ export interface StepMeta {
   description?: string
   raw: Record<string, unknown>
 }
+
+// ── Source step types ─────────────────────────────────────────────────────────
+
+export type SourceFirstRunPolicy = 'skip_existing' | 'process_all' | 'process_last_n'
+
+export interface SourceDedup {
+  key: string
+  max_memory: number
+  first_run: SourceFirstRunPolicy
+  first_run_n?: number
+}
+
+export interface SourceStepConfig {
+  id: string
+  kind: 'source'
+  name: string
+  description: string
+  color: string
+  icon: string
+  schedule_cron: string
+  dedup: SourceDedup
+  execution: {
+    timeout_seconds: number
+    adapter: string
+  }
+  paused: boolean
+}
+
+export interface SeenIdsEntry {
+  id: string
+  seen_at: string
+}
+
+export interface SourceCounters {
+  runs_total: number
+  items_found: number
+  items_new: number
+  last_run_at: string | null
+}
+
+export interface SourceRunMeta {
+  run_id: string
+  step_id: string
+  project: string
+  workflow: string
+  started_at: string
+  ended_at?: string
+  status: 'running' | 'completed' | 'failed'
+  items_found?: number
+  items_new?: number
+  error?: string
+  elapsed_ms?: number
+}
+
+export interface SourceState {
+  counters: SourceCounters
+  seenCount: number
+  paused: boolean
+  nextRunAt: string | null
+  running: boolean
+}
+
+export type SourceRunEvent =
+  | { type: 'started'; project: string; workflow: string; stepId: string; runId: string }
+  | { type: 'completed'; project: string; workflow: string; stepId: string; runId: string; itemsFound: number; itemsNew: number }
+  | { type: 'failed'; project: string; workflow: string; stepId: string; runId: string; error: string }
 
 // ── Usage / rate-limit windows ────────────────────────────────────────────────
 
