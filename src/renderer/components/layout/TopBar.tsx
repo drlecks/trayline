@@ -26,7 +26,7 @@ export default function TopBar() {
   const Icon = THEME_ICON[theme]
 
   return (
-    <header className="
+    <header data-tour="topbar" className="
       flex items-center justify-between
       h-11 shrink-0
       border-b border-black/[0.06] dark:border-white/[0.06]

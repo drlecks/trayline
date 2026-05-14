@@ -355,3 +355,31 @@ The batch worker's AI receives a JSON object:
 ```
 
 The `process.md` instructs the AI how to synthesise the array into one output.
+
+---
+
+## 7.18 Onboarding Tour
+
+A one-time guided tour that runs the first time the user launches the app. Implemented as an overlay with a dimmed backdrop and a highlight ring around the currently-described region.
+
+- Walks through: the welcome screen, the top bar, the left rail of workflow steps, the right detail panel, and a closing card.
+- The tour reads `data-tour="..."` attributes on key DOM regions (`topbar`, `left-rail`, `detail-panel`) so its position adapts to the current screen.
+- "Skip tour" and the final "Done" button both flip `settings.onboardingComplete` to `true`. The tour will not auto-launch again.
+- A **Run onboarding tour** button under **Settings → Help** re-triggers it whenever the user wants a refresher.
+
+---
+
+## 7.19 Keyboard Shortcuts
+
+A small set of global shortcuts wired through `useGlobalShortcuts`. They are skipped while the user is typing in an input or contenteditable element, with the deliberate exception of the command palette (which uses the same global shortcut convention as Slack, VS Code, etc.).
+
+| Shortcut | Action |
+|---|---|
+| ⌘/Ctrl+N | New card in the selected tray |
+| ⌘/Ctrl+, | Open Settings |
+| ⌘/Ctrl+K | Open the command palette |
+| ⌘/Ctrl+/ | Open the keyboard-shortcuts reference dialog |
+
+The **command palette** (⌘/Ctrl+K) is a quick-jump search: type to filter steps in the current workflow, other projects, and the Settings / Skills / Shortcuts screens. ↑/↓ navigate, Enter activates.
+
+A **Keyboard shortcuts** button under **Settings → Help** opens the same reference dialog as ⌘/Ctrl+/.
