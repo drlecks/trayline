@@ -26,6 +26,7 @@ All design decisions, data models, flows, and implementation plans live in `docs
 | [`docs/features.md`](docs/features.md) | Detailed feature designs — left rail, tray/worker detail views, card viewer, terminal layers, scheduler, skill finder, error tray |
 | [`docs/skills-and-mcps.md`](docs/skills-and-mcps.md) | Full skills + MCP system — validation pipeline, curated catalog, setup wizard steps, execution flow, security model |
 | [`docs/implementation/tasks.md`](docs/implementation/tasks.md) | **Master task list** — all phases with done/not-done status |
+| [`docs/release.md`](docs/release.md) | CI release pipeline, versioning, code signing, notarization, auto-updates |
 
 ### Implementation Phase Files
 

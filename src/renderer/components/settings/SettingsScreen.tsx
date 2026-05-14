@@ -310,6 +310,33 @@ export default function SettingsScreen() {
           </Field>
         )}
       </Section>
+
+      <Section title="Help" subtitle="Reminders and a way back to the onboarding tour.">
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new CustomEvent('trayline:open-tour'))}
+            className="px-3 py-1.5 rounded-md border border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-900 text-xs"
+          >
+            Run onboarding tour
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              // Defer to the global shortcut handler so the dialog comes up.
+              window.dispatchEvent(new KeyboardEvent('keydown', {
+                key: '/',
+                ctrlKey: !navigator.platform.toLowerCase().includes('mac'),
+                metaKey: navigator.platform.toLowerCase().includes('mac'),
+                bubbles: true,
+              }))
+            }}
+            className="px-3 py-1.5 rounded-md border border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-900 text-xs"
+          >
+            Keyboard shortcuts
+          </button>
+        </div>
+      </Section>
     </div>
   )
 }

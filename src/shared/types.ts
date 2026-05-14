@@ -19,6 +19,12 @@ export interface Settings {
    * user is on the welcome screen.
    */
   lastOpenedProject: string | null
+  /**
+   * True once the user has completed (or dismissed) the onboarding tour.
+   * Drives auto-launch of the tour on first run; can be reset from the
+   * Help menu to re-trigger.
+   */
+  onboardingComplete: boolean
 }
 
 // ── Audit log ─────────────────────────────────────────────────────────────────

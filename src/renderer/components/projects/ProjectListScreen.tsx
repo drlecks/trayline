@@ -5,6 +5,7 @@ import type { ProjectMeta, ProjectStatus, ImportSuccess, ImportNeedsReview } fro
 import ExportProjectDialog from './ExportProjectDialog'
 import ImportMissingSkillsDialog from './ImportMissingSkillsDialog'
 import ImportSecurityAuditDialog from './ImportSecurityAuditDialog'
+import iconUrl from '../../../../resources/icon-128.png'
 
 function formatRelative(iso: string): string {
   const then = new Date(iso).getTime()
@@ -87,6 +88,12 @@ export default function ProjectListScreen() {
 
   return (
     <div className="flex flex-col items-center w-full max-w-2xl mx-auto px-8">
+      <img
+        src={iconUrl}
+        alt=""
+        className="w-16 h-16 mb-4 select-none"
+        draggable={false}
+      />
       <h1 className="text-2xl font-semibold tracking-tight mb-2">Your projects</h1>
       <p className="text-sm text-neutral-500 dark:text-neutral-400 text-center max-w-md mb-8 leading-relaxed">
         Pick a project to open, or create a new one. Click the status dot to toggle a project active or inactive.
