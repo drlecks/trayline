@@ -128,57 +128,6 @@
       ],
       "has_test": true,
       "tags": ["notion", "docs", "database"]
-    },
-    {
-      "id": "gmail",
-      "name": "Gmail",
-      "version": "1.0.0",
-      "description": "Send and read Gmail messages using an App Password — no Google Cloud project needed.",
-      "install_method": "npm",
-      "command_template": "npx -y mcp-gmail",
-      "instructions": "Gmail supports App Passwords as a simple alternative to OAuth. No Google Cloud project is required.\n\n1. Make sure 2-Step Verification is enabled on your Google account\n2. Go to myaccount.google.com → Security → App passwords\n3. Create a new app password (name it 'Trayline')\n4. Copy the 16-character password shown\n\nYour email address and app password are stored securely in your OS keychain.",
-      "credentials_schema": [
-        {
-          "id": "GMAIL_EMAIL",
-          "label": "Gmail Address",
-          "description": "Your full Gmail address (e.g. you@gmail.com)",
-          "kind": "text_field"
-        },
-        {
-          "id": "GMAIL_APP_PASSWORD",
-          "label": "App Password",
-          "description": "16-character app password from myaccount.google.com/apppasswords",
-          "kind": "api_key"
-        }
-      ],
-      "has_test": true,
-      "tags": ["email", "gmail", "google"]
-    },
-    {
-      "id": "instagram",
-      "name": "Instagram",
-      "version": "1.0.0",
-      "description": "Read comments and mentions, reply to comments, and send DMs on Instagram Business or Creator accounts.",
-      "install_method": "npm",
-      "command_template": "npx -y mcp-instagram",
-      "instructions": "Requires an Instagram Business or Creator account linked to a Facebook Page.\n\n1. Go to developers.facebook.com and create an app with Instagram Graph API access\n2. Generate a long-lived User Access Token with these permissions:\n   • instagram_basic\n   • instagram_manage_comments\n   • instagram_manage_messages\n3. Find your Business Account ID in Meta Business Suite → Account Settings, or via the Graph API Explorer\n\nBoth values are stored securely in your OS keychain.",
-      "credentials_schema": [
-        {
-          "id": "INSTAGRAM_ACCESS_TOKEN",
-          "label": "Access Token",
-          "description": "Long-lived User Access Token from the Meta Developer portal",
-          "kind": "api_key"
-        },
-        {
-          "id": "INSTAGRAM_BUSINESS_ACCOUNT_ID",
-          "label": "Business Account ID",
-          "description": "Numeric ID of your Instagram Business or Creator account",
-          "kind": "text_field"
-        }
-      ],
-      "has_test": true,
-      "tags": ["instagram", "social", "comments", "messaging"],
-      "homepage": "https://developers.facebook.com/docs/instagram-api"
     }
   ]
 }
