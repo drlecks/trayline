@@ -130,6 +130,18 @@
       "tags": ["notion", "docs", "database"]
     },
     {
+      "id": "web-browse",
+      "name": "Web Browse",
+      "version": "1.0.0",
+      "description": "Full-browser automation — navigate pages, click elements, fill forms, and extract content with JavaScript support.",
+      "install_method": "npm",
+      "command_template": "npx -y @playwright/mcp@latest",
+      "instructions": "No credentials required. Once installed the agent can open web pages, interact with elements, and extract content from any site.\n\nThe first run downloads a browser automatically. Requires Node.js and an internet connection for that initial download.",
+      "credentials_schema": [],
+      "has_test": false,
+      "tags": ["web", "browser", "automation"]
+    },
+    {
       "id": "macos-apps",
       "name": "macOS Apps",
       "version": "1.0.0",
