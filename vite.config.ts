@@ -16,6 +16,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const mainExternals = [
   'electron',
   'better-sqlite3',
+  'keytar',
   'bindings',
   'electron-store',
   'chokidar',
