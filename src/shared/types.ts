@@ -339,6 +339,82 @@ export interface MissingSkillsEntry {
   missingSkillIds: string[]
 }
 
+// ── MCP system ────────────────────────────────────────────────────────────────
+
+export type McpInstallMethod = 'npm' | 'binary' | 'docker' | 'local'
+
+export type McpSetupStepType = 'info' | 'api_key' | 'text_field' | 'select' | 'oauth' | 'test_connection'
+
+export interface McpSetupStep {
+  id: string
+  type: McpSetupStepType
+  title: string
+  body?: string
+  credential_id?: string
+  options?: Array<{ label: string; value: string }>
+  provider?: string
+  scopes?: string[]
+}
+
+export interface McpCredentialSchemaEntry {
+  id: string
+  label: string
+  description?: string
+  kind: 'api_key' | 'text_field' | 'oauth'
+}
+
+export interface McpManifest {
+  id: string
+  name: string
+  version: string
+  description: string
+  install_method: McpInstallMethod
+  command_template: string
+  credentials_schema: McpCredentialSchemaEntry[]
+  setup_steps: McpSetupStep[]
+  tags?: string[]
+  homepage?: string
+}
+
+export type McpHealthState = 'ready' | 'unconfigured' | 'error' | 'unknown' | 'disabled'
+
+export interface McpStatus {
+  /** True when all required credentials are confirmed present in the keychain. */
+  configured: boolean
+  /** Result of last health check. null if never run. */
+  health: 'ok' | 'failed' | null
+  healthCheckedAt: string | null
+  lastError?: string
+  /** When true, MCP won't auto-start even if a worker has it marked. */
+  disabled?: boolean
+}
+
+export interface InstalledMcpRow {
+  manifest: McpManifest
+  status: McpStatus
+  healthState: McpHealthState
+  installedAt: string
+}
+
+export interface McpCatalogEntry {
+  id: string
+  name: string
+  version: string
+  description: string
+  install_method: McpInstallMethod
+  command_template: string
+  credentials_schema: McpCredentialSchemaEntry[]
+  setup_steps: McpSetupStep[]
+  tags?: string[]
+  homepage?: string
+}
+
+export interface McpCatalogIndex {
+  schema_version?: number
+  generated_at?: string
+  mcps: McpCatalogEntry[]
+}
+
 // ── Import / Export (Phase 11) ────────────────────────────────────────────────
 
 export interface ExportOptions {
