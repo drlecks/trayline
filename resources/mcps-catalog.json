@@ -353,6 +353,57 @@
           "title": "Verifying connection..."
         }
       ]
+    },
+    {
+      "id": "instagram",
+      "name": "Instagram",
+      "version": "1.0.0",
+      "description": "Read comments and mentions, reply to comments, and send DMs on Instagram Business or Creator accounts.",
+      "install_method": "npm",
+      "command_template": "npx -y mcp-instagram",
+      "tags": ["instagram", "social", "comments", "messaging", "oauth"],
+      "homepage": "https://developers.facebook.com/docs/instagram-api",
+      "credentials_schema": [
+        {
+          "id": "INSTAGRAM_ACCESS_TOKEN",
+          "label": "Instagram Access Token",
+          "description": "Long-lived User Access Token with instagram_basic, instagram_manage_comments, and instagram_manage_messages permissions.",
+          "kind": "api_key"
+        },
+        {
+          "id": "INSTAGRAM_BUSINESS_ACCOUNT_ID",
+          "label": "Instagram Business Account ID",
+          "description": "The numeric ID of your Instagram Business or Creator account.",
+          "kind": "text_field"
+        }
+      ],
+      "setup_steps": [
+        {
+          "id": "intro",
+          "type": "info",
+          "title": "Connect Instagram",
+          "body": "This MCP connects to the Instagram Graph API. You need an Instagram Business or Creator account linked to a Facebook Page.\n\nYou'll need:\n• A Meta Developer app with Instagram Graph API access\n• A long-lived User Access Token\n• Your Instagram Business Account ID\n\nTokens are stored securely in your OS keychain — never in any file."
+        },
+        {
+          "id": "token",
+          "type": "api_key",
+          "title": "Access Token",
+          "body": "Generate a long-lived User Access Token in the Meta Developer portal (developers.facebook.com). The token needs these permissions: instagram_basic, instagram_manage_comments, instagram_manage_messages.",
+          "credential_id": "INSTAGRAM_ACCESS_TOKEN"
+        },
+        {
+          "id": "account_id",
+          "type": "text_field",
+          "title": "Business Account ID",
+          "body": "Enter your Instagram Business Account ID. Find it in the Meta Business Suite under Account Settings, or via the Graph API Explorer: GET /me/accounts → select your page → GET /{page-id}?fields=instagram_business_account.",
+          "credential_id": "INSTAGRAM_BUSINESS_ACCOUNT_ID"
+        },
+        {
+          "id": "verify",
+          "type": "test_connection",
+          "title": "Verifying connection..."
+        }
+      ]
     }
   ]
 }
