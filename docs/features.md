@@ -220,27 +220,21 @@ Two skills ship with the app. Restored from bundled app resources on every launc
 
 ## 7.15 Persistent Footer
 
-A thin strip rendered at the bottom of every screen, always visible. The right side shows live AI usage indicators that refresh on a 10-second poll.
+A thin strip rendered at the bottom of every screen, always visible. The right side shows the active adapter selection and rolling usage indicators.
 
 **What it shows (right side):**
-- **5h window** — percentage of the active AI agent's 5-hour rolling rate-limit window consumed
-- **Weekly window** — percentage of the agent's weekly rate-limit window consumed
+- **Provider · Model · Effort** — the active AI Terminal Adapter, selected model, and effort tier. Always visible.
+- **5h window** — percentage of the 5-hour rolling rate-limit window consumed. Hidden for adapters that don't implement `getUsage()`.
+- **Weekly window** — percentage of the weekly rate-limit window consumed. Hidden when unavailable.
 
 **Behaviour:**
-- Polls the main process every 10 seconds via the `usage:get` IPC channel
-- Values ≥ 80 % render in amber to flag impending throttling
-- When usage data is unavailable (no agent installed, fetch failed, MVP placeholder mode), each indicator shows `—`
-- Hovering the indicators shows a tooltip with the data source (`claude-code` / `placeholder` / `unavailable`) and the timestamp of the last snapshot
-
-**Data source:**
-- The footer queries `usageService.getSnapshot()` in the main process.
-- **Currently:** returns `{ fiveHourPct: null, weeklyPct: null, source: 'unavailable' }` — Claude Code does not surface window state through any non-interactive entry point, so we render `—` instead of fabricating numbers.
-- **Phase 4 plan:** as the worker engine spawns Claude Code runs, accumulate the per-call token usage from the CLI's JSON envelope (`usage.input_tokens` + `output_tokens`) into rolling 5-hour and 7-day buckets. This gives a lower bound that's accurate for Trayline-spawned work; usage from the user's other Claude Code sessions remains invisible.
-- **Long-term:** if Anthropic ships a CLI flag or subcommand that prints true window state, swap that in.
+- Values refresh whenever a worker run completes (main process broadcasts `adapters:onUsageUpdate`) and via manual refresh in Settings
+- Usage values ≥ 80 % render in amber to flag impending throttling
+- Adapters without `getUsage()` show only the Provider · Model · Effort segment; no placeholder dashes
 
 **Left half:** currently empty, reserved for future use (project breadcrumbs, sync status, version, etc.).
 
-See `docs/design-principles.md` → **Footer** for visual specification.
+See `docs/design-principles.md` → **Footer** and `docs/tech-stack.md` → **Provider / model / effort selection** for the full specification.
 
 ---
 
@@ -293,6 +287,9 @@ Two tabs: **Source** and **Config**.
 │                                                              │
 │  Adapter       [claude-code ▼]   Timeout [60s]              │
 │                                                              │
+│  MCPs          ☑ Instagram                     ✓ Ready       │
+│                ☐ GitHub                                      │
+│                                                              │
 │  [Run now]   [Pause schedule]                               │
 └──────────────────────────────────────────────────────────────┘
 ```
@@ -300,6 +297,10 @@ Two tabs: **Source** and **Config**.
 **Schedule picker** shows friendly labels ("Every 5 minutes", "Every hour", "Every day at 9am", "Custom") and renders the resulting cron expression below the picker so users can verify it.
 
 **First run** mode only applies the very first time the source runs (when `seen-ids.json` is empty or absent). After the first run it has no effect.
+
+**Adapter selector** — dropdown of all installed AI Terminal Adapters. Defaults to the global default. Per-source overrides persist in `step.json → execution.adapter`. *(Pending implementation — see N3.2)*
+
+**MCPs** — a checklist of installed MCPs the source can activate for its runs. Source steps follow the same pre-flight and credential-injection rules as workers: if a selected MCP is not Ready, the run is aborted before starting. *(Pending implementation — see N3.1 / N3.2)*
 
 **Run now** fires the source immediately, outside the cron schedule. Useful for testing `source.md` before relying on the schedule.
 

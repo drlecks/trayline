@@ -52,6 +52,13 @@ Build the complete backend for Source steps: scheduling, AI execution, JSON pars
 - [x] Write `source_run_failed` event with `{ error, duration_ms }` on failure
 - [x] Write one `source_item_new` event per new card created, with `{ item_id, card_id }`
 
+### MCP Support
+
+- [ ] Add `mcps: string[]` field to `SourceStepConfig` (default `[]`)
+- [ ] Pre-flight check before each source run: resolve each MCP id; if any is not installed or not in Ready state → abort the run, emit `source_run_failed` with code `run_aborted_mcp_not_ready`, log the blocking MCP name
+- [ ] Credential injection: read credentials from keychain and pass to the adapter's `spawn()` call exactly as workers do (N2.5 path)
+- [ ] Update `source:get-state` IPC response to include `mcps: string[]` so the UI can display the assigned MCPs
+
 ### Crash Recovery
 
 - [x] On app launch, for each Source step folder: check for `state/seen-ids.json.tmp`; if present, discard it (the rename never completed — the last good `seen-ids.json` is authoritative)

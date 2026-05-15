@@ -188,6 +188,7 @@ When `batch_mode` is `true`, the worker receives all cards currently in the prev
     "timeout_seconds": 60,
     "adapter": "claude-code"
   },
+  "mcps": [],
   "paused": false
 }
 ```
@@ -200,6 +201,8 @@ When `batch_mode` is `true`, the worker receives all cards currently in the prev
 | `dedup.max_memory` | Maximum number of IDs stored in `seen-ids.json`; oldest entries pruned when exceeded |
 | `dedup.first_run` | What to do on the very first run: `skip_existing` (default — fetch but discard all, record IDs only), `process_all` (create cards for everything found), `process_last_n` (create cards for the N most recent) |
 | `dedup.first_run_n` | Number of most-recent items to process when `first_run` is `"process_last_n"` |
+| `execution.adapter` | Which AI Terminal Adapter to use for this source (overrides global default). Defaults to `claude-code`. |
+| `mcps` | List of MCP ids to activate for each source run — same pre-flight and credential-injection rules as workers. *(Pending implementation — N3.1 / N3.2)* |
 | `paused` | When `true`, the cron job is not registered at launch and `source:pause` / `source:resume` toggle it |
 
 **Source step folder structure:**
@@ -244,22 +247,25 @@ A Source step is always the **first** step in a workflow (`00-<slug>`). It has n
 
 ```json
 {
-  "id": "gmail",
-  "name": "Gmail",
+  "id": "github",
+  "name": "GitHub",
   "version": "1.0.0",
-  "description": "Read, search and send Gmail messages",
+  "description": "Issues, PRs, repos, and files via Personal Access Token",
   "install_method": "npm",
-  "command_template": "...",
-  "credentials_schema": [...],
-  "setup_steps": [
-    { "id": "intro", "type": "info", "title": "Connect Gmail", "body": "..." },
-    { "id": "oauth", "type": "oauth", "provider": "google", "scopes": ["gmail.readonly", "gmail.send"], "credential_id": "google_oauth_token" },
-    { "id": "verify", "type": "test_connection", "title": "Verifying connection..." }
-  ]
+  "command_template": "npx -y @modelcontextprotocol/server-github",
+  "instructions": "Create a Personal Access Token at github.com/settings/tokens with repo and issues scopes.",
+  "credentials_schema": [
+    { "id": "github_pat", "type": "api_key", "label": "Personal Access Token", "env_var": "GITHUB_PERSONAL_ACCESS_TOKEN" }
+  ],
+  "has_test": true
 }
 ```
 
+The Setup Wizard is derived entirely from these three fields: `instructions` → info screen, each `credentials_schema` entry → one masked (`api_key`) or plain (`text_field` / `select`) input, and `has_test: true` → connection test screen at the end.
+
 **Credentials are never in `mcp.json`.** They live in the OS keychain (keytar). `state/status.json` only stores flags (`configured: true/false`), never the secret itself.
+
+**Trayline does not support OAuth-based MCPs.** All credentials are simple key/value pairs (API keys, tokens, file paths) stored in the OS keychain via keytar. MCPs that require a browser-based OAuth flow are intentionally excluded.
 
 ### App settings (`app-data/settings.json`)
 
@@ -281,7 +287,7 @@ User-level preferences shared across projects. Lives at `~/Documents/Trayline/ap
 | `defaultCliCommand` | The CLI binary the worker engine spawns by default. |
 | `defaultAdapterId` | Which AI Terminal Adapter is active by default. |
 | `notificationsEnabled` | Whether OS notifications fire on completed/failed runs. |
-| `lastOpenedProject` | Folder id of the project the user had open when the app last closed. On launch, the renderer reads this and reopens that project automatically (if it still exists on disk). `null` means the user was on the welcome screen. |
+| `lastOpenedProject` | Folder id of the project the user had open when the app last closed. Maintained for future use — the app always opens to the Project List on launch regardless of this value. `null` when no project has been opened yet. |
 
 The renderer writes `lastOpenedProject` whenever the active project changes (open / switch / close). When a project is deleted, the field is cleared.
 
