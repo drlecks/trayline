@@ -119,12 +119,29 @@ describe('skillService', () => {
     expect(res.index.skills).toEqual([])
   })
 
-  it('installFromCatalog fetches files, writes manifest + md, and stamps _trayline metadata', async () => {
-    const baseUrl = 'https://example.test/skills/demo-skill/'
+  it('installFromCatalog fetches files via GitHub API, writes manifest + md, and stamps _trayline metadata', async () => {
+    const baseUrl = 'https://raw.githubusercontent.com/test-owner/test-skills/main/skills/demo-skill/'
+    const apiUrl = 'https://api.github.com/repos/test-owner/test-skills/contents/skills/demo-skill?ref=main'
+    const rawMdUrl = 'https://raw.githubusercontent.com/test-owner/test-skills/main/skills/demo-skill/SKILL.md'
+
+    // Catalog index with a real GitHub raw URL so validateFromGitHubCatalog can parse it
+    const githubIndex: CatalogIndex = {
+      schema_version: 1,
+      skills: [
+        { ...SAMPLE_INDEX.skills[0]!, base_url: baseUrl, skill_md: 'SKILL.md' },
+        SAMPLE_INDEX.skills[1]!,
+      ],
+    }
+
     vi.stubGlobal('fetch', makeFakeFetch({
-      [REAL_CATALOG_URL]: { body: JSON.stringify(SAMPLE_INDEX) },
-      [baseUrl + 'skill.json']: { body: DEMO_MANIFEST },
-      [baseUrl + 'skill.md']: { body: DEMO_MD },
+      [REAL_CATALOG_URL]: { body: JSON.stringify(githubIndex) },
+      // GitHub Contents API returns a flat file listing for this skill directory
+      [apiUrl]: {
+        body: JSON.stringify([
+          { name: 'SKILL.md', type: 'file', download_url: rawMdUrl, url: `${apiUrl}/SKILL.md` },
+        ]),
+      },
+      [rawMdUrl]: { body: DEMO_MD },
     }))
 
     const installed = await skillService.installFromCatalog('demo-skill')
@@ -136,7 +153,8 @@ describe('skillService', () => {
     expect(manifest._trayline.source).toBe('catalog')
     expect(manifest._trayline.source_url).toBe(baseUrl)
     expect(typeof manifest._trayline.installed_at).toBe('string')
-    expect(await fs.readFile(join(dir, 'skill.md'), 'utf-8')).toBe(DEMO_MD)
+    // File is stored with its original GitHub name (SKILL.md)
+    expect(await fs.readFile(join(dir, 'SKILL.md'), 'utf-8')).toBe(DEMO_MD)
   })
 
   it('installFromUrl validates the manifest and rejects bad ids', async () => {

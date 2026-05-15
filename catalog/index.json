@@ -1,5 +1,76 @@
 {
   "schema_version": 1,
   "generated_at": "2026-05-15T00:00:00Z",
-  "skills": []
+  "skills": [
+    {
+      "id": "pdf",
+      "name": "PDF Tools",
+      "version": "1.0.0",
+      "description": "Extract text, tables, and metadata from PDF files.",
+      "author": "Anthropic",
+      "tags": ["pdf", "document", "extract"],
+      "base_url": "https://raw.githubusercontent.com/anthropics/skills/main/skills/pdf/",
+      "skill_md": "SKILL.md"
+    },
+    {
+      "id": "docx",
+      "name": "Word Document Tools",
+      "version": "1.0.0",
+      "description": "Read and manipulate Microsoft Word (.docx) files.",
+      "author": "Anthropic",
+      "tags": ["word", "docx", "document"],
+      "base_url": "https://raw.githubusercontent.com/anthropics/skills/main/skills/docx/",
+      "skill_md": "SKILL.md"
+    },
+    {
+      "id": "xlsx",
+      "name": "Excel Spreadsheet Tools",
+      "version": "1.0.0",
+      "description": "Read and analyze Microsoft Excel (.xlsx) spreadsheets.",
+      "author": "Anthropic",
+      "tags": ["excel", "xlsx", "spreadsheet"],
+      "base_url": "https://raw.githubusercontent.com/anthropics/skills/main/skills/xlsx/",
+      "skill_md": "SKILL.md"
+    },
+    {
+      "id": "canvas-design",
+      "name": "Canvas Design",
+      "version": "1.0.0",
+      "description": "Create and edit images on an HTML canvas.",
+      "author": "Anthropic",
+      "tags": ["design", "canvas", "image"],
+      "base_url": "https://raw.githubusercontent.com/anthropics/skills/main/skills/canvas-design/",
+      "skill_md": "SKILL.md"
+    },
+    {
+      "id": "marketing-psychology",
+      "name": "Marketing Psychology",
+      "version": "1.0.0",
+      "description": "Apply consumer psychology frameworks to marketing content.",
+      "author": "Corey Haines",
+      "tags": ["marketing", "psychology", "copywriting"],
+      "base_url": "https://raw.githubusercontent.com/coreyhaines31/marketingskills/main/skills/marketing-psychology/",
+      "skill_md": "SKILL.md"
+    },
+    {
+      "id": "social-content",
+      "name": "Social Media Content",
+      "version": "1.0.0",
+      "description": "Create engaging social media content across platforms.",
+      "author": "Corey Haines",
+      "tags": ["social", "content", "marketing"],
+      "base_url": "https://raw.githubusercontent.com/coreyhaines31/marketingskills/main/skills/social/",
+      "skill_md": "SKILL.md"
+    },
+    {
+      "id": "triage",
+      "name": "Issue Triage",
+      "version": "1.0.0",
+      "description": "Triage and prioritize issues, bugs, and support requests.",
+      "author": "Matt Pocock",
+      "tags": ["triage", "issues", "engineering"],
+      "base_url": "https://raw.githubusercontent.com/mattpocock/skills/main/skills/engineering/triage/",
+      "skill_md": "SKILL.md"
+    }
+  ]
 }
