@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import type { ProjectMeta, StepMeta, WorkflowMeta } from '../../shared/types'
 import type { MissingSkillsEntry } from '../../shared/types'
 
-type Screen = 'splash' | 'projectList' | 'author' | 'project' | 'settings' | 'skills'
+type Screen = 'splash' | 'projectList' | 'author' | 'project' | 'settings' | 'skills' | 'mcps'
 
 interface ProjectStoreState {
   /** The project currently open in the right canvas, or null on the splash. */
