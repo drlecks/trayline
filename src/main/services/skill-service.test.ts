@@ -112,11 +112,12 @@ describe('skillService', () => {
     expect(res.index.skills.map((s) => s.id)).toContain('demo-skill')
   })
 
-  it('fetchCatalog returns an empty index when offline and no cache exists', async () => {
+  it('fetchCatalog falls back to bundled catalog when offline and no cache exists', async () => {
     vi.stubGlobal('fetch', makeFakeFetch({ [REAL_CATALOG_URL]: { error: 'offline' } }))
     const res = await skillService.fetchCatalog()
     expect(res.source).toBe('cache')
-    expect(res.index.skills).toEqual([])
+    // Falls back to the bundled resources/skills-catalog.json which is present in dev
+    expect(res.index.skills.length).toBeGreaterThan(0)
   })
 
   it('installFromCatalog fetches files via GitHub API, writes manifest + md, and stamps _trayline metadata', async () => {

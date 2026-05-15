@@ -1,5 +1,6 @@
 import { join } from 'path'
 import fs from 'fs/promises'
+import { app } from 'electron'
 import { Paths, fsService } from './fs-service'
 import { projectService } from './project-service'
 import { auditDb } from './audit-db'
@@ -18,6 +19,11 @@ const CATALOG_URL =
   'https://raw.githubusercontent.com/drlecks/trayline/develop/catalog/index.json'
 const CACHE_PATH = join(Paths.appData, 'skills-index-cache.json')
 const FETCH_TIMEOUT_MS = 8000
+
+function getBundledCatalogPath(): string {
+  if (app.isPackaged) return join(process.resourcesPath, 'skills-catalog.json')
+  return join(app.getAppPath(), 'resources', 'skills-catalog.json')
+}
 
 export interface CatalogEntry {
   id: string
@@ -121,7 +127,17 @@ function skillAudit(event: 'skill_installed' | 'skill_updated' | 'skill_uninstal
   })
 }
 
-// ── Catalog fetch + cache ─────────────────────────────────────────────────────
+// ── Catalog seeding + fetch ───────────────────────────────────────────────────
+
+/** Copy bundled skills-catalog.json to app-data on first launch. No-op if already present. */
+async function seedCatalog(): Promise<void> {
+  if (await pathExists(CACHE_PATH)) return
+  const src = getBundledCatalogPath()
+  if (!(await pathExists(src))) return
+  const raw = await fs.readFile(src, 'utf-8')
+  await fs.mkdir(Paths.appData, { recursive: true })
+  await fs.writeFile(CACHE_PATH, raw, 'utf-8')
+}
 
 async function fetchCatalog(opts?: { forceRefresh?: boolean }): Promise<CatalogFetchResult> {
   let remoteError: string | undefined
@@ -143,6 +159,12 @@ async function fetchCatalog(opts?: { forceRefresh?: boolean }): Promise<CatalogF
   if (await pathExists(CACHE_PATH)) {
     const cached = await fsService.readJson<CatalogIndex>(CACHE_PATH)
     return { index: cached, source: 'cache', remoteError }
+  }
+  // Last resort: read from the bundled file shipped with the app
+  const bundled = getBundledCatalogPath()
+  if (await pathExists(bundled)) {
+    const index = await fsService.readJson<CatalogIndex>(bundled)
+    return { index, source: 'cache', remoteError }
   }
   return { index: { skills: [] }, source: 'cache', remoteError }
 }
@@ -413,6 +435,7 @@ export async function revalidateAll(): Promise<{ skillId: string; quarantined: b
 }
 
 export const skillService = {
+  seedCatalog,
   fetchCatalog,
   listInstalled,
   installFromCatalog,

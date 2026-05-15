@@ -160,6 +160,9 @@ app.whenReady().then(async () => {
     await mcpRegistry.seedCatalog()
     stage('mcpRegistry.seedCatalog done')
 
+    await skillService.seedCatalog()
+    stage('skillService.seedCatalog done')
+
     // Background quarantine check — non-blocking; failures are swallowed so a
     // corrupt skill can't prevent the app from opening.
     skillService.revalidateAll().then((quarantined) => {
