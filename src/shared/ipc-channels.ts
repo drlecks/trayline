@@ -75,8 +75,12 @@ export const IPC = {
     listInstalled: 'skills:listInstalled',
     install: 'skills:install',
     installFromUrl: 'skills:installFromUrl',
+    validateFromUrl: 'skills:validateFromUrl',
+    confirmInstall: 'skills:confirmInstall',
+    cancelValidation: 'skills:cancelValidation',
     update: 'skills:update',
     uninstall: 'skills:uninstall',
+    revalidateAll: 'skills:revalidateAll',
   },
   card: {
     list: 'card:list',
