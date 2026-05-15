@@ -130,43 +130,32 @@
       "tags": ["notion", "docs", "database"]
     },
     {
-      "id": "macos-calendar",
-      "name": "macOS Calendar",
+      "id": "macos-apps",
+      "name": "macOS Apps",
       "version": "1.0.0",
-      "description": "Read and create events in your Mac's Calendar app — works with iCloud, Google Calendar, Exchange, or any account synced locally.",
+      "description": "Read and manage Calendar events, Mail, Reminders, and Files through your Mac's native apps — works with iCloud, Google, Exchange, or any account signed in.",
       "install_method": "npm",
-      "command_template": "npx -y mcp-apple-calendar",
-      "instructions": "No credentials needed. The agent reads from your Mac's Calendar app directly, using whichever accounts are already signed in.\n\nWhen you first run a worker with this MCP, macOS will ask for permission to access your calendars. Click Allow.",
+      "command_template": "npx -y @l22-io/orchard-mcp",
+      "instructions": "No credentials needed. The agent works through your Mac's native Calendar, Mail, Reminders, and Files apps using whichever accounts are already signed in via System Settings → Internet Accounts.\n\nRequires macOS 14 (Sonoma) or later.\n\nWhen you first run a worker with this MCP, macOS will ask for permission to access your calendar and mail. Click Allow.",
       "credentials_schema": [],
       "has_test": false,
       "platforms": ["darwin"],
-      "tags": ["calendar", "macos", "apple"]
+      "tags": ["calendar", "email", "macos", "apple"],
+      "homepage": "https://github.com/l22-io/orchard-mcp"
     },
     {
-      "id": "macos-mail",
-      "name": "macOS Mail",
+      "id": "outlook-calendar",
+      "name": "Outlook Calendar",
       "version": "1.0.0",
-      "description": "Read and send emails through your Mac's Mail app — works with iCloud, Gmail, Exchange, or any account synced locally.",
+      "description": "Read and create calendar events through your locally installed Outlook — works with Microsoft 365, Exchange, or any account signed into Outlook.",
       "install_method": "npm",
-      "command_template": "npx -y mcp-apple-mail",
-      "instructions": "No credentials needed. The agent reads and sends mail through your Mac's Mail app directly, using whichever accounts are already signed in.\n\nWhen you first run a worker with this MCP, macOS will ask for permission to access Mail. Click Allow.",
-      "credentials_schema": [],
-      "has_test": false,
-      "platforms": ["darwin"],
-      "tags": ["email", "macos", "apple"]
-    },
-    {
-      "id": "outlook",
-      "name": "Outlook",
-      "version": "1.0.0",
-      "description": "Read and send emails and calendar events through your locally installed Outlook — works with Microsoft 365, Exchange, or any account signed into Outlook.",
-      "install_method": "npm",
-      "command_template": "npx -y mcp-outlook",
-      "instructions": "No credentials needed. The agent works through your locally installed Outlook app, using whichever account is already signed in.\n\nRequires Microsoft Outlook to be installed on this computer.",
+      "command_template": "npx -y outlook-calendar-mcp",
+      "instructions": "No credentials needed. The agent reads and creates calendar events through your locally installed Outlook desktop app using whichever account is already signed in.\n\nRequires Microsoft Outlook to be installed on this computer.\n\nOn first use, Outlook may show a security prompt to allow script access — click Allow.",
       "credentials_schema": [],
       "has_test": false,
       "platforms": ["win32"],
-      "tags": ["email", "calendar", "outlook", "microsoft"]
+      "tags": ["calendar", "outlook", "microsoft"],
+      "homepage": "https://github.com/merajmehrabi/Outlook_Calendar_MCP"
     }
   ]
 }
