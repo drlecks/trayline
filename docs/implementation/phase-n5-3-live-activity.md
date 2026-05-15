@@ -12,13 +12,13 @@ Surface real-time cross-project activity so users can see what's running across 
 
 ## Tasks
 
-- [ ] **Global active-runs store in the renderer** (`useActiveRuns` hook or Zustand slice):
+- [x] **Global active-runs store in the renderer** (`useActiveRuns` hook or Zustand slice):
   - Subscribes to `run_event` and `source:run-event` IPC push events globally (not just per-project)
   - Maintains a map: `key (project/workflow/step) → { projectName, workflowName, stepName, startedAt, kind: 'worker' | 'source' }`
   - Adds entries on `run_started` / `source_run_started` events; removes them on `run_completed` / `run_failed` / `source_run_completed` / `source_run_failed`
   - Exposed as `activeRuns: ActiveRun[]` to any component
 
-- [ ] **Global activity bar** — rendered below the project pill list in `ProjectListScreen` when `activeRuns.length > 0`:
+- [x] **Global activity bar** — rendered below the project pill list in `ProjectListScreen` when `activeRuns.length > 0`:
   ```
   ┌─────────────────────────────────────────────────────────────┐
   │  Live activity                                              │
@@ -30,11 +30,11 @@ Surface real-time cross-project activity so users can see what's running across 
   - Rows are sorted by `startedAt` descending (most recent at top)
   - The bar collapses and disappears when `activeRuns` is empty
 
-- [ ] **Top bar activity indicator** — a small pulsing dot on the top bar's right side (near the project switcher) when `activeRuns.length > 0`. Tooltip: `"N runs in progress"`. Clicking it returns to the Project List screen (which shows the activity bar).
+- [x] **Top bar activity indicator** — a small pulsing dot on the top bar's right side (near the project switcher) when `activeRuns.length > 0`. Tooltip: `"N runs in progress"`. Clicking it returns to the Project List screen (which shows the activity bar).
 
-- [ ] **Source countdown live refresh** — source step left rail cards currently display `next: Xm` from a stale `source:get-state` snapshot. Replace the static read with a 60-second `setInterval` that re-calls `source:get-state` while the source step is selected, keeping the countdown accurate.
+- [x] **Source countdown live refresh** — source step left rail cards currently display `next: Xm` from a stale `source:get-state` snapshot. Replace the static read with a 60-second `setInterval` that re-calls `source:get-state` while the source step is selected, keeping the countdown accurate.
 
-- [ ] **`project:live-stats` push subscription** — when the renderer is on the Project List screen, subscribe to `run_event` and `source:run-event` to increment/decrement the per-project running-worker counter without polling. (This completes the reactive wiring started in N5.2.)
+- [x] **`project:live-stats` push subscription** — when the renderer is on the Project List screen, subscribe to `run_event` and `source:run-event` to increment/decrement the per-project running-worker counter without polling. (This completes the reactive wiring started in N5.2.)
 
 ---
 

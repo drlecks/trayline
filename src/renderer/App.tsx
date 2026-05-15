@@ -15,6 +15,7 @@ import OnboardingTour from './components/onboarding/OnboardingTour'
 import ShortcutsDialog from './components/shortcuts/ShortcutsDialog'
 import CommandPalette from './components/shortcuts/CommandPalette'
 import { useGlobalShortcuts } from './components/shortcuts/useGlobalShortcuts'
+import { useActiveRunsStore } from './stores/active-runs-store'
 
 function applyThemeClass(theme: 'light' | 'dark' | 'system') {
   const root = document.documentElement
@@ -44,6 +45,11 @@ export default function App() {
     openPalette: () => setPaletteOpen(true),
     openShortcuts: () => setShortcutsOpen(true),
   })
+
+  // Initialize global active-runs subscription (runs until app unmounts)
+  useEffect(() => {
+    return useActiveRunsStore.getState().init()
+  }, [])
 
   useEffect(() => {
     applyThemeClass(theme)
