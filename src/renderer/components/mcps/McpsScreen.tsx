@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { AlertTriangle, ArrowLeft, Check, ChevronRight, Download, ExternalLink, MoreHorizontal, Plug, Plus, Search, Trash2, X } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, Check, ChevronRight, Download, ExternalLink, MoreHorizontal, Plug, Plus, Search, Settings2, Trash2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -9,7 +9,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { useProjectStore } from '@/stores/project-store'
-import type { InstalledMcpRow, McpCatalogEntry, McpHealthState } from '../../../shared/types'
+import type { InstalledMcpRow, McpCatalogEntry, McpHealthState, McpManifest } from '../../../shared/types'
+import McpSetupWizard from './McpSetupWizard'
 
 // ── Status badge ──────────────────────────────────────────────────────────────
 
@@ -146,6 +147,7 @@ function McpDetailDialog({
   onOpenChange,
   onUninstall,
   onToggleDisabled,
+  onSetup,
   busy,
 }: {
   row: InstalledMcpRow | null
@@ -153,6 +155,7 @@ function McpDetailDialog({
   onOpenChange: (o: boolean) => void
   onUninstall: () => void
   onToggleDisabled: () => void
+  onSetup: () => void
   busy: boolean
 }) {
   if (!row) return null
@@ -200,9 +203,15 @@ function McpDetailDialog({
               </ul>
             )}
             {hasCredentials && !status.configured && (
-              <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-2">
-                Configure credentials via the Setup Wizard (coming soon).
-              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={onSetup}
+                className="mt-2 gap-1.5 text-[11px]"
+              >
+                <Settings2 size={11} strokeWidth={2} />
+                Set up
+              </Button>
             )}
           </section>
 
@@ -255,7 +264,7 @@ function McpDetailDialog({
 
         {/* Actions */}
         <div className="flex items-center justify-between gap-2 pt-4 border-t border-neutral-100 dark:border-neutral-800 mt-2 shrink-0">
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button
               size="sm"
               variant="outline"
@@ -264,6 +273,18 @@ function McpDetailDialog({
             >
               {status.disabled ? 'Enable' : 'Disable'}
             </Button>
+            {hasCredentials && status.configured && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={busy}
+                onClick={onSetup}
+                className="gap-1.5"
+              >
+                <Settings2 size={11} strokeWidth={2} />
+                Reset credentials
+              </Button>
+            )}
             <Button
               size="sm"
               variant="outline"
@@ -275,7 +296,7 @@ function McpDetailDialog({
               Uninstall
             </Button>
           </div>
-          <p className="text-[11px] text-neutral-400 dark:text-neutral-600">
+          <p className="text-[11px] text-neutral-400 dark:text-neutral-600 shrink-0">
             Installed {new Date(row.installedAt).toLocaleDateString()}
           </p>
         </div>
@@ -297,7 +318,7 @@ function AddMcpDialog({
   open: boolean
   onOpenChange: (o: boolean) => void
   installedIds: Set<string>
-  onInstalled: () => void
+  onInstalled: (row: InstalledMcpRow) => void
 }) {
   const [tab, setTab] = useState<AddTab>('catalog')
   return (
@@ -320,7 +341,7 @@ function AddMcpDialog({
           {tab === 'catalog' && (
             <CatalogAddTab
               installedIds={installedIds}
-              onInstalled={() => { onInstalled(); onOpenChange(false) }}
+              onInstalled={(row) => { onInstalled(row); onOpenChange(false) }}
             />
           )}
           {tab === 'registry' && <RegistryStubTab />}
@@ -336,7 +357,7 @@ function CatalogAddTab({
   onInstalled,
 }: {
   installedIds: Set<string>
-  onInstalled: () => void
+  onInstalled: (row: InstalledMcpRow) => void
 }) {
   const [catalog, setCatalog] = useState<McpCatalogEntry[] | null>(null)
   const [search, setSearch] = useState('')
@@ -364,8 +385,8 @@ function CatalogAddTab({
     setBusy(mcpId)
     setError(null)
     try {
-      await window.trayline.mcp.install(mcpId)
-      onInstalled()
+      const row = await window.trayline.mcp.install(mcpId)
+      onInstalled(row)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -472,6 +493,7 @@ export default function McpsScreen() {
   const [catalog, setCatalog] = useState<McpCatalogEntry[] | null>(null)
   const [detail, setDetail] = useState<InstalledMcpRow | null>(null)
   const [addOpen, setAddOpen] = useState(false)
+  const [wizardManifest, setWizardManifest] = useState<McpManifest | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -521,6 +543,24 @@ export default function McpsScreen() {
     } finally {
       setBusy(null)
     }
+  }
+
+  async function handleSetup(row: InstalledMcpRow) {
+    if (row.status.configured) {
+      if (!window.confirm(`Reset credentials for "${row.manifest.name}"?\nYou will need to re-enter your credentials.`)) return
+      setBusy(row.manifest.id)
+      try {
+        await window.trayline.mcp.deleteCredentials(row.manifest.id)
+        await window.trayline.mcp.writeStatus(row.manifest.id, { configured: false, health: null, healthCheckedAt: null })
+        await refresh()
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e))
+        setBusy(null)
+        return
+      }
+      setBusy(null)
+    }
+    setWizardManifest(row.manifest)
   }
 
   function backTarget(): string {
@@ -627,6 +667,7 @@ export default function McpsScreen() {
         onOpenChange={(o) => { if (!o) setDetail(null) }}
         onUninstall={() => detail && void handleUninstall(detail)}
         onToggleDisabled={() => detail && void handleToggleDisabled(detail)}
+        onSetup={() => detail && void handleSetup(detail)}
         busy={detail ? busy === detail.manifest.id : false}
       />
 
@@ -635,8 +676,23 @@ export default function McpsScreen() {
         open={addOpen}
         onOpenChange={setAddOpen}
         installedIds={installedIds}
-        onInstalled={() => void refresh()}
+        onInstalled={(row) => {
+          void refresh()
+          if (row.manifest.setup_steps.length > 0 && row.manifest.credentials_schema.length > 0) {
+            setWizardManifest(row.manifest)
+          }
+        }}
       />
+
+      {/* Setup wizard — auto-chained after install or opened from detail panel */}
+      {wizardManifest && (
+        <McpSetupWizard
+          manifest={wizardManifest}
+          open={wizardManifest !== null}
+          onOpenChange={(o) => { if (!o) setWizardManifest(null) }}
+          onComplete={() => { setWizardManifest(null); void refresh() }}
+        />
+      )}
     </div>
   )
 }

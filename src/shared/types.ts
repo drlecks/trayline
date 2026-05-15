@@ -354,6 +354,10 @@ export interface McpSetupStep {
   options?: Array<{ label: string; value: string }>
   provider?: string
   scopes?: string[]
+  /** For oauth steps: which keychain credential holds the OAuth client_id. */
+  client_id_key?: string
+  /** For oauth steps: which keychain credential holds the OAuth client_secret. */
+  client_secret_key?: string
 }
 
 export interface McpCredentialSchemaEntry {
