@@ -5,10 +5,11 @@ import { settingsStore } from './services/settings-store'
 import { fsService, Paths } from './services/fs-service'
 import { auditDb } from './services/audit-db'
 import { systemSkillsService } from './services/system-skills-service'
+import { mcpRegistry } from './services/mcp-registry'
+import { skillService } from './services/skill-service'
 import { workerRunner, setRunEventBroadcast } from './services/worker-runner'
-import { watcherService } from './services/watcher-service'
-import { schedulerService } from './services/scheduler-service'
-import { queueService } from './services/queue-service'
+import { sourceRunner, setSourceEventBroadcast } from './services/source-runner'
+import { orchestrator } from './services/orchestrator'
 import { setupAutoUpdater } from './services/auto-update-service'
 import { registerIpcHandlers } from './ipc/handlers'
 import { dirnameFromMeta } from './util/paths'
@@ -64,6 +65,7 @@ process.on('unhandledRejection', (reason) => {
 interface BootstrapInfo {
   dataDir: string
   systemSkillsRestored: string[]
+  appVersion: string
 }
 
 let bootstrapInfo: BootstrapInfo
@@ -153,26 +155,39 @@ app.whenReady().then(async () => {
     const { restored } = await systemSkillsService.ensureInstalled()
     stage(`systemSkillsService.ensureInstalled done (restored=${restored.join(',') || 'none'})`)
 
+    await mcpRegistry.seedCatalog()
+    stage('mcpRegistry.seedCatalog done')
+
+    await skillService.seedCatalog()
+    stage('skillService.seedCatalog done')
+
+    // Background quarantine check — non-blocking; failures are swallowed so a
+    // corrupt skill can't prevent the app from opening.
+    skillService.revalidateAll().then((quarantined) => {
+      const blocked = quarantined.filter((q) => q.quarantined)
+      if (blocked.length > 0) {
+        stage(`skillService.revalidateAll: quarantined=${blocked.map((q) => q.skillId).join(',')}`)
+      }
+    }).catch(() => {})
+
     const { recovered } = await workerRunner.recoverOrphanedRuns()
     stage(`workerRunner.recoverOrphanedRuns done (recovered=${recovered})`)
 
-    setRunEventBroadcast(() => BrowserWindow.getAllWindows())
+    const { recovered: sourceRecovered } = await sourceRunner.recoverOrphanedRuns()
+    stage(`sourceRunner.recoverOrphanedRuns done (recovered=${sourceRecovered})`)
 
-    bootstrapInfo = { dataDir: Paths.root, systemSkillsRestored: restored }
+    setRunEventBroadcast(() => BrowserWindow.getAllWindows())
+    setSourceEventBroadcast(() => BrowserWindow.getAllWindows())
+
+    bootstrapInfo = { dataDir: Paths.root, systemSkillsRestored: restored, appVersion: app.getVersion() }
     registerIpcHandlers(ipcMain, () => bootstrapInfo)
     stage('registerIpcHandlers done')
 
     createWindow()
     stage('createWindow returned')
 
-    await watcherService.mountAll()
-    stage('watcherService.mountAll done')
-
-    await schedulerService.mountAll()
-    stage('schedulerService.mountAll done')
-
-    await queueService.mountAll()
-    stage('queueService.mountAll done')
+    await orchestrator.mountAll()
+    stage('orchestrator.mountAll done')
 
     setupAutoUpdater(stage)
 
@@ -199,7 +214,5 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
-  void watcherService.unmountAll()
-  void queueService.unmountAll()
-  schedulerService.stopAll()
+  void orchestrator.unmountAll()
 })

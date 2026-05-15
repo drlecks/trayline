@@ -56,6 +56,7 @@ async function addDirectory(
 
 async function buildManifest(projectName: string): Promise<ExportManifest> {
   const skillIds = new Set<string>()
+  const mcpIds = new Set<string>()
 
   const wfRoot = join(Paths.projects, projectName, 'workflows')
   if (await pathExists(wfRoot)) {
@@ -71,9 +72,12 @@ async function buildManifest(projectName: string): Promise<ExportManifest> {
           const raw = JSON.parse(
             await fs.readFile(join(stepsRoot, step.name as string, 'step.json'), 'utf-8'),
           ) as Record<string, unknown>
-          if (raw.kind === 'worker' && Array.isArray(raw.skills)) {
-            for (const id of raw.skills) {
-              if (typeof id === 'string') skillIds.add(id)
+          if (raw.kind === 'worker') {
+            if (Array.isArray(raw.skills)) {
+              for (const id of raw.skills) { if (typeof id === 'string') skillIds.add(id) }
+            }
+            if (Array.isArray(raw.mcps)) {
+              for (const id of raw.mcps) { if (typeof id === 'string') mcpIds.add(id) }
             }
           }
         } catch { /* skip unparseable */ }
@@ -91,7 +95,7 @@ async function buildManifest(projectName: string): Promise<ExportManifest> {
     trayline_version: app.getVersion(),
     exported_at: new Date().toISOString(),
     skills,
-    mcps: [],
+    mcps: [...mcpIds],
   }
 }
 
@@ -189,6 +193,17 @@ async function resolveMissingSkills(manifest: ExportManifest | null): Promise<Im
   return missing
 }
 
+async function resolveMissingMcps(manifest: ExportManifest | null): Promise<string[]> {
+  if (!manifest) return []
+  const missing: string[] = []
+  for (const id of manifest.mcps) {
+    if (!(await pathExists(join(Paths.mcps, id, 'mcp.json')))) {
+      missing.push(id)
+    }
+  }
+  return missing
+}
+
 async function importProject(zipPath: string): Promise<ImportResult> {
   const { tempDir, extractedPath, projectName, manifest } = await extractAndValidate(zipPath)
 
@@ -216,7 +231,8 @@ async function importProject(zipPath: string): Promise<ImportResult> {
     // Clean — commit immediately
     await fs.cp(extractedPath, join(Paths.projects, projectName), { recursive: true })
     const missingSkills = await resolveMissingSkills(manifest)
-    return { ok: true, projectName, missingSkills }
+    const missingMcps = await resolveMissingMcps(manifest)
+    return { ok: true, projectName, missingSkills, missingMcps }
   } finally {
     if (cleanupTemp) {
       await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {})
@@ -234,7 +250,8 @@ async function commitImport(token: string): Promise<ImportSuccess> {
   try {
     await fs.cp(extractedPath, join(Paths.projects, projectName), { recursive: true })
     const missingSkills = await resolveMissingSkills(manifest)
-    return { ok: true, projectName, missingSkills }
+    const missingMcps = await resolveMissingMcps(manifest)
+    return { ok: true, projectName, missingSkills, missingMcps }
   } finally {
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {})
   }
@@ -262,11 +279,11 @@ async function openExampleProject(): Promise<ImportSuccess> {
 
   const targetPath = join(Paths.projects, projectName)
   if (await pathExists(targetPath)) {
-    return { ok: true, projectName, missingSkills: [] }
+    return { ok: true, projectName, missingSkills: [], missingMcps: [] }
   }
 
   await fs.cp(src, targetPath, { recursive: true })
-  return { ok: true, projectName, missingSkills: [] }
+  return { ok: true, projectName, missingSkills: [], missingMcps: [] }
 }
 
 export const exportService = {

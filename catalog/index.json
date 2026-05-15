@@ -1,76 +1,69 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-05-13T00:00:00Z",
+  "generated_at": "2026-05-15T00:00:00Z",
   "skills": [
     {
       "id": "pdf",
-      "name": "PDF Reader",
+      "name": "PDF Tools",
       "version": "1.0.0",
-      "description": "Extract text, tables, and structure from PDF files.",
+      "description": "Extract text, tables, and metadata from PDF files.",
       "author": "Anthropic",
-      "tags": ["documents", "pdf", "extraction"],
-      "base_url": "https://raw.githubusercontent.com/anthropics/skills/main/skills/pdf/",
-      "skill_md": "SKILL.md"
+      "tags": ["pdf", "document", "extract"],
+      "base_url": "https://api.github.com/repos/anthropics/skills/contents/skills/pdf?ref=main"
     },
     {
       "id": "docx",
-      "name": "Word Document Reader",
+      "name": "Word Document Tools",
       "version": "1.0.0",
-      "description": "Extract text, tables, and headings from Word (.docx) files.",
+      "description": "Read and manipulate Microsoft Word (.docx) files.",
       "author": "Anthropic",
-      "tags": ["documents", "docx", "word", "extraction"],
-      "base_url": "https://raw.githubusercontent.com/anthropics/skills/main/skills/docx/",
-      "skill_md": "SKILL.md"
+      "tags": ["word", "docx", "document"],
+      "base_url": "https://api.github.com/repos/anthropics/skills/contents/skills/docx?ref=main"
     },
     {
       "id": "xlsx",
-      "name": "Spreadsheet Reader",
+      "name": "Excel Spreadsheet Tools",
       "version": "1.0.0",
-      "description": "Read and reason over Excel (.xlsx) files — multiple sheets, formulas, and tabular data.",
+      "description": "Read and analyze Microsoft Excel (.xlsx) spreadsheets.",
       "author": "Anthropic",
-      "tags": ["documents", "xlsx", "excel", "spreadsheet"],
-      "base_url": "https://raw.githubusercontent.com/anthropics/skills/main/skills/xlsx/",
-      "skill_md": "SKILL.md"
+      "tags": ["excel", "xlsx", "spreadsheet"],
+      "base_url": "https://api.github.com/repos/anthropics/skills/contents/skills/xlsx?ref=main"
     },
     {
       "id": "canvas-design",
       "name": "Canvas Design",
       "version": "1.0.0",
-      "description": "Produce UI layouts, wireframes, and design specs as HTML, SVG, or structured component output.",
+      "description": "Create and edit images on an HTML canvas.",
       "author": "Anthropic",
-      "tags": ["design", "ui", "wireframe", "html", "svg"],
-      "base_url": "https://raw.githubusercontent.com/anthropics/skills/main/skills/canvas-design/",
-      "skill_md": "SKILL.md"
+      "tags": ["design", "canvas", "image"],
+      "base_url": "https://api.github.com/repos/anthropics/skills/contents/skills/canvas-design?ref=main"
     },
     {
       "id": "marketing-psychology",
       "name": "Marketing Psychology",
       "version": "1.0.0",
-      "description": "Apply persuasion principles — scarcity, social proof, loss aversion, anchoring — to strengthen marketing copy.",
+      "description": "Apply consumer psychology frameworks to marketing content.",
       "author": "Corey Haines",
-      "tags": ["marketing", "copywriting", "psychology", "persuasion"],
-      "base_url": "https://raw.githubusercontent.com/coreyhaines31/marketingskills/main/skills/marketing-psychology/",
-      "skill_md": "SKILL.md"
+      "tags": ["marketing", "psychology", "copywriting"],
+      "base_url": "https://api.github.com/repos/coreyhaines31/marketingskills/contents/skills/marketing-psychology?ref=main"
     },
     {
       "id": "social-content",
-      "name": "Social Content",
+      "name": "Social Media Content",
       "version": "1.0.0",
-      "description": "Create platform-appropriate posts for LinkedIn, X/Twitter, Instagram, and Facebook.",
+      "description": "Create engaging social media content across platforms.",
       "author": "Corey Haines",
-      "tags": ["social-media", "content", "copywriting", "marketing"],
-      "base_url": "https://raw.githubusercontent.com/coreyhaines31/marketingskills/main/skills/social-content/",
-      "skill_md": "SKILL.md"
+      "tags": ["social", "content", "marketing"],
+      "base_url": "https://api.github.com/repos/coreyhaines31/marketingskills/contents/skills/social?ref=main"
     },
     {
       "id": "triage",
-      "name": "Triage",
+      "name": "Issue Triage",
       "version": "1.0.0",
-      "description": "Classify, prioritize, and route incoming items — tickets, bugs, requests, leads — by severity, urgency, and category.",
+      "description": "Triage and prioritize issues, bugs, and support requests.",
       "author": "Matt Pocock",
-      "tags": ["triage", "classification", "prioritization", "routing"],
-      "base_url": "https://raw.githubusercontent.com/mattpocock/skills/main/skills/engineering/triage/",
-      "skill_md": "SKILL.md"
+      "tags": ["triage", "issues", "engineering"],
+      "base_url": "https://api.github.com/repos/mattpocock/skills/contents/skills/engineering/triage?ref=main"
     }
   ]
 }

@@ -15,15 +15,19 @@ import type {
   ProviderReadyResult,
   SkillCatalogFetchResult,
   InstalledSkillRow,
+  SkillValidationResult,
   ExportOptions,
   ImportResult,
   ImportSuccess,
+  ProjectLiveStats,
+  ProjectReadiness,
 } from '../shared/types'
 import type { MissingSkillsEntry } from '../shared/types'
 import type { Card, CardStatus, CardCounts } from '../shared/card'
 import type { QueueEntry } from '../shared/queue'
 import type { PlanFieldDef, PlanTrayStep, PlanWorkerStep } from '../shared/workflow-plan'
 import type { WorkerRun, WorkerRunEvent } from '../shared/worker-run'
+import type { SourceStepConfig, SourceState, SourceRunMeta, SourceRunEvent, InstalledMcpRow, McpCatalogEntry, McpStatus } from '../shared/types'
 
 const api = {
   settings: {
@@ -73,6 +77,19 @@ const api = {
     delete: (name: string): Promise<void> => ipcRenderer.invoke(IPC.project.delete, name),
     setStatus: (name: string, status: ProjectStatus): Promise<ProjectMeta> =>
       ipcRenderer.invoke(IPC.project.setStatus, name, status),
+    getOrchestration: (name: string): Promise<{ name: string; mounted: boolean }> =>
+      ipcRenderer.invoke(IPC.project.getOrchestration, name),
+    onStatusChanged: (
+      handler: (event: { name: string; status: ProjectStatus; mounted: boolean }) => void,
+    ): (() => void) => {
+      const listener = (_e: unknown, ev: { name: string; status: ProjectStatus; mounted: boolean }) => handler(ev)
+      ipcRenderer.on(IPC.project.onStatusChanged, listener)
+      return () => ipcRenderer.off(IPC.project.onStatusChanged, listener)
+    },
+    liveStats: (name: string): Promise<ProjectLiveStats> =>
+      ipcRenderer.invoke(IPC.project.liveStats, name),
+    checkReadiness: (name: string): Promise<ProjectReadiness> =>
+      ipcRenderer.invoke(IPC.project.checkReadiness, name),
     export: (name: string, options: ExportOptions): Promise<{ ok: true; path: string } | { canceled: true }> =>
       ipcRenderer.invoke(IPC.project.export, name, options),
     import: (): Promise<ImportResult | { canceled: true }> =>
@@ -135,6 +152,15 @@ const api = {
       process_md?: string
     }): Promise<PlanWorkerStep & { id: string }> =>
       ipcRenderer.invoke(IPC.step.addWorker, input),
+    addSource: (input: {
+      project: string
+      workflow: string
+      name: string
+      description?: string
+      schedule_cron?: string
+      dedup_key?: string
+    }): Promise<SourceStepConfig & { id: string }> =>
+      ipcRenderer.invoke(IPC.step.addSource, input),
     readProcess: (project: string, workflow: string, stepId: string): Promise<string> =>
       ipcRenderer.invoke(IPC.step.readProcess, project, workflow, stepId),
     updateProcess: (input: {
@@ -174,10 +200,18 @@ const api = {
       ipcRenderer.invoke(IPC.skills.install, skillId),
     installFromUrl: (url: string): Promise<InstalledSkillRow> =>
       ipcRenderer.invoke(IPC.skills.installFromUrl, url),
+    validateFromUrl: (url: string): Promise<SkillValidationResult> =>
+      ipcRenderer.invoke(IPC.skills.validateFromUrl, url),
+    confirmInstall: (tempDir: string, acceptedWarnings: string[], sourceUrl: string, source: 'url' | 'catalog'): Promise<InstalledSkillRow> =>
+      ipcRenderer.invoke(IPC.skills.confirmInstall, tempDir, acceptedWarnings, sourceUrl, source),
+    cancelValidation: (tempDir: string): Promise<void> =>
+      ipcRenderer.invoke(IPC.skills.cancelValidation, tempDir),
     update: (skillId: string): Promise<InstalledSkillRow> =>
       ipcRenderer.invoke(IPC.skills.update, skillId),
     uninstall: (skillId: string): Promise<void> =>
       ipcRenderer.invoke(IPC.skills.uninstall, skillId),
+    revalidateAll: (): Promise<{ skillId: string; quarantined: boolean }[]> =>
+      ipcRenderer.invoke(IPC.skills.revalidateAll),
   },
   card: {
     list: (project: string, workflow: string, stepId: string, status: CardStatus): Promise<Card[]> =>
@@ -207,6 +241,56 @@ const api = {
       ipcRenderer.on(IPC.queue.onUpdate, listener)
       return () => ipcRenderer.off(IPC.queue.onUpdate, listener)
     },
+  },
+  source: {
+    create: (input: {
+      project: string
+      workflow: string
+      name: string
+      description?: string
+      schedule_cron?: string
+      dedup_key?: string
+    }): Promise<SourceStepConfig & { id: string }> =>
+      ipcRenderer.invoke(IPC.source.create, input),
+    runNow: (project: string, workflow: string, stepId: string): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke(IPC.source.runNow, project, workflow, stepId),
+    pause: (project: string, workflow: string, stepId: string): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke(IPC.source.pause, project, workflow, stepId),
+    resume: (project: string, workflow: string, stepId: string): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke(IPC.source.resume, project, workflow, stepId),
+    getState: (project: string, workflow: string, stepId: string): Promise<SourceState> =>
+      ipcRenderer.invoke(IPC.source.getState, project, workflow, stepId),
+    readInstructions: (project: string, workflow: string, stepId: string): Promise<string> =>
+      ipcRenderer.invoke(IPC.source.readInstructions, project, workflow, stepId),
+    updateInstructions: (input: { project: string; workflow: string; stepId: string; content: string }): Promise<void> =>
+      ipcRenderer.invoke(IPC.source.updateInstructions, input),
+    listRuns: (project: string, workflow: string, stepId: string): Promise<SourceRunMeta[]> =>
+      ipcRenderer.invoke(IPC.source.listRuns, project, workflow, stepId),
+    onRunEvent: (handler: (event: SourceRunEvent) => void): (() => void) => {
+      const listener = (_e: unknown, ev: SourceRunEvent) => handler(ev)
+      ipcRenderer.on(IPC.source.onRunEvent, listener)
+      return () => ipcRenderer.off(IPC.source.onRunEvent, listener)
+    },
+  },
+  mcp: {
+    listInstalled: (): Promise<InstalledMcpRow[]> =>
+      ipcRenderer.invoke(IPC.mcp.listInstalled),
+    listCatalog: (): Promise<McpCatalogEntry[]> =>
+      ipcRenderer.invoke(IPC.mcp.listCatalog),
+    install: (mcpId: string): Promise<InstalledMcpRow> =>
+      ipcRenderer.invoke(IPC.mcp.install, mcpId),
+    uninstall: (mcpId: string): Promise<void> =>
+      ipcRenderer.invoke(IPC.mcp.uninstall, mcpId),
+    readStatus: (mcpId: string): Promise<McpStatus> =>
+      ipcRenderer.invoke(IPC.mcp.readStatus, mcpId),
+    writeStatus: (mcpId: string, partial: Partial<McpStatus>): Promise<McpStatus> =>
+      ipcRenderer.invoke(IPC.mcp.writeStatus, mcpId, partial),
+    saveCredential: (mcpId: string, credId: string, value: string): Promise<void> =>
+      ipcRenderer.invoke(IPC.mcp.saveCredential, mcpId, credId, value),
+    deleteCredentials: (mcpId: string): Promise<void> =>
+      ipcRenderer.invoke(IPC.mcp.deleteCredentials, mcpId),
+    testConnection: (mcpId: string): Promise<{ ok: boolean; error?: string }> =>
+      ipcRenderer.invoke(IPC.mcp.testConnection, mcpId),
   },
   platform: process.platform as NodeJS.Platform,
 }

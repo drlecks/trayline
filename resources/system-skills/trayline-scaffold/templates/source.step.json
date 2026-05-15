@@ -1,0 +1,20 @@
+{
+  "id": "{{id}}",
+  "kind": "source",
+  "name": "{{name}}",
+  "description": "{{description}}",
+  "color": "#4CB87E",
+  "icon": "rss",
+  "schedule_cron": "{{schedule_cron}}",
+  "dedup": {
+    "key": "{{dedup_key}}",
+    "max_memory": 10000,
+    "first_run": "{{first_run}}"
+  },
+  "execution": {
+    "timeout_seconds": 60,
+    "adapter": "claude-code"
+  },
+  "mcps": [],
+  "paused": false
+}

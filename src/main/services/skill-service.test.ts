@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vite
 import fs from 'node:fs/promises'
 import { join } from 'node:path'
 import { Paths } from './fs-service'
+import { auditDb } from './audit-db'
 import { skillService, type CatalogIndex } from './skill-service'
 
 async function writeJson(path: string, data: unknown) {
@@ -53,18 +54,13 @@ const SAMPLE_INDEX: CatalogIndex = {
   ],
 }
 
-const DEMO_MANIFEST = JSON.stringify({
-  id: 'demo-skill',
-  name: 'Demo Skill',
-  version: '1.2.0',
-  description: 'A test skill',
-})
 const DEMO_MD = '# Demo\nInstructions\n'
 
 describe('skillService', () => {
   beforeAll(async () => {
     await fs.mkdir(Paths.skills, { recursive: true })
     await fs.mkdir(Paths.appData, { recursive: true })
+    auditDb.init()
   })
 
   beforeEach(async () => {
@@ -110,19 +106,36 @@ describe('skillService', () => {
     expect(res.index.skills.map((s) => s.id)).toContain('demo-skill')
   })
 
-  it('fetchCatalog returns an empty index when offline and no cache exists', async () => {
+  it('fetchCatalog falls back to bundled catalog when offline and no cache exists', async () => {
     vi.stubGlobal('fetch', makeFakeFetch({ [REAL_CATALOG_URL]: { error: 'offline' } }))
     const res = await skillService.fetchCatalog()
     expect(res.source).toBe('cache')
-    expect(res.index.skills).toEqual([])
+    // Falls back to the bundled resources/skills-catalog.json which is present in dev
+    expect(res.index.skills.length).toBeGreaterThan(0)
   })
 
-  it('installFromCatalog fetches files, writes manifest + md, and stamps _trayline metadata', async () => {
-    const baseUrl = 'https://example.test/skills/demo-skill/'
+  it('installFromCatalog fetches files via GitHub API, writes manifest + md, and stamps _trayline metadata', async () => {
+    const apiUrl = 'https://api.github.com/repos/test-owner/test-skills/contents/skills/demo-skill?ref=main'
+    const rawMdUrl = 'https://raw.githubusercontent.com/test-owner/test-skills/main/skills/demo-skill/SKILL.md'
+
+    // Catalog index using GitHub Contents API URL directly as base_url
+    const githubIndex: CatalogIndex = {
+      schema_version: 1,
+      skills: [
+        { ...SAMPLE_INDEX.skills[0]!, base_url: apiUrl },
+        SAMPLE_INDEX.skills[1]!,
+      ],
+    }
+
     vi.stubGlobal('fetch', makeFakeFetch({
-      [REAL_CATALOG_URL]: { body: JSON.stringify(SAMPLE_INDEX) },
-      [baseUrl + 'skill.json']: { body: DEMO_MANIFEST },
-      [baseUrl + 'skill.md']: { body: DEMO_MD },
+      [REAL_CATALOG_URL]: { body: JSON.stringify(githubIndex) },
+      // GitHub Contents API returns a flat file listing
+      [apiUrl]: {
+        body: JSON.stringify([
+          { name: 'SKILL.md', type: 'file', download_url: rawMdUrl, url: `${apiUrl}/SKILL.md` },
+        ]),
+      },
+      [rawMdUrl]: { body: DEMO_MD },
     }))
 
     const installed = await skillService.installFromCatalog('demo-skill')
@@ -132,9 +145,10 @@ describe('skillService', () => {
     const dir = join(Paths.skills, 'demo-skill')
     const manifest = JSON.parse(await fs.readFile(join(dir, 'skill.json'), 'utf-8'))
     expect(manifest._trayline.source).toBe('catalog')
-    expect(manifest._trayline.source_url).toBe(baseUrl)
+    expect(manifest._trayline.source_url).toBe(apiUrl)
     expect(typeof manifest._trayline.installed_at).toBe('string')
-    expect(await fs.readFile(join(dir, 'skill.md'), 'utf-8')).toBe(DEMO_MD)
+    // File stored under its original GitHub name (SKILL.md), auto-detected as instruction file
+    expect(await fs.readFile(join(dir, 'SKILL.md'), 'utf-8')).toBe(DEMO_MD)
   })
 
   it('installFromUrl validates the manifest and rejects bad ids', async () => {

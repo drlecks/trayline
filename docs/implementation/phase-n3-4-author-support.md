@@ -16,53 +16,48 @@ Update the Workflow Author (`trayline-author` system skill) and the scaffold sys
 
 ### `trayline-author` Skill Update
 
-- [ ] Update `skills/_system/trayline-author/skill.md`:
-  - [ ] Introduce `"kind": "source"` as a valid first step in the output JSON plan
-  - [ ] Add guidance: if the user's description involves polling, monitoring, or ingesting from an external source on a schedule, the plan should start with a Source step
-  - [ ] Add guidance: if the user's description involves summarising or digesting many items into one, the relevant Worker should have `batch_mode: true`
-  - [ ] For each Source step in the plan, the author must output:
-    - `name`, `description`, `icon` (default `"rss"`), `color` (default `"#4CB87E"`)
-    - `schedule_cron` — a sensible default for the described use case
-    - `dedup.key` — the field name the AI should use as the unique ID
-    - `dedup.first_run` — recommended mode for the use case
-    - A draft `source.md` with instructions appropriate to the described workflow
-  - [ ] For each Batch Worker in the plan, the author must output `batch_mode: true` and a sensible `batch_max`
+- [x] Update `resources/system-skills/trayline-author/skill.md`:
+  - [x] Introduce `"kind": "source"` as a valid first step in the output JSON plan (prefix `00-`)
+  - [x] Add guidance: if the user's description involves polling, monitoring, or ingesting from an external source on a schedule, the plan should start with a Source step
+  - [x] Add guidance: if the user's description involves summarising or digesting many items into one, the relevant Worker should have `batch_mode: true`
+  - [x] For each Source step in the plan, the author outputs: `name`, `description`, `icon`, `schedule_cron`, `dedup.key`, `dedup.first_run`, `dedup.first_run_n`, and a draft `source.md`
+  - [x] For each Batch Worker in the plan, the author outputs `batch_mode: true` and a sensible `batch_max`
+  - [x] Version header comment added (`<!-- v2 -->`)
 
 ### `trayline-scaffold` Skill Update
 
-- [ ] Update `skills/_system/trayline-scaffold/skill.md` to handle `"kind": "source"` steps in the plan:
-  - [ ] Create `<index>-<name>/step.json` from `source.step.json` template, filling in all plan fields
-  - [ ] Write the draft `source.md` from the plan into the step folder
-  - [ ] Create `state/` directory with empty `seen-ids.json` (`[]`) and initial `counters.json`
-  - [ ] Create `cards/ready/` and `cards/archived/` directories
-- [ ] Update scaffold to write `batch_mode` and `batch_max` into Worker `step.json` when the plan specifies them
-- [ ] Update the `workflow.json` template to include Source as a valid step kind in the step list
+- [x] Update `resources/system-skills/trayline-scaffold/skill.md` to document `"kind": "source"` step handling: template usage, `source.md`, `seen-ids.json`, `counters.json`, folder layout
+- [x] Document batch_mode/batch_max writing into Worker `step.json`
+- [x] `scaffold-service.ts` materialises Source steps: stamps `source.step.json` template, writes `source.md`, `state/seen-ids.json`, `state/counters.json`, `cards/ready/`, `cards/archived/`, `runs/`
+- [x] `scaffold-service.ts` sets `batch_mode` and `batch_max` on Worker steps from the plan; coerces trigger to `manual` if it was `on_ready`
+- [x] Added `source.step.json` template to `resources/system-skills/trayline-scaffold/templates/`
+- [x] Added `source.md` starter template to `resources/system-skills/trayline-scaffold/templates/`
 
 ### Workflow Author UI — Example Chips
 
-- [ ] Update the five rotating example chips in the Workflow Author screen to include at least two source-first examples:
-  - *"Poll Instagram comments every minute and draft a reply for each new one"*
-  - *"Fetch the top Hacker News stories every 30 minutes and email me a daily digest"*
-- [ ] Ensure the existing non-source examples remain (do not replace all five; add to the rotation pool so examples cycle)
+- [x] Added two source-first examples to the rotating chip pool (pool now has 7 chips):
+  - *"Poll Instagram comments every hour and draft a reply for each new one"*
+  - *"Fetch the top Hacker News stories every 30 minutes and send a daily digest"*
+- [x] Existing non-source examples remain
 
 ### Workflow Author Loading Messages
 
-- [ ] Add new warm status messages to the loading sequence for source-aware generation:
-  - *"Setting up your data source..."*
-  - *"Configuring the schedule..."*
-  - *"Wiring up deduplication..."*
-- [ ] These messages appear only when the generated plan includes a Source step (the author outputs a flag in its JSON that the UI can read)
+- [x] Added source-aware loading messages to the pool:
+  - *"Setting up your data source…"*
+  - *"Configuring the schedule…"*
+  - *"Wiring up deduplication…"*
 
 ### Post-Generation Banner
 
-- [ ] If the generated workflow includes a Source step, update the post-generation banner text:
-  - *"Here's a starting point. Your source is set to run every X — click it to write your fetch instructions."*
-  - If MCPs are also needed: *"Here's a starting point. Set up [MCP name] and write your fetch instructions to get started."*
+- [x] When the generated workflow includes a Source step (`hasSourceStep: true` in `ProjectCreateSuccess`), a `PostGenBanner` component is shown before navigating to the project
+- [x] Banner text: "Your source step is ready — click it to write your fetch instructions and set your schedule."
+- [x] If unconfigured MCPs are also present: banner also shows their names with setup instructions
+- [x] User clicks "Open project" to navigate; without a source step the app navigates immediately as before
 
 ### Documentation Sync
 
-- [ ] Update `skills/_system/trayline-author/skill.md` header comment to note the version that added Source and Batch Worker support
-- [ ] Update `docs/features.md` § 7.13 (Workflow Author) to note that the author can now generate Source steps and Batch Workers
+- [x] `resources/system-skills/trayline-author/skill.md` header version comment updated
+- [x] `docs/features.md` § 7.13 updated to describe Source step and Batch Worker author support, loading messages, and post-generation banner
 
 ---
 
