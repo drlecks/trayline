@@ -33,6 +33,12 @@ export default function SourceDetailPanel({ step }: SourceDetailPanelProps) {
     void loadState()
   }, [loadState])
 
+  // Refresh source state every 60 s so the next-run countdown stays accurate
+  useEffect(() => {
+    const id = setInterval(() => void loadState(), 60_000)
+    return () => clearInterval(id)
+  }, [loadState])
+
   // Subscribe to live run events
   useEffect(() => {
     const off = window.trayline.source.onRunEvent((ev: SourceRunEvent) => {
