@@ -19,6 +19,8 @@ import type {
   ExportOptions,
   ImportResult,
   ImportSuccess,
+  ProjectLiveStats,
+  ProjectReadiness,
 } from '../shared/types'
 import type { MissingSkillsEntry } from '../shared/types'
 import type { Card, CardStatus, CardCounts } from '../shared/card'
@@ -84,6 +86,10 @@ const api = {
       ipcRenderer.on(IPC.project.onStatusChanged, listener)
       return () => ipcRenderer.off(IPC.project.onStatusChanged, listener)
     },
+    liveStats: (name: string): Promise<ProjectLiveStats> =>
+      ipcRenderer.invoke(IPC.project.liveStats, name),
+    checkReadiness: (name: string): Promise<ProjectReadiness> =>
+      ipcRenderer.invoke(IPC.project.checkReadiness, name),
     export: (name: string, options: ExportOptions): Promise<{ ok: true; path: string } | { canceled: true }> =>
       ipcRenderer.invoke(IPC.project.export, name, options),
     import: (): Promise<ImportResult | { canceled: true }> =>

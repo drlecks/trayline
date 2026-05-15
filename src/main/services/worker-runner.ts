@@ -1051,5 +1051,13 @@ export const workerRunner = {
   recoverOrphanedRuns,
   sendInput,
   openExternalTerminal,
+  activeRunCount: (project: string): number => {
+    const prefix = project + '/'
+    let count = 0
+    for (const k of inFlight) {
+      if (k.startsWith(prefix)) count++
+    }
+    return count
+  },
 }
 
