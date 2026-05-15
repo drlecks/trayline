@@ -5,6 +5,7 @@ import { settingsStore } from './services/settings-store'
 import { fsService, Paths } from './services/fs-service'
 import { auditDb } from './services/audit-db'
 import { systemSkillsService } from './services/system-skills-service'
+import { skillService } from './services/skill-service'
 import { workerRunner, setRunEventBroadcast } from './services/worker-runner'
 import { sourceRunner, setSourceEventBroadcast } from './services/source-runner'
 import { sourceScheduler } from './services/source-scheduler'
@@ -154,6 +155,15 @@ app.whenReady().then(async () => {
 
     const { restored } = await systemSkillsService.ensureInstalled()
     stage(`systemSkillsService.ensureInstalled done (restored=${restored.join(',') || 'none'})`)
+
+    // Background quarantine check — non-blocking; failures are swallowed so a
+    // corrupt skill can't prevent the app from opening.
+    skillService.revalidateAll().then((quarantined) => {
+      const blocked = quarantined.filter((q) => q.quarantined)
+      if (blocked.length > 0) {
+        stage(`skillService.revalidateAll: quarantined=${blocked.map((q) => q.skillId).join(',')}`)
+      }
+    }).catch(() => {})
 
     const { recovered } = await workerRunner.recoverOrphanedRuns()
     stage(`workerRunner.recoverOrphanedRuns done (recovered=${recovered})`)
