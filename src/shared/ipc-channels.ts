@@ -108,4 +108,12 @@ export const IPC = {
     listRuns: 'source:list-runs',
     onRunEvent: 'source:run-event',
   },
+  mcp: {
+    listInstalled: 'mcp:list-installed',
+    listCatalog: 'mcp:list-catalog',
+    install: 'mcp:install',
+    uninstall: 'mcp:uninstall',
+    readStatus: 'mcp:read-status',
+    writeStatus: 'mcp:write-status',
+  },
 } as const

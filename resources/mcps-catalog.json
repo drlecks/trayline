@@ -1,0 +1,358 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-15T00:00:00Z",
+  "mcps": [
+    {
+      "id": "filesystem",
+      "name": "Filesystem",
+      "version": "1.0.0",
+      "description": "Read and write files in configured directories on your computer.",
+      "install_method": "npm",
+      "command_template": "npx -y @modelcontextprotocol/server-filesystem {allowed_dirs}",
+      "tags": ["files", "storage"],
+      "credentials_schema": [
+        {
+          "id": "allowed_dirs",
+          "label": "Allowed Directories",
+          "description": "Comma-separated list of directories the MCP can access.",
+          "kind": "text_field"
+        }
+      ],
+      "setup_steps": [
+        {
+          "id": "intro",
+          "type": "info",
+          "title": "Filesystem Access",
+          "body": "This MCP lets the AI agent read and write files. You choose which directories it can access."
+        },
+        {
+          "id": "dirs",
+          "type": "text_field",
+          "title": "Allowed Directories",
+          "body": "Enter the full paths of directories to allow, separated by commas. For example: /Users/you/Documents, /Users/you/Desktop",
+          "credential_id": "allowed_dirs"
+        }
+      ]
+    },
+    {
+      "id": "fetch",
+      "name": "Fetch",
+      "version": "1.0.0",
+      "description": "Make arbitrary HTTP requests and extract content from web pages.",
+      "install_method": "npm",
+      "command_template": "npx -y @modelcontextprotocol/server-fetch",
+      "tags": ["web", "http"],
+      "credentials_schema": [],
+      "setup_steps": [
+        {
+          "id": "intro",
+          "type": "info",
+          "title": "Web Fetch",
+          "body": "This MCP lets the AI agent fetch URLs and extract page content. No credentials are required."
+        }
+      ]
+    },
+    {
+      "id": "memory",
+      "name": "Memory",
+      "version": "1.0.0",
+      "description": "Persistent key-value memory store for the agent across runs.",
+      "install_method": "npm",
+      "command_template": "npx -y @modelcontextprotocol/server-memory",
+      "tags": ["memory", "storage"],
+      "credentials_schema": [],
+      "setup_steps": [
+        {
+          "id": "intro",
+          "type": "info",
+          "title": "Agent Memory",
+          "body": "This MCP gives the AI agent a persistent memory store it can read and write across runs. No credentials are required."
+        }
+      ]
+    },
+    {
+      "id": "github",
+      "name": "GitHub",
+      "version": "1.0.0",
+      "description": "Read and write GitHub issues, pull requests, repositories, and files.",
+      "install_method": "npm",
+      "command_template": "npx -y @modelcontextprotocol/server-github",
+      "tags": ["github", "code", "devops"],
+      "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/github",
+      "credentials_schema": [
+        {
+          "id": "GITHUB_PERSONAL_ACCESS_TOKEN",
+          "label": "GitHub Personal Access Token",
+          "description": "A GitHub PAT with access to the repos you want to work with.",
+          "kind": "api_key"
+        }
+      ],
+      "setup_steps": [
+        {
+          "id": "intro",
+          "type": "info",
+          "title": "Connect GitHub",
+          "body": "Trayline will use a Personal Access Token to access GitHub on your behalf. The token is stored securely in your OS keychain — never in any file."
+        },
+        {
+          "id": "token",
+          "type": "api_key",
+          "title": "Personal Access Token",
+          "body": "Create a token at github.com/settings/tokens. Grant repo scope (and optionally read:org for org repos).",
+          "credential_id": "GITHUB_PERSONAL_ACCESS_TOKEN"
+        },
+        {
+          "id": "verify",
+          "type": "test_connection",
+          "title": "Verifying connection..."
+        }
+      ]
+    },
+    {
+      "id": "brave-search",
+      "name": "Brave Search",
+      "version": "1.0.0",
+      "description": "Web and local search powered by the Brave Search API.",
+      "install_method": "npm",
+      "command_template": "npx -y @modelcontextprotocol/server-brave-search",
+      "tags": ["search", "web"],
+      "homepage": "https://brave.com/search/api/",
+      "credentials_schema": [
+        {
+          "id": "BRAVE_API_KEY",
+          "label": "Brave Search API Key",
+          "description": "Get a free API key at brave.com/search/api/",
+          "kind": "api_key"
+        }
+      ],
+      "setup_steps": [
+        {
+          "id": "intro",
+          "type": "info",
+          "title": "Brave Search",
+          "body": "Trayline uses the Brave Search API to give the AI agent web search capabilities. The API key is stored securely in your OS keychain."
+        },
+        {
+          "id": "api_key",
+          "type": "api_key",
+          "title": "API Key",
+          "body": "Visit brave.com/search/api/ to get a free API key.",
+          "credential_id": "BRAVE_API_KEY"
+        },
+        {
+          "id": "verify",
+          "type": "test_connection",
+          "title": "Verifying connection..."
+        }
+      ]
+    },
+    {
+      "id": "slack",
+      "name": "Slack",
+      "version": "1.0.0",
+      "description": "Read Slack channels, list messages, and post as a bot.",
+      "install_method": "npm",
+      "command_template": "npx -y @modelcontextprotocol/server-slack",
+      "tags": ["slack", "messaging", "team"],
+      "credentials_schema": [
+        {
+          "id": "SLACK_BOT_TOKEN",
+          "label": "Slack Bot Token",
+          "description": "Bot OAuth token (xoxb-...) from your Slack app.",
+          "kind": "api_key"
+        },
+        {
+          "id": "SLACK_TEAM_ID",
+          "label": "Slack Team ID",
+          "description": "Your Slack workspace ID (e.g. T012AB3CD).",
+          "kind": "text_field"
+        }
+      ],
+      "setup_steps": [
+        {
+          "id": "intro",
+          "type": "info",
+          "title": "Connect Slack",
+          "body": "You'll need to create a Slack app in your workspace and install it to get a Bot Token. Tokens are stored securely in your OS keychain."
+        },
+        {
+          "id": "bot_token",
+          "type": "api_key",
+          "title": "Bot Token",
+          "body": "Create a Slack app at api.slack.com/apps and copy the Bot User OAuth Token.",
+          "credential_id": "SLACK_BOT_TOKEN"
+        },
+        {
+          "id": "team_id",
+          "type": "text_field",
+          "title": "Team ID",
+          "body": "Your workspace ID, found in your Slack workspace URL (e.g. T012AB3CD).",
+          "credential_id": "SLACK_TEAM_ID"
+        },
+        {
+          "id": "verify",
+          "type": "test_connection",
+          "title": "Verifying connection..."
+        }
+      ]
+    },
+    {
+      "id": "notion",
+      "name": "Notion",
+      "version": "1.0.0",
+      "description": "Read and edit Notion pages, databases, and blocks.",
+      "install_method": "npm",
+      "command_template": "npx -y @modelcontextprotocol/server-notion",
+      "tags": ["notion", "docs", "database"],
+      "credentials_schema": [
+        {
+          "id": "NOTION_API_TOKEN",
+          "label": "Notion Integration Token",
+          "description": "Internal integration token from notion.so/my-integrations.",
+          "kind": "api_key"
+        }
+      ],
+      "setup_steps": [
+        {
+          "id": "intro",
+          "type": "info",
+          "title": "Connect Notion",
+          "body": "Create an internal integration at notion.so/my-integrations, then share the pages you want the AI to access with that integration."
+        },
+        {
+          "id": "token",
+          "type": "api_key",
+          "title": "Integration Token",
+          "body": "Copy the Internal Integration Token from notion.so/my-integrations.",
+          "credential_id": "NOTION_API_TOKEN"
+        },
+        {
+          "id": "verify",
+          "type": "test_connection",
+          "title": "Verifying connection..."
+        }
+      ]
+    },
+    {
+      "id": "google-drive",
+      "name": "Google Drive",
+      "version": "1.0.0",
+      "description": "List, read, create, and edit files in Google Drive.",
+      "install_method": "npm",
+      "command_template": "npx -y @modelcontextprotocol/server-gdrive",
+      "tags": ["google", "drive", "files", "oauth"],
+      "credentials_schema": [
+        {
+          "id": "google_oauth_token",
+          "label": "Google Account",
+          "description": "Sign in with Google to grant Drive access.",
+          "kind": "oauth"
+        }
+      ],
+      "setup_steps": [
+        {
+          "id": "intro",
+          "type": "info",
+          "title": "Connect Google Drive",
+          "body": "Trayline will request permission to access your Google Drive. Your credentials are stored securely in your OS keychain."
+        },
+        {
+          "id": "oauth",
+          "type": "oauth",
+          "title": "Sign in with Google",
+          "provider": "google",
+          "scopes": [
+            "https://www.googleapis.com/auth/drive"
+          ],
+          "credential_id": "google_oauth_token"
+        },
+        {
+          "id": "verify",
+          "type": "test_connection",
+          "title": "Verifying connection..."
+        }
+      ]
+    },
+    {
+      "id": "gmail",
+      "name": "Gmail",
+      "version": "1.0.0",
+      "description": "Read, search, and send Gmail messages.",
+      "install_method": "npm",
+      "command_template": "npx -y @modelcontextprotocol/server-gmail",
+      "tags": ["google", "email", "gmail", "oauth"],
+      "credentials_schema": [
+        {
+          "id": "google_oauth_token",
+          "label": "Google Account",
+          "description": "Sign in with Google to grant Gmail access.",
+          "kind": "oauth"
+        }
+      ],
+      "setup_steps": [
+        {
+          "id": "intro",
+          "type": "info",
+          "title": "Connect Gmail",
+          "body": "Trayline will request permission to read and send email via your Gmail account. Your credentials are stored securely in your OS keychain."
+        },
+        {
+          "id": "oauth",
+          "type": "oauth",
+          "title": "Sign in with Google",
+          "provider": "google",
+          "scopes": [
+            "https://www.googleapis.com/auth/gmail.readonly",
+            "https://www.googleapis.com/auth/gmail.send"
+          ],
+          "credential_id": "google_oauth_token"
+        },
+        {
+          "id": "verify",
+          "type": "test_connection",
+          "title": "Verifying connection..."
+        }
+      ]
+    },
+    {
+      "id": "google-calendar",
+      "name": "Google Calendar",
+      "version": "1.0.0",
+      "description": "Read events, create events, and manage Google Calendar.",
+      "install_method": "npm",
+      "command_template": "npx -y @modelcontextprotocol/server-gcal",
+      "tags": ["google", "calendar", "scheduling", "oauth"],
+      "credentials_schema": [
+        {
+          "id": "google_oauth_token",
+          "label": "Google Account",
+          "description": "Sign in with Google to grant Calendar access.",
+          "kind": "oauth"
+        }
+      ],
+      "setup_steps": [
+        {
+          "id": "intro",
+          "type": "info",
+          "title": "Connect Google Calendar",
+          "body": "Trayline will request permission to read and write your Google Calendar. Your credentials are stored securely in your OS keychain."
+        },
+        {
+          "id": "oauth",
+          "type": "oauth",
+          "title": "Sign in with Google",
+          "provider": "google",
+          "scopes": [
+            "https://www.googleapis.com/auth/calendar"
+          ],
+          "credential_id": "google_oauth_token"
+        },
+        {
+          "id": "verify",
+          "type": "test_connection",
+          "title": "Verifying connection..."
+        }
+      ]
+    }
+  ]
+}

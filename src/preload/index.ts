@@ -25,7 +25,7 @@ import type { Card, CardStatus, CardCounts } from '../shared/card'
 import type { QueueEntry } from '../shared/queue'
 import type { PlanFieldDef, PlanTrayStep, PlanWorkerStep } from '../shared/workflow-plan'
 import type { WorkerRun, WorkerRunEvent } from '../shared/worker-run'
-import type { SourceStepConfig, SourceState, SourceRunMeta, SourceRunEvent } from '../shared/types'
+import type { SourceStepConfig, SourceState, SourceRunMeta, SourceRunEvent, InstalledMcpRow, McpCatalogEntry, McpStatus } from '../shared/types'
 
 const api = {
   settings: {
@@ -256,6 +256,20 @@ const api = {
       ipcRenderer.on(IPC.source.onRunEvent, listener)
       return () => ipcRenderer.off(IPC.source.onRunEvent, listener)
     },
+  },
+  mcp: {
+    listInstalled: (): Promise<InstalledMcpRow[]> =>
+      ipcRenderer.invoke(IPC.mcp.listInstalled),
+    listCatalog: (): Promise<McpCatalogEntry[]> =>
+      ipcRenderer.invoke(IPC.mcp.listCatalog),
+    install: (mcpId: string): Promise<InstalledMcpRow> =>
+      ipcRenderer.invoke(IPC.mcp.install, mcpId),
+    uninstall: (mcpId: string): Promise<void> =>
+      ipcRenderer.invoke(IPC.mcp.uninstall, mcpId),
+    readStatus: (mcpId: string): Promise<McpStatus> =>
+      ipcRenderer.invoke(IPC.mcp.readStatus, mcpId),
+    writeStatus: (mcpId: string, partial: Partial<McpStatus>): Promise<McpStatus> =>
+      ipcRenderer.invoke(IPC.mcp.writeStatus, mcpId, partial),
   },
   platform: process.platform as NodeJS.Platform,
 }

@@ -13,11 +13,12 @@ import { sourceScheduler } from '../services/source-scheduler'
 import { watcherService } from '../services/watcher-service'
 import { schedulerService } from '../services/scheduler-service'
 import { skillService } from '../services/skill-service'
+import { mcpRegistry } from '../services/mcp-registry'
 import { queueService } from '../services/queue-service'
 import { exportService } from '../services/export-service'
 import { join } from 'path'
 import { fsService } from '../services/fs-service'
-import type { BootstrapInfo, ProviderInstallSuggestion, ProviderReadyResult, ExportOptions, ImportSuccess, SourceStepConfig } from '../../shared/types'
+import type { BootstrapInfo, ProviderInstallSuggestion, ProviderReadyResult, ExportOptions, ImportSuccess, SourceStepConfig, McpStatus } from '../../shared/types'
 import type { CardStatus } from '../../shared/card'
 
 export type { BootstrapInfo }
@@ -397,6 +398,16 @@ export function registerIpcHandlers(
     skillService.uninstall(skillId),
   )
   ipcMain.handle('skills:revalidateAll', () => skillService.revalidateAll())
+
+  // ── MCPs ──────────────────────────────────────────────────────────────────────
+  ipcMain.handle('mcp:list-installed', () => mcpRegistry.listInstalled())
+  ipcMain.handle('mcp:list-catalog', () => mcpRegistry.listCatalog())
+  ipcMain.handle('mcp:install', (_: unknown, mcpId: string) => mcpRegistry.install(mcpId))
+  ipcMain.handle('mcp:uninstall', (_: unknown, mcpId: string) => mcpRegistry.uninstall(mcpId))
+  ipcMain.handle('mcp:read-status', (_: unknown, mcpId: string) => mcpRegistry.readStatus(mcpId))
+  ipcMain.handle('mcp:write-status', (_: unknown, mcpId: string, partial: Partial<McpStatus>) =>
+    mcpRegistry.writeStatus(mcpId, partial),
+  )
 
   // ── Cards ─────────────────────────────────────────────────────────────────
   ipcMain.handle('card:list', (_: unknown, project: string, workflow: string, stepId: string, status: CardStatus) =>
