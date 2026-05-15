@@ -47,7 +47,7 @@ Each task corresponds to a phase file in this folder. Check off tasks as they ar
 - [x] [Phase N2.4 — Setup Wizard](./phase-n2-4-setup-wizard.md)
 - [x] [Phase N2.5 — Worker Engine Integration (MCPs)](./phase-n2-5-worker-engine.md)
 - [x] [Phase N2.6 — Initial Catalog MCPs](./phase-n2-6-catalog-mcps.md)
-- [ ] [Phase N2.7 — Workflow Author Update](./phase-n2-7-workflow-author-update.md)
+- [x] [Phase N2.7 — Workflow Author Update](./phase-n2-7-workflow-author-update.md)
 - [ ] [Phase N2.8 — Import/Export & Polish](./phase-n2-8-polish.md)
 
 ---
