@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { ProjectMeta, StepMeta, WorkflowMeta } from '../../shared/types'
+import type { ProjectMeta, StepMeta, WorkflowMeta, InstalledMcpRow } from '../../shared/types'
 import type { MissingSkillsEntry } from '../../shared/types'
 
 type Screen = 'splash' | 'projectList' | 'author' | 'project' | 'settings' | 'skills' | 'mcps'
@@ -21,6 +21,8 @@ interface ProjectStoreState {
   unconfiguredMcps: string[]
   /** Missing skills per worker step in the open project. stepId → skill IDs. */
   missingSkillsByStep: Record<string, string[]>
+  /** MCPs referenced by worker steps that are not in Ready state. stepId → mcp IDs. */
+  unconfiguredMcpsByStep: Record<string, string[]>
   /** Project names that have at least one worker with a missing skill. */
   projectsWithMissingSkills: Set<string>
   /** When set, the author screen treats Generate as a regenerate of this project. */
@@ -47,6 +49,7 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
   screen: 'splash',
   unconfiguredMcps: [],
   missingSkillsByStep: {},
+  unconfiguredMcpsByStep: {},
   projectsWithMissingSkills: new Set(),
   regenerateOf: null,
   jumpTarget: null,
@@ -76,16 +79,17 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
   refreshSteps: async () => {
     const active = get().active
     if (!active) {
-      set({ workflow: null, steps: [], missingSkillsByStep: {} })
+      set({ workflow: null, steps: [], missingSkillsByStep: {}, unconfiguredMcpsByStep: {} })
       return
     }
-    const [workflows, skillEntries] = await Promise.all([
+    const [workflows, skillEntries, installedMcps] = await Promise.all([
       window.trayline.project.listWorkflows(active.name),
       window.trayline.project.checkSkills(active.name).catch(() => [] as MissingSkillsEntry[]),
+      window.trayline.mcp.listInstalled().catch(() => [] as InstalledMcpRow[]),
     ])
     const wf = workflows[0] ?? null
     if (!wf) {
-      set({ workflow: null, steps: [], missingSkillsByStep: {} })
+      set({ workflow: null, steps: [], missingSkillsByStep: {}, unconfiguredMcpsByStep: {} })
       return
     }
     const steps = await window.trayline.project.listSteps(active.name, wf.name)
@@ -93,7 +97,17 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
     for (const entry of skillEntries) {
       missingSkillsByStep[entry.stepId] = entry.missingSkillIds
     }
-    set({ workflow: wf, steps, missingSkillsByStep })
+    const unconfiguredMcpsByStep: Record<string, string[]> = {}
+    for (const step of steps) {
+      if (step.kind !== 'worker') continue
+      const stepMcps = (step.raw as { mcps?: string[] }).mcps ?? []
+      const notReady = stepMcps.filter((id) => {
+        const row = installedMcps.find((m) => m.manifest.id === id)
+        return !row || row.healthState !== 'ready'
+      })
+      if (notReady.length > 0) unconfiguredMcpsByStep[step.id] = notReady
+    }
+    set({ workflow: wf, steps, missingSkillsByStep, unconfiguredMcpsByStep })
     // If the previously selected step no longer exists, clear it.
     const sel = get().selectedStepId
     if (sel && !steps.some((s) => s.id === sel)) set({ selectedStepId: null })

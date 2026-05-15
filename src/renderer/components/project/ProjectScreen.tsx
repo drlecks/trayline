@@ -22,6 +22,7 @@ export default function ProjectScreen() {
   const setSelectedStepId = useProjectStore((s) => s.setSelectedStepId)
   const unconfiguredMcps = useProjectStore((s) => s.unconfiguredMcps)
   const missingSkillsByStep = useProjectStore((s) => s.missingSkillsByStep)
+  const unconfiguredMcpsByStep = useProjectStore((s) => s.unconfiguredMcpsByStep)
   const setScreen = useProjectStore((s) => s.setScreen)
   const setRegenerateOf = useProjectStore((s) => s.setRegenerateOf)
   const refreshSteps = useProjectStore((s) => s.refreshSteps)
@@ -76,6 +77,7 @@ export default function ProjectScreen() {
                 step={step}
                 selected={step.id === selectedStepId && !showContextEditor}
                 missingSkills={missingSkillsByStep[step.id] ?? []}
+                unconfiguredMcps={unconfiguredMcpsByStep[step.id] ?? []}
                 onClick={() => { setSelectedStepId(step.id); setShowContextEditor(false) }}
               />
             ))}
@@ -266,6 +268,7 @@ function ErrorTraySection({
             step={step}
             selected={selected}
             missingSkills={[]}
+            unconfiguredMcps={[]}
             onClick={onSelect}
           />
         </div>
@@ -274,7 +277,7 @@ function ErrorTraySection({
   )
 }
 
-function StepCard({ step, selected, missingSkills, onClick }: { step: StepMeta; selected: boolean; missingSkills: string[]; onClick: () => void }) {
+function StepCard({ step, selected, missingSkills, unconfiguredMcps, onClick }: { step: StepMeta; selected: boolean; missingSkills: string[]; unconfiguredMcps: string[]; onClick: () => void }) {
   const isBatch = step.kind === 'worker' && !!(step.raw as { batch_mode?: boolean }).batch_mode
   const Icon = step.kind === 'source'
     ? Rss
@@ -426,6 +429,11 @@ function StepCard({ step, selected, missingSkills, onClick }: { step: StepMeta; 
           )}
           {step.kind === 'worker' && missingSkills.length > 0 && (
             <span title="Missing skill" className="shrink-0">
+              <AlertTriangle size={13} strokeWidth={2} className="text-amber-500" />
+            </span>
+          )}
+          {step.kind === 'worker' && unconfiguredMcps.length > 0 && (
+            <span title={`${unconfiguredMcps.join(', ')} needs setup`} className="shrink-0">
               <AlertTriangle size={13} strokeWidth={2} className="text-amber-500" />
             </span>
           )}
