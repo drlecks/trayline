@@ -17,8 +17,9 @@ vi.mock('keytar', () => {
       findCredentials: vi.fn(async (s: string) =>
         [...store.entries()]
           .filter(([k]) => k.startsWith(`${s}:`))
-          .map(([k, password]) => ({ account: k.slice(s.length + 1), password })),
-    ),
+          .map(([k, password]) => ({ account: k.slice(s.length + 1), password }))
+      ),
+    },
   }
 })
 
