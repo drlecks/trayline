@@ -368,7 +368,7 @@ export function registerIpcHandlers(
     workerRunner.openExternalTerminal(project, workflow, stepId, runId),
   )
 
-  // ── Skill Finder ──────────────────────────────────────────────────────────
+  // ── Skills ────────────────────────────────────────────────────────────────
   ipcMain.handle('skills:fetchCatalog', (_: unknown, opts?: { forceRefresh?: boolean }) =>
     skillService.fetchCatalog(opts),
   )
@@ -379,10 +379,24 @@ export function registerIpcHandlers(
   ipcMain.handle('skills:installFromUrl', (_: unknown, url: string) =>
     skillService.installFromUrl(url),
   )
+  ipcMain.handle('skills:validateFromUrl', (_: unknown, url: string) =>
+    skillService.validateFromUrl(url),
+  )
+  ipcMain.handle('skills:confirmInstall', (
+    _: unknown,
+    tempDir: string,
+    acceptedWarnings: string[],
+    sourceUrl: string,
+    source: 'url' | 'catalog',
+  ) => skillService.confirmInstall(tempDir, acceptedWarnings, sourceUrl, source))
+  ipcMain.handle('skills:cancelValidation', (_: unknown, tempDir: string) =>
+    skillService.cancelValidation(tempDir),
+  )
   ipcMain.handle('skills:update', (_: unknown, skillId: string) => skillService.update(skillId))
   ipcMain.handle('skills:uninstall', (_: unknown, skillId: string) =>
     skillService.uninstall(skillId),
   )
+  ipcMain.handle('skills:revalidateAll', () => skillService.revalidateAll())
 
   // ── Cards ─────────────────────────────────────────────────────────────────
   ipcMain.handle('card:list', (_: unknown, project: string, workflow: string, stepId: string, status: CardStatus) =>

@@ -51,6 +51,10 @@ export type AuditEvent =
   | 'source_run_completed'
   | 'source_run_failed'
   | 'source_item_new'
+  | 'skill_installed'
+  | 'skill_updated'
+  | 'skill_uninstalled'
+  | 'skill_quarantined'
 
 export interface AuditRow {
   id: string
@@ -252,6 +256,8 @@ export interface SkillManifest {
   description: string
   tags?: string[]
   tools?: string[]
+  /** Additional files bundled with this skill (relative paths under the skill directory). */
+  files?: string[]
   _trayline?: Record<string, unknown>
 }
 
@@ -291,6 +297,40 @@ export interface InstalledSkillRow {
   usedBy: { project: string; workflow: string; stepId: string }[]
   /** Version available in the cached catalog when newer than installed. */
   updateAvailable?: string
+  /** True when on-disk revalidation at launch found the skill tampered or invalid. */
+  quarantined?: boolean
+}
+
+// ── Skill validation (N2.1) ───────────────────────────────────────────────────
+
+export interface ValidationCheck {
+  id: string
+  label: string
+  status: 'pass' | 'fail' | 'warn'
+  /** Human-readable description for fail/warn status. */
+  message?: string
+  /** For skill.md safety scan: each matched line as "line N: [pattern] text". */
+  matches?: string[]
+}
+
+export interface SkillValidationResult {
+  checks: ValidationCheck[]
+  /** Parsed and validated manifest, or null if skill.json was invalid. */
+  manifest: {
+    id: string
+    name: string
+    version: string
+    description: string
+    tags?: string[]
+  } | null
+  /** Every file found in the bundle with its byte size. */
+  fileList: { name: string; sizeBytes: number }[]
+  /** True when at least one check has status === 'fail'. */
+  hasFail: boolean
+  /** Populated only when hasFail === false; the temp dir where files are staged. */
+  pendingTempDir?: string
+  /** The source URL used for this validation. */
+  sourceUrl?: string
 }
 
 export interface MissingSkillsEntry {
