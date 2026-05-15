@@ -270,6 +270,12 @@ const api = {
       ipcRenderer.invoke(IPC.mcp.readStatus, mcpId),
     writeStatus: (mcpId: string, partial: Partial<McpStatus>): Promise<McpStatus> =>
       ipcRenderer.invoke(IPC.mcp.writeStatus, mcpId, partial),
+    saveCredential: (mcpId: string, credId: string, value: string): Promise<void> =>
+      ipcRenderer.invoke(IPC.mcp.saveCredential, mcpId, credId, value),
+    deleteCredentials: (mcpId: string): Promise<void> =>
+      ipcRenderer.invoke(IPC.mcp.deleteCredentials, mcpId),
+    testConnection: (mcpId: string): Promise<{ ok: boolean; error?: string }> =>
+      ipcRenderer.invoke(IPC.mcp.testConnection, mcpId),
   },
   platform: process.platform as NodeJS.Platform,
 }

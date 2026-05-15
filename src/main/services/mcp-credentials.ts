@@ -28,6 +28,17 @@ async function deleteAllCredentials(mcpId: string, schema: McpCredentialSchemaEn
   }
 }
 
+/** Delete all keychain entries for an MCP by scanning for the mcp:{id}: prefix. */
+async function deleteAllForMcp(mcpId: string): Promise<void> {
+  const prefix = `mcp:${mcpId}:`
+  const all = await keytar.findCredentials(KEYTAR_SERVICE)
+  await Promise.all(
+    all
+      .filter(({ account }) => account.startsWith(prefix))
+      .map(({ account }) => keytar.deletePassword(KEYTAR_SERVICE, account).catch(() => {})),
+  )
+}
+
 /** Check whether all required credentials are present in the keychain. */
 async function areAllConfigured(mcpId: string, schema: McpCredentialSchemaEntry[]): Promise<boolean> {
   for (const cred of schema) {
@@ -42,5 +53,6 @@ export const mcpCredentials = {
   readCredential,
   deleteCredential,
   deleteAllCredentials,
+  deleteAllForMcp,
   areAllConfigured,
 }

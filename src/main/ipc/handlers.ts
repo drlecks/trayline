@@ -14,6 +14,8 @@ import { watcherService } from '../services/watcher-service'
 import { schedulerService } from '../services/scheduler-service'
 import { skillService } from '../services/skill-service'
 import { mcpRegistry } from '../services/mcp-registry'
+import { mcpCredentials } from '../services/mcp-credentials'
+import { testConnection } from '../services/mcp-connection-test'
 import { queueService } from '../services/queue-service'
 import { exportService } from '../services/export-service'
 import { join } from 'path'
@@ -408,6 +410,13 @@ export function registerIpcHandlers(
   ipcMain.handle('mcp:write-status', (_: unknown, mcpId: string, partial: Partial<McpStatus>) =>
     mcpRegistry.writeStatus(mcpId, partial),
   )
+  ipcMain.handle('mcp:save-credential', async (_: unknown, mcpId: string, credId: string, value: string) => {
+    await mcpCredentials.storeCredential(mcpId, credId, value)
+  })
+  ipcMain.handle('mcp:delete-credentials', async (_: unknown, mcpId: string) => {
+    await mcpCredentials.deleteAllForMcp(mcpId)
+  })
+  ipcMain.handle('mcp:test-connection', (_: unknown, mcpId: string) => testConnection(mcpId))
 
   // ── Cards ─────────────────────────────────────────────────────────────────
   ipcMain.handle('card:list', (_: unknown, project: string, workflow: string, stepId: string, status: CardStatus) =>
