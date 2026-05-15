@@ -3,7 +3,7 @@ import fs from 'node:fs/promises'
 import { join } from 'node:path'
 import { Paths } from './fs-service'
 import { auditDb } from './audit-db'
-import { setMockScript, getMockClearContextCalls, resetMockClearContextCalls } from '../ai-terminals/mock'
+import { setMockScript, getMockClearContextCalls, resetMockClearContextCalls, getLastSpawnedMcps, resetLastSpawnedMcps } from '../ai-terminals/mock'
 import { workerRunner } from './worker-runner'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -218,6 +218,128 @@ describe('workerRunner', () => {
     const runDir = join(stepsDir, '02-worker', 'runs', runId)
     const resolvedExists = await pathExists(join(runDir, 'process.md'))
     expect(resolvedExists).toBe(false)
+  })
+
+  // ── MCP pre-flight tests ─────────────────────────────────────────────────────
+
+  it('aborts with run_aborted_mcp_not_ready when MCP is not installed', async () => {
+    const project = `mcp-not-installed-${Date.now()}`
+    const { stepsDir } = await buildWorkflow({ name: project, trayId: '01-src', workerId: '02-worker', nextTrayId: '03-next' })
+
+    // Worker references an MCP that has no directory under Paths.mcps
+    await writeJson(join(stepsDir, '02-worker', 'step.json'), {
+      id: '02-worker', kind: 'worker', name: 'Worker',
+      skills: [], mcps: ['nonexistent-mcp'], context_packs: [],
+      execution: { adapter: 'mock', timeout_seconds: 5, retry_attempts: 0 },
+      trigger: { mode: 'on_ready' },
+      on_success: 'advance', on_failure: 'send_to_errors',
+    })
+
+    await seedReadyCard(stepsDir, '01-src', 'card_mni_001')
+
+    const { runId } = await workerRunner.triggerRun({
+      project, workflow: 'wf', stepId: '02-worker', cardId: 'card_mni_001',
+    })
+
+    const runDir = join(stepsDir, '02-worker', 'runs', runId)
+    const meta = JSON.parse(await fs.readFile(join(runDir, 'meta.json'), 'utf-8'))
+    expect(meta.status).toBe('failed')
+    expect(meta.error).toContain('nonexistent-mcp')
+
+    const rows = auditDb.query({ project_id: project, event: 'run_aborted_mcp_not_ready' })
+    expect(rows.length).toBeGreaterThan(0)
+    const details = JSON.parse(rows[0].details_json)
+    expect(details.mcp_id).toBe('nonexistent-mcp')
+    expect(details.reason).toBe('not_installed')
+  })
+
+  it('aborts with run_aborted_mcp_not_ready when MCP has unconfigured credentials', async () => {
+    const project = `mcp-not-configured-${Date.now()}`
+    const { stepsDir } = await buildWorkflow({ name: project, trayId: '01-src', workerId: '02-worker', nextTrayId: '03-next' })
+
+    // Create an MCP that requires credentials but is not configured
+    const mcpId = `test-mcp-unconf-${Date.now()}`
+    const mcpDir = join(Paths.mcps, mcpId)
+    await fs.mkdir(join(mcpDir, 'state'), { recursive: true })
+    await writeJson(join(mcpDir, 'mcp.json'), {
+      id: mcpId, name: 'Needs Config MCP', version: '1.0.0',
+      description: 'Test', install_method: 'npm',
+      command_template: 'npx test-mcp',
+      credentials_schema: [{ id: 'api_key', label: 'API Key', kind: 'api_key' }],
+    })
+    await writeJson(join(mcpDir, 'state', 'status.json'), {
+      configured: false, health: null, healthCheckedAt: null,
+    })
+
+    await writeJson(join(stepsDir, '02-worker', 'step.json'), {
+      id: '02-worker', kind: 'worker', name: 'Worker',
+      skills: [], mcps: [mcpId], context_packs: [],
+      execution: { adapter: 'mock', timeout_seconds: 5, retry_attempts: 0 },
+      trigger: { mode: 'on_ready' },
+      on_success: 'advance', on_failure: 'send_to_errors',
+    })
+
+    await seedReadyCard(stepsDir, '01-src', 'card_mnc_001')
+
+    const { runId } = await workerRunner.triggerRun({
+      project, workflow: 'wf', stepId: '02-worker', cardId: 'card_mnc_001',
+    })
+
+    const runDir = join(stepsDir, '02-worker', 'runs', runId)
+    const meta = JSON.parse(await fs.readFile(join(runDir, 'meta.json'), 'utf-8'))
+    expect(meta.status).toBe('failed')
+    expect(meta.error).toContain('Needs Config MCP')
+
+    const rows = auditDb.query({ project_id: project, event: 'run_aborted_mcp_not_ready' })
+    expect(rows.length).toBeGreaterThan(0)
+    const details = JSON.parse(rows[0].details_json)
+    expect(details.reason).toBe('not_configured')
+  })
+
+  it('resolves a ready no-credential MCP and passes it to the adapter', async () => {
+    resetLastSpawnedMcps()
+    const project = `mcp-ready-${Date.now()}`
+    const { stepsDir } = await buildWorkflow({ name: project, trayId: '01-src', workerId: '02-worker', nextTrayId: '03-next' })
+
+    // Create a ready MCP with no credentials (auto-configured)
+    const mcpId = `test-mcp-ready-${Date.now()}`
+    const mcpDir = join(Paths.mcps, mcpId)
+    await fs.mkdir(join(mcpDir, 'state'), { recursive: true })
+    await writeJson(join(mcpDir, 'mcp.json'), {
+      id: mcpId, name: 'Ready MCP', version: '1.0.0',
+      description: 'Test', install_method: 'npm',
+      command_template: 'npx ready-test-mcp',
+      credentials_schema: [],
+    })
+    await writeJson(join(mcpDir, 'state', 'status.json'), {
+      configured: true, health: null, healthCheckedAt: null,
+    })
+
+    await writeJson(join(stepsDir, '02-worker', 'step.json'), {
+      id: '02-worker', kind: 'worker', name: 'Worker',
+      skills: [], mcps: [mcpId], context_packs: [],
+      execution: { adapter: 'mock', timeout_seconds: 5, retry_attempts: 0 },
+      trigger: { mode: 'on_ready' },
+      on_success: 'advance', on_failure: 'send_to_errors',
+    })
+
+    await seedReadyCard(stepsDir, '01-src', 'card_mr_001')
+
+    const { runId } = await workerRunner.triggerRun({
+      project, workflow: 'wf', stepId: '02-worker', cardId: 'card_mr_001',
+    })
+
+    // Run should succeed
+    const runDir = join(stepsDir, '02-worker', 'runs', runId)
+    const meta = JSON.parse(await fs.readFile(join(runDir, 'meta.json'), 'utf-8'))
+    expect(meta.status).toBe('succeeded')
+    expect(meta.mcps_active).toEqual([mcpId])
+
+    // Mock adapter received the MCP definition
+    const spawnedMcps = getLastSpawnedMcps()
+    expect(spawnedMcps).toHaveLength(1)
+    expect(spawnedMcps[0].id).toBe(mcpId)
+    expect((spawnedMcps[0].manifest as Record<string, unknown>)['command_template']).toBe('npx ready-test-mcp')
   })
 
   it('marks orphaned running runs as interrupted', async () => {
