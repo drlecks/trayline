@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { AlertTriangle, Plus, Trash2, Upload, Download, PauseCircle, PlayCircle } from 'lucide-react'
 import { useProjectStore } from '@/stores/project-store'
 import type { ProjectMeta, ProjectStatus, ImportSuccess, ImportNeedsReview, ProjectLiveStats, ProjectReadiness } from '../../../shared/types'
+import GlobalActivityBar from './GlobalActivityBar'
 import ExportProjectDialog from './ExportProjectDialog'
 import ImportMissingSkillsDialog from './ImportMissingSkillsDialog'
 import ImportSecurityAuditDialog from './ImportSecurityAuditDialog'
@@ -401,6 +402,8 @@ export default function ProjectListScreen() {
           )
         })}
       </ul>
+
+      <GlobalActivityBar />
 
       {exportTarget && (
         <ExportProjectDialog
