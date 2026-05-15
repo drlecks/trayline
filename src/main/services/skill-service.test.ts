@@ -54,12 +54,6 @@ const SAMPLE_INDEX: CatalogIndex = {
   ],
 }
 
-const DEMO_MANIFEST = JSON.stringify({
-  id: 'demo-skill',
-  name: 'Demo Skill',
-  version: '1.2.0',
-  description: 'A test skill',
-})
 const DEMO_MD = '# Demo\nInstructions\n'
 
 describe('skillService', () => {
