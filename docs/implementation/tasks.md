@@ -71,7 +71,7 @@ Each task corresponds to a phase file in this folder. Check off tasks as they ar
 
 - [x] [Phase N5.1 — Orchestration Engine](./phase-n5-1-orchestration-engine.md)
 - [x] [Phase N5.2 — Project Dashboard](./phase-n5-2-project-dashboard.md)
-- [ ] [Phase N5.3 — Live Activity](./phase-n5-3-live-activity.md)
+- [x] [Phase N5.3 — Live Activity](./phase-n5-3-live-activity.md)
 
 ---
 
