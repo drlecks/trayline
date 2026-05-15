@@ -75,6 +75,15 @@ const api = {
     delete: (name: string): Promise<void> => ipcRenderer.invoke(IPC.project.delete, name),
     setStatus: (name: string, status: ProjectStatus): Promise<ProjectMeta> =>
       ipcRenderer.invoke(IPC.project.setStatus, name, status),
+    getOrchestration: (name: string): Promise<{ name: string; mounted: boolean }> =>
+      ipcRenderer.invoke(IPC.project.getOrchestration, name),
+    onStatusChanged: (
+      handler: (event: { name: string; status: ProjectStatus; mounted: boolean }) => void,
+    ): (() => void) => {
+      const listener = (_e: unknown, ev: { name: string; status: ProjectStatus; mounted: boolean }) => handler(ev)
+      ipcRenderer.on(IPC.project.onStatusChanged, listener)
+      return () => ipcRenderer.off(IPC.project.onStatusChanged, listener)
+    },
     export: (name: string, options: ExportOptions): Promise<{ ok: true; path: string } | { canceled: true }> =>
       ipcRenderer.invoke(IPC.project.export, name, options),
     import: (): Promise<ImportResult | { canceled: true }> =>
