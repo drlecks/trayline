@@ -18,13 +18,6 @@ concurrency:
   group: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'release' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-# Opt third-party JS actions into the Node 24 runtime ahead of the June 2026
-# default flip. actions/cache@v4 and actions/upload-artifact@v4 still declare
-# Node 20 internally and will warn until a v5 ships; this env var silences
-# that for every step in this workflow.
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
-
 jobs:
   test:
     name: Typecheck + Tests
@@ -67,7 +60,7 @@ jobs:
           cache: 'npm'
 
       - name: Cache Electron binaries
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cache/electron
@@ -186,7 +179,7 @@ jobs:
       # ── Always upload installer artifacts even on failure (debug aid) ──────
       - name: Upload installer artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: trayline-${{ runner.os }}-v${{ env.RELEASE_VERSION }}
           path: |
