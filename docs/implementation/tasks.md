@@ -67,6 +67,14 @@ Each task corresponds to a phase file in this folder. Check off tasks as they ar
 
 ---
 
+## N5 Phases (Global Orchestration & Live Dashboard)
+
+- [ ] [Phase N5.1 — Orchestration Engine](./phase-n5-1-orchestration-engine.md)
+- [ ] [Phase N5.2 — Project Dashboard](./phase-n5-2-project-dashboard.md)
+- [ ] [Phase N5.3 — Live Activity](./phase-n5-3-live-activity.md)
+
+---
+
 ## Estimates
 
 | Block | Estimate |
@@ -75,6 +83,7 @@ Each task corresponds to a phase file in this folder. Check off tasks as they ar
 | N2 (Phases N2.1–N2.8) | ~6–7 weeks (1 developer) |
 | N3 (Phases N3.1–N3.4) | ~3–4 weeks (1 developer) |
 | N4 (Phase N4.1) | ~3 days (1 developer) |
-| **Total** | **~20–24 weeks** |
+| N5 (Phases N5.1–N5.3) | ~1 week (1 developer) |
+| **Total** | **~21–25 weeks** |
 
 Highest-risk areas: Phase N2.4 (OAuth in Electron has OS-specific quirks), Phase N2.5 (clean MCP integration into the adapter layer), Phase N3.1 (atomic dedup index under crash conditions).
