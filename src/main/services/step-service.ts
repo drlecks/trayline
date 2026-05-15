@@ -351,6 +351,7 @@ async function addSource(input: AddSourceInput): Promise<SourceStepConfig & { id
       timeout_seconds: 60,
       adapter: 'claude-code',
     },
+    mcps: [],
     paused: false,
   }
 

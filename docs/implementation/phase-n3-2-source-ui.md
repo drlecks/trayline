@@ -57,8 +57,8 @@ Build the full UI for Source steps: the left rail card with live status, the Sou
 - [x] Dedup key field
 - [x] Max memory field (number input, default 10000)
 - [x] First run mode: dropdown (`skip_existing` / `process_all` / `process_last_n`) with N input appearing when `process_last_n` is selected
-- [ ] Adapter selector (dropdown of registered adapters, default `claude-code`)
-- [ ] MCP checklist — same visual block as the worker detail's MCPs section; shows installed MCPs with status badges and an inline **Configure ›** button; selected MCPs saved to `step.json → mcps[]`. Depends on N3.1 engine work.
+- [x] Adapter selector (dropdown of registered adapters, default `claude-code`)
+- [x] MCP checklist — same visual block as the worker detail's MCPs section; shows installed MCPs with status badges and an inline **Configure ›** button; selected MCPs saved to `step.json → mcps[]`.
 - [x] Timeout field (seconds)
 - [x] **Run now** button — calls `source:run-now`; disabled while running; guarded by provider-ready check
 - [x] **Pause schedule** / **Resume schedule** toggle button — calls `source:pause` / `source:resume`; updates visual state immediately

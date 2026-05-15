@@ -140,6 +140,7 @@ export interface SourceStepConfig {
     timeout_seconds: number
     adapter: string
   }
+  mcps?: string[]
   paused: boolean
 }
 
