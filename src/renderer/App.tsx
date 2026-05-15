@@ -9,11 +9,13 @@ import ProjectListScreen from './components/projects/ProjectListScreen'
 import ProjectScreen from './components/project/ProjectScreen'
 import SettingsScreen from './components/settings/SettingsScreen'
 import SkillsScreen from './components/skills/SkillsScreen'
+import McpsScreen from './components/mcps/McpsScreen'
 import ProviderNotInstalledModal from './components/layout/ProviderNotInstalledModal'
 import OnboardingTour from './components/onboarding/OnboardingTour'
 import ShortcutsDialog from './components/shortcuts/ShortcutsDialog'
 import CommandPalette from './components/shortcuts/CommandPalette'
 import { useGlobalShortcuts } from './components/shortcuts/useGlobalShortcuts'
+import { useActiveRunsStore } from './stores/active-runs-store'
 
 function applyThemeClass(theme: 'light' | 'dark' | 'system') {
   const root = document.documentElement
@@ -43,6 +45,11 @@ export default function App() {
     openPalette: () => setPaletteOpen(true),
     openShortcuts: () => setShortcutsOpen(true),
   })
+
+  // Initialize global active-runs subscription (runs until app unmounts)
+  useEffect(() => {
+    return useActiveRunsStore.getState().init()
+  }, [])
 
   useEffect(() => {
     applyThemeClass(theme)
@@ -122,6 +129,11 @@ export default function App() {
         {screen === 'skills' && (
           <div className="flex-1 overflow-y-auto">
             <SkillsScreen />
+          </div>
+        )}
+        {screen === 'mcps' && (
+          <div className="flex-1 overflow-y-auto">
+            <McpsScreen />
           </div>
         )}
       </main>

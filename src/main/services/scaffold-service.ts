@@ -33,7 +33,10 @@ function fillTemplate(template: string, vars: Record<string, string>): string {
 }
 
 function defaultIcon(step: PlanStep): string {
-  return step.icon ?? (step.kind === 'tray' ? 'inbox' : 'cpu')
+  if (step.icon) return step.icon
+  if (step.kind === 'tray') return 'inbox'
+  if (step.kind === 'source') return 'rss'
+  return 'cpu'
 }
 
 interface ScaffoldOptions {
@@ -47,6 +50,7 @@ interface ScaffoldResult {
   project: ProjectMeta
   projectPath: string
   unconfiguredMcps: string[]
+  hasSourceStep: boolean
 }
 
 async function scaffold(plan: WorkflowPlan, options: ScaffoldOptions = {}): Promise<ScaffoldResult> {
@@ -98,11 +102,14 @@ async function scaffold(plan: WorkflowPlan, options: ScaffoldOptions = {}): Prom
 
   const trayTemplate = await readTemplate('tray.step.json')
   const workerTemplate = await readTemplate('worker.step.json')
+  const sourceTemplate = await readTemplate('source.step.json')
+  const sourceMdTemplate = await readTemplate('source.md')
   const processTemplate = await readTemplate('process.md')
   const workflowTemplate = await readTemplate('workflow.json')
 
   const stepIds: string[] = []
   const unconfiguredMcps = new Set<string>()
+  let hasSourceStep = false
 
   for (const step of plan.workflow.steps) {
     stepIds.push(step.id)
@@ -129,6 +136,31 @@ async function scaffold(plan: WorkflowPlan, options: ScaffoldOptions = {}): Prom
         join(stepPath, 'state', 'counters.json'),
         JSON.stringify({ received_total: 0, today: 0 }, null, 2),
       )
+    } else if (step.kind === 'source') {
+      hasSourceStep = true
+      const json = JSON.parse(fillTemplate(sourceTemplate, {
+        id: step.id,
+        name: step.name,
+        description: step.description ?? '',
+        schedule_cron: step.schedule_cron,
+        dedup_key: step.dedup.key,
+        first_run: step.dedup.first_run,
+      }))
+      if (step.dedup.first_run_n != null) json.dedup.first_run_n = step.dedup.first_run_n
+
+      await writeFileAtomic(join(stepPath, 'step.json'), JSON.stringify(json, null, 2))
+      await writeFileAtomic(
+        join(stepPath, 'source.md'),
+        step.source_md && step.source_md.trim().length > 0 ? step.source_md : sourceMdTemplate,
+      )
+      await fs.mkdir(join(stepPath, 'cards', 'ready'), { recursive: true })
+      await fs.mkdir(join(stepPath, 'cards', 'archived'), { recursive: true })
+      await fs.mkdir(join(stepPath, 'runs'), { recursive: true })
+      await writeFileAtomic(
+        join(stepPath, 'state', 'counters.json'),
+        JSON.stringify({ runs_total: 0, items_found: 0, items_new: 0, last_run_at: null }, null, 2),
+      )
+      await writeFileAtomic(join(stepPath, 'state', 'seen-ids.json'), '[]')
     } else {
       const json = JSON.parse(fillTemplate(workerTemplate, {
         id: step.id,
@@ -139,6 +171,12 @@ async function scaffold(plan: WorkflowPlan, options: ScaffoldOptions = {}): Prom
       json.skills = step.skills ?? []
       json.mcps = step.mcps ?? []
       json.context_packs = step.context_packs ?? []
+      if (step.batch_mode) {
+        json.batch_mode = true
+        json.batch_max = step.batch_max ?? null
+        // Batch workers default to manual trigger
+        if (json.trigger?.mode === 'on_ready') json.trigger.mode = 'manual'
+      }
 
       // Track MCPs the user has not yet installed
       for (const mcp of json.mcps as string[]) unconfiguredMcps.add(mcp)
@@ -192,6 +230,7 @@ async function scaffold(plan: WorkflowPlan, options: ScaffoldOptions = {}): Prom
     project: projectMeta,
     projectPath,
     unconfiguredMcps: [...unconfiguredMcps],
+    hasSourceStep,
   }
 }
 

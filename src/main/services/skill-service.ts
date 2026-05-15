@@ -1,26 +1,29 @@
-// Skill catalog + install/uninstall/update.
-//
-// Phase 8 scope:
-//   - Fetch a remote skill index, cache it to app-data/skills-index-cache.json
-//   - List installed skills (user skills under skills/, excluding _system)
-//   - Install from the catalog or from a base URL
-//   - Update / uninstall installed skills
-//   - Block uninstall when a worker in any project still references the skill
-//
-// Skills in this phase are instruction-only: skill.json + skill.md. The phase
-// brief delegates the full validation pipeline (executables rejection,
-// signature checks, etc.) to N2.1; here we just refuse anything other than
-// those two files and require a well-formed manifest.
-
 import { join } from 'path'
 import fs from 'fs/promises'
+import { app } from 'electron'
 import { Paths, fsService } from './fs-service'
 import { projectService } from './project-service'
-import type { SkillManifest } from '../../shared/types'
+import { auditDb } from './audit-db'
+import {
+  validateFromUrl as validatorFromUrl,
+  validateFromGitHubCatalog,
+  validateOnDisk,
+  cleanupTemp,
+  VALIDATOR_VERSION,
+  validateManifestContent,
+} from './skill-validator'
+import type { SkillManifest, InstalledSkillRow, SkillValidationResult } from '../../shared/types'
 
-const CATALOG_URL = process.env.TRAYLINE_CATALOG_URL ?? 'https://raw.githubusercontent.com/drlecks/trayline/develop/catalog/index.json'
+const CATALOG_URL =
+  process.env.TRAYLINE_CATALOG_URL ??
+  'https://raw.githubusercontent.com/drlecks/trayline/develop/catalog/index.json'
 const CACHE_PATH = join(Paths.appData, 'skills-index-cache.json')
 const FETCH_TIMEOUT_MS = 8000
+
+function getBundledCatalogPath(): string {
+  if (app.isPackaged) return join(process.resourcesPath, 'skills-catalog.json')
+  return join(app.getAppPath(), 'resources', 'skills-catalog.json')
+}
 
 export interface CatalogEntry {
   id: string
@@ -29,10 +32,9 @@ export interface CatalogEntry {
   description: string
   author?: string
   tags?: string[]
-  /** Directory URL where the skill's files live (must end with `/`). */
+  /** GitHub Contents API URL for listing this skill's files (includes `?ref=`). */
   base_url: string
-  /** Instruction file name inside base_url. Defaults to "skill.md". Remote repos may use "SKILL.md". */
-  skill_md?: string
+  files?: string[]
 }
 
 export interface CatalogIndex {
@@ -43,54 +45,16 @@ export interface CatalogIndex {
 
 export interface CatalogFetchResult {
   index: CatalogIndex
-  /** Where the data came from on this call. */
   source: 'remote' | 'cache'
-  /** Filled when source === 'cache' — why the remote failed. */
   remoteError?: string
 }
 
-export interface InstalledSkill {
-  manifest: SkillManifest
-  /** Absolute path to the skill folder on disk. */
-  dir: string
-  /** Origin if known. */
-  source: 'catalog' | 'url' | 'local' | 'system'
-  sourceUrl?: string
-  installedAt?: string
-  /** Workers in any project that still reference this skill. */
-  usedBy: { project: string; workflow: string; stepId: string }[]
-  /** Catalog version if newer than installed. */
-  updateAvailable?: string
-}
+export type InstalledSkill = InstalledSkillRow & { dir: string }
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 async function pathExists(p: string): Promise<boolean> {
   try { await fs.access(p); return true } catch { return false }
-}
-
-function isValidId(id: unknown): id is string {
-  return typeof id === 'string' && /^[a-z0-9][a-z0-9_-]{0,63}$/.test(id)
-}
-
-function validateManifest(raw: unknown): SkillManifest {
-  if (!raw || typeof raw !== 'object') throw new Error('skill.json is not a JSON object')
-  const m = raw as Record<string, unknown>
-  if (!isValidId(m.id)) {
-    throw new Error('skill.json: `id` must be lowercase alphanumeric with dashes/underscores')
-  }
-  if (typeof m.name !== 'string' || !m.name) throw new Error('skill.json: `name` is required')
-  if (typeof m.version !== 'string' || !m.version) throw new Error('skill.json: `version` is required')
-  if (typeof m.description !== 'string') throw new Error('skill.json: `description` is required')
-  return {
-    id: m.id,
-    name: m.name,
-    version: m.version,
-    description: m.description,
-    tags: Array.isArray(m.tags) ? (m.tags as string[]) : undefined,
-    tools: Array.isArray(m.tools) ? (m.tools as string[]) : undefined,
-    _trayline: typeof m._trayline === 'object' && m._trayline ? (m._trayline as Record<string, unknown>) : undefined,
-  }
 }
 
 function compareVersions(a: string, b: string): number {
@@ -102,8 +66,7 @@ function compareVersions(a: string, b: string): number {
     const nb = Number(pb[i] ?? '0')
     if (!Number.isNaN(na) && !Number.isNaN(nb) && na !== nb) return na - nb
     if (Number.isNaN(na) || Number.isNaN(nb)) {
-      const sa = pa[i] ?? ''
-      const sb = pb[i] ?? ''
+      const sa = pa[i] ?? '', sb = pb[i] ?? ''
       if (sa !== sb) return sa < sb ? -1 : 1
     }
   }
@@ -120,62 +83,25 @@ async function fetchWithTimeout(url: string, init?: RequestInit): Promise<Respon
   }
 }
 
-// ── Catalog fetch + cache ────────────────────────────────────────────────────
-
-async function fetchCatalog(opts?: { forceRefresh?: boolean }): Promise<CatalogFetchResult> {
-  // Always try the network first; fall back to cache only when offline / error.
-  // forceRefresh just means "even if the network fails, don't pretend to have
-  // succeeded by silently returning the cache without a remoteError set."
-  let remoteError: string | undefined
-  try {
-    const res = await fetchWithTimeout(CATALOG_URL, { headers: { Accept: 'application/json' } })
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    const text = await res.text()
-    const parsed = JSON.parse(text) as CatalogIndex
-    if (!parsed || !Array.isArray(parsed.skills)) throw new Error('catalog: missing `skills` array')
-    await fs.mkdir(Paths.appData, { recursive: true })
-    await fsService.writeJsonAtomic(CACHE_PATH, parsed)
-    return { index: parsed, source: 'remote' }
-  } catch (err) {
-    remoteError = err instanceof Error ? err.message : String(err)
-  }
-
-  if (opts?.forceRefresh) {
-    // Caller wants a definitive remote answer; return the error so the UI
-    // can surface it instead of pretending nothing went wrong.
-  }
-
-  if (await pathExists(CACHE_PATH)) {
-    const cached = await fsService.readJson<CatalogIndex>(CACHE_PATH)
-    return { index: cached, source: 'cache', remoteError }
-  }
-
-  // No remote, no cache. Return an empty index so the UI renders cleanly.
-  return { index: { skills: [] }, source: 'cache', remoteError }
+function normalizeBaseUrl(url: string): string {
+  return url.endsWith('/') ? url : url + '/'
 }
 
-// ── Installed skills ─────────────────────────────────────────────────────────
-
 async function readInstalledManifest(skillId: string): Promise<{
-  manifest: SkillManifest
-  dir: string
+  manifest: SkillManifest; dir: string
 } | null> {
   const dir = join(Paths.skills, skillId)
   const manifestPath = join(dir, 'skill.json')
   if (!(await pathExists(manifestPath))) return null
   try {
     const raw = await fs.readFile(manifestPath, 'utf-8')
-    const manifest = validateManifest(JSON.parse(raw))
+    const manifest = validateManifestContent(JSON.parse(raw))
     return { manifest, dir }
   } catch {
     return null
   }
 }
 
-/**
- * Scan every workflow in every project and return workers whose step.json
- * lists `skillId` in their `skills` array.
- */
 async function findUsage(skillId: string): Promise<{ project: string; workflow: string; stepId: string }[]> {
   const out: { project: string; workflow: string; stepId: string }[] = []
   const projects = await projectService.listProjects().catch(() => [])
@@ -186,22 +112,82 @@ async function findUsage(skillId: string): Promise<{ project: string; workflow: 
       for (const step of steps) {
         if (step.kind !== 'worker') continue
         const skills = Array.isArray(step.raw.skills) ? (step.raw.skills as unknown[]) : []
-        if (skills.includes(skillId)) {
-          out.push({ project: proj.name, workflow: wf.name, stepId: step.id })
-        }
+        if (skills.includes(skillId)) out.push({ project: proj.name, workflow: wf.name, stepId: step.id })
       }
     }
   }
   return out
 }
 
-async function listInstalled(): Promise<InstalledSkill[]> {
+function skillAudit(event: 'skill_installed' | 'skill_updated' | 'skill_uninstalled' | 'skill_quarantined', details: Record<string, unknown>) {
+  auditDb.insert({
+    project_id: '', workflow_id: '', step_id: '', card_id: '',
+    event, actor: 'system',
+    details_json: JSON.stringify(details),
+  })
+}
+
+// ── Catalog seeding + fetch ───────────────────────────────────────────────────
+
+/**
+ * Seed skills-index-cache.json from the bundled catalog on launch.
+ * Overwrites an empty cache (e.g. stale remote-fetched empty array) so the
+ * app is never left with a blank catalog when bundled skills are available.
+ */
+async function seedCatalog(): Promise<void> {
+  const src = getBundledCatalogPath()
+  if (!(await pathExists(src))) return
+
+  if (await pathExists(CACHE_PATH)) {
+    try {
+      const existing = await fsService.readJson<CatalogIndex>(CACHE_PATH)
+      if ((existing.skills?.length ?? 0) > 0) return // Cache already has real data
+    } catch { /* corrupt — fall through and reseed */ }
+  }
+
+  const raw = await fs.readFile(src, 'utf-8')
+  await fs.mkdir(Paths.appData, { recursive: true })
+  await fs.writeFile(CACHE_PATH, raw, 'utf-8')
+}
+
+async function fetchCatalog(opts?: { forceRefresh?: boolean }): Promise<CatalogFetchResult> {
+  let remoteError: string | undefined
+  try {
+    const res = await fetchWithTimeout(CATALOG_URL, { headers: { Accept: 'application/json' } })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const parsed = JSON.parse(await res.text()) as CatalogIndex
+    if (!parsed || !Array.isArray(parsed.skills)) throw new Error('catalog: missing `skills` array')
+    // Don't cache or return a remote catalog with no skills — treat it the same
+    // as a failed fetch so the bundled / cached catalog continues to show.
+    if (parsed.skills.length === 0) throw new Error('remote catalog has no skills')
+    await fs.mkdir(Paths.appData, { recursive: true })
+    await fsService.writeJsonAtomic(CACHE_PATH, parsed)
+    return { index: parsed, source: 'remote' }
+  } catch (err) {
+    remoteError = err instanceof Error ? err.message : String(err)
+  }
+
+  void opts // forceRefresh is a hint only; we always fall back gracefully
+
+  if (await pathExists(CACHE_PATH)) {
+    const cached = await fsService.readJson<CatalogIndex>(CACHE_PATH)
+    if ((cached.skills?.length ?? 0) > 0) return { index: cached, source: 'cache', remoteError }
+  }
+  // Last resort: read from the bundled file shipped with the app
+  const bundled = getBundledCatalogPath()
+  if (await pathExists(bundled)) {
+    const index = await fsService.readJson<CatalogIndex>(bundled)
+    return { index, source: 'cache', remoteError }
+  }
+  return { index: { skills: [] }, source: 'cache', remoteError }
+}
+
+// ── Installed skills ──────────────────────────────────────────────────────────
+
+async function listInstalled(): Promise<InstalledSkillRow[]> {
   if (!(await pathExists(Paths.skills))) return []
   const entries = await fs.readdir(Paths.skills, { withFileTypes: true })
 
-  // Best-effort catalog load (cache only — listInstalled must be fast and
-  // offline-clean). If the cache exists we use it to surface "update available"
-  // flags; if not, we just omit them.
   let catalogById = new Map<string, CatalogEntry>()
   if (await pathExists(CACHE_PATH)) {
     try {
@@ -210,80 +196,49 @@ async function listInstalled(): Promise<InstalledSkill[]> {
     } catch { /* ignore corrupt cache */ }
   }
 
-  const out: InstalledSkill[] = []
+  const out: InstalledSkillRow[] = []
   for (const e of entries) {
     if (!e.isDirectory()) continue
     if (e.name === '_system') continue
     const loaded = await readInstalledManifest(e.name)
     if (!loaded) continue
     const tr = (loaded.manifest._trayline ?? {}) as Record<string, unknown>
-    const source = (tr.source as InstalledSkill['source']) ?? 'local'
+    const source = (tr.source as InstalledSkillRow['source']) ?? 'local'
     const sourceUrl = typeof tr.source_url === 'string' ? tr.source_url : undefined
     const installedAt = typeof tr.installed_at === 'string' ? tr.installed_at : undefined
+    const quarantined = tr.quarantined === true
     const usedBy = await findUsage(loaded.manifest.id)
     const cat = catalogById.get(loaded.manifest.id)
     const updateAvailable = cat && compareVersions(cat.version, loaded.manifest.version) > 0
-      ? cat.version
-      : undefined
-    out.push({ manifest: loaded.manifest, dir: loaded.dir, source, sourceUrl, installedAt, usedBy, updateAvailable })
+      ? cat.version : undefined
+    out.push({ manifest: loaded.manifest, source, sourceUrl, installedAt, usedBy, updateAvailable, quarantined })
   }
   out.sort((a, b) => a.manifest.name.localeCompare(b.manifest.name))
   return out
 }
 
-// ── Install / update / uninstall ─────────────────────────────────────────────
+// ── Install helpers ───────────────────────────────────────────────────────────
 
-function normalizeBaseUrl(url: string): string {
-  return url.endsWith('/') ? url : url + '/'
-}
-
-async function fetchSkillFiles(
-  baseUrl: string,
-  files: string[],
-): Promise<{ manifest: SkillManifest; manifestRaw: string; skillMd: string }> {
-  const base = normalizeBaseUrl(baseUrl)
-  if (!files.includes('skill.json')) {
-    throw new Error('A skill must include `skill.json`')
-  }
-  if (!files.includes('skill.md')) {
-    throw new Error('A skill must include `skill.md`')
-  }
-
-  // Phase 8 only accepts these two files. The full pipeline (N2.1) will
-  // permit additional sibling files after scanning them for executables.
-  const allowed = new Set(['skill.json', 'skill.md'])
-  for (const f of files) {
-    if (!allowed.has(f)) {
-      throw new Error(`Phase 8 skills can only contain skill.json and skill.md (got "${f}")`)
-    }
-  }
-
-  const manifestUrl = base + 'skill.json'
-  const manifestRes = await fetchWithTimeout(manifestUrl, { headers: { Accept: 'application/json' } })
-  if (!manifestRes.ok) throw new Error(`Failed to fetch skill.json: HTTP ${manifestRes.status}`)
-  const manifestRaw = await manifestRes.text()
-  const manifest = validateManifest(JSON.parse(manifestRaw))
-
-  const skillMdUrl = base + 'skill.md'
-  const mdRes = await fetchWithTimeout(skillMdUrl, { headers: { Accept: 'text/markdown,text/plain' } })
-  if (!mdRes.ok) throw new Error(`Failed to fetch skill.md: HTTP ${mdRes.status}`)
-  const skillMd = await mdRes.text()
-
-  return { manifest, manifestRaw, skillMd }
-}
-
-async function writeSkillToDisk(
-  manifest: SkillManifest,
-  skillMd: string,
+/** Copy files from a staged temp dir into skills/<id>/, stamp _trayline, write audit. */
+async function finalizeFromTemp(
+  tempDir: string,
   origin: { source: 'catalog' | 'url'; sourceUrl: string },
-): Promise<void> {
-  const target = join(Paths.skills, manifest.id)
-  // Write to a sibling .tmp directory then swap, so a half-written skill
-  // never becomes "installed."
-  const tmp = target + '.installing'
-  if (await pathExists(tmp)) await fs.rm(tmp, { recursive: true, force: true })
-  await fs.mkdir(tmp, { recursive: true })
+  acceptedWarnings: string[],
+  event: 'skill_installed' | 'skill_updated',
+): Promise<InstalledSkillRow> {
+  // Read and re-validate the manifest from temp to get the id
+  const manifestPath = join(tempDir, 'skill.json')
+  const rawManifest = await fs.readFile(manifestPath, 'utf-8')
+  const manifest = validateManifestContent(JSON.parse(rawManifest))
 
+  const target = join(Paths.skills, manifest.id)
+  const swapTmp = target + '.installing'
+  if (await pathExists(swapTmp)) await fs.rm(swapTmp, { recursive: true, force: true })
+
+  // Copy temp to .installing sibling
+  await fs.cp(tempDir, swapTmp, { recursive: true })
+
+  // Enrich skill.json with _trayline metadata
   const enriched: SkillManifest = {
     ...manifest,
     _trayline: {
@@ -291,24 +246,89 @@ async function writeSkillToDisk(
       source: origin.source,
       source_url: origin.sourceUrl,
       installed_at: new Date().toISOString(),
+      validator_version: VALIDATOR_VERSION,
+      accepted_warnings: acceptedWarnings,
     },
   }
-  await fs.writeFile(join(tmp, 'skill.json'), JSON.stringify(enriched, null, 2), 'utf-8')
-  await fs.writeFile(join(tmp, 'skill.md'), skillMd, 'utf-8')
+  await fs.writeFile(join(swapTmp, 'skill.json'), JSON.stringify(enriched, null, 2), 'utf-8')
 
-  if (await pathExists(target)) {
-    await fs.rm(target, { recursive: true, force: true })
+  // Atomic swap
+  if (await pathExists(target)) await fs.rm(target, { recursive: true, force: true })
+  await fs.rename(swapTmp, target)
+
+  // Cleanup temp
+  await cleanupTemp(tempDir).catch(() => {})
+
+  const usedBy = await findUsage(manifest.id)
+  skillAudit(event, {
+    skill_id: manifest.id,
+    version: manifest.version,
+    source: origin.source,
+    source_url: origin.sourceUrl,
+    validator_version: VALIDATOR_VERSION,
+    accepted_warnings: acceptedWarnings,
+  })
+
+  return {
+    manifest: enriched,
+    source: origin.source,
+    sourceUrl: origin.sourceUrl,
+    installedAt: enriched._trayline!.installed_at as string,
+    usedBy,
+    quarantined: false,
   }
-  await fs.rename(tmp, target)
 }
 
-async function installFromCatalog(skillId: string): Promise<InstalledSkill> {
+// ── Public install API ────────────────────────────────────────────────────────
+
+/** Step 1: validate a URL-sourced skill bundle and stage it to a temp dir. */
+async function validateSkillFromUrl(url: string): Promise<SkillValidationResult> {
+  const result = await validatorFromUrl(url)
+
+  // Add ID-collision check if manifest was parsed
+  if (result.manifest && !result.hasFail) {
+    const existingDir = join(Paths.skills, result.manifest.id)
+    if (await pathExists(existingDir)) {
+      result.checks.push({
+        id: 'id_collision',
+        label: 'Skill ID unique (or replacement confirmed)',
+        status: 'warn',
+        message: `A skill with id "${result.manifest.id}" is already installed. Installing will replace it.`,
+      })
+    } else {
+      result.checks.push({
+        id: 'id_collision',
+        label: 'Skill ID unique (or replacement confirmed)',
+        status: 'pass',
+      })
+    }
+  }
+
+  return result
+}
+
+/** Step 2: move a staged temp dir into the final install location. */
+async function confirmInstall(
+  tempDir: string,
+  acceptedWarnings: string[],
+  sourceUrl: string,
+  source: 'url' | 'catalog' = 'url',
+): Promise<InstalledSkillRow> {
+  return finalizeFromTemp(tempDir, { source, sourceUrl }, acceptedWarnings, 'skill_installed')
+}
+
+/** Cancel a pending validation — removes the staged temp dir. */
+async function cancelValidation(tempDir: string): Promise<void> {
+  await cleanupTemp(tempDir)
+}
+
+async function installFromCatalog(skillId: string): Promise<InstalledSkillRow> {
   const { index } = await fetchCatalog()
   const entry = index.skills.find((s) => s.id === skillId)
   if (!entry) throw new Error(`Skill not found in catalog: ${skillId}`)
 
-  // Manifest is synthesized from catalog metadata — remote repos don't need skill.json.
-  const manifest: SkillManifest = {
+  // Build catalog-authoritative manifest (these repos don't ship their own skill.json)
+  const catalogManifest: SkillManifest = {
     id: entry.id,
     name: entry.name,
     version: entry.version,
@@ -316,64 +336,65 @@ async function installFromCatalog(skillId: string): Promise<InstalledSkill> {
     tags: entry.tags,
   }
 
-  const base = normalizeBaseUrl(entry.base_url)
-  const skillMdFile = entry.skill_md ?? 'skill.md'
-  const mdRes = await fetchWithTimeout(`${base}${skillMdFile}`, { headers: { Accept: 'text/markdown,text/plain' } })
-  if (!mdRes.ok) throw new Error(`Failed to fetch ${skillMdFile}: HTTP ${mdRes.status}`)
-  const skillMd = await mdRes.text()
-  if (!skillMd.trim()) throw new Error(`${skillMdFile} is empty`)
-
-  await writeSkillToDisk(manifest, skillMd, { source: 'catalog', sourceUrl: base })
-  const loaded = await readInstalledManifest(manifest.id)
-  if (!loaded) throw new Error('Install completed but skill is unreadable on disk')
-  return {
-    manifest: loaded.manifest,
-    dir: loaded.dir,
-    source: 'catalog',
-    sourceUrl: base,
-    installedAt: new Date().toISOString(),
-    usedBy: [],
+  // Use GitHub Contents API URL to list + download the full directory tree, then run security checks
+  const result = await validateFromGitHubCatalog(entry.base_url, catalogManifest)
+  if (result.hasFail) {
+    const failing = result.checks.filter((c) => c.status === 'fail').map((c) => c.message ?? c.label)
+    throw new Error(`Catalog skill "${skillId}" failed validation: ${failing.join('; ')}`)
   }
+
+  return finalizeFromTemp(
+    result.pendingTempDir!,
+    { source: 'catalog', sourceUrl: entry.base_url },
+    [],
+    'skill_installed',
+  )
 }
 
-async function installFromUrl(rawUrl: string): Promise<InstalledSkill> {
+async function installFromUrl(rawUrl: string): Promise<InstalledSkillRow> {
   const url = rawUrl.trim()
   if (!/^https?:\/\//i.test(url)) throw new Error('URL must start with http:// or https://')
-  const base = normalizeBaseUrl(url)
-  const { manifest, skillMd } = await fetchSkillFiles(base, ['skill.json', 'skill.md'])
-  await writeSkillToDisk(manifest, skillMd, { source: 'url', sourceUrl: base })
-  const loaded = await readInstalledManifest(manifest.id)
-  if (!loaded) throw new Error('Install completed but skill is unreadable on disk')
-  return {
-    manifest: loaded.manifest,
-    dir: loaded.dir,
-    source: 'url',
-    sourceUrl: base,
-    installedAt: new Date().toISOString(),
-    usedBy: [],
+
+  const result = await validateSkillFromUrl(url)
+  if (result.hasFail) {
+    const failing = result.checks.filter((c) => c.status === 'fail').map((c) => c.message ?? c.label)
+    throw new Error(`Skill validation failed: ${failing.join('; ')}`)
   }
+
+  return finalizeFromTemp(
+    result.pendingTempDir!,
+    { source: 'url', sourceUrl: normalizeBaseUrl(url) },
+    [],
+    'skill_installed',
+  )
 }
 
-async function update(skillId: string): Promise<InstalledSkill> {
+async function update(skillId: string): Promise<InstalledSkillRow> {
   const loaded = await readInstalledManifest(skillId)
   if (!loaded) throw new Error(`Skill not installed: ${skillId}`)
   const tr = (loaded.manifest._trayline ?? {}) as Record<string, unknown>
   const source = tr.source as string | undefined
   const sourceUrl = tr.source_url as string | undefined
 
+  let row: InstalledSkillRow
   if (source === 'catalog' || (!source && sourceUrl)) {
-    // Prefer the live catalog entry — the base_url it advertises may have
-    // moved since install.
     const { index } = await fetchCatalog()
     const entry = index.skills.find((s) => s.id === skillId)
-    if (entry) return installFromCatalog(skillId)
-    if (sourceUrl) return installFromUrl(sourceUrl)
-    throw new Error(`Skill "${skillId}" is no longer in the catalog and has no source URL`)
+    if (entry) {
+      row = await installFromCatalog(skillId)
+    } else if (sourceUrl) {
+      row = await installFromUrl(sourceUrl)
+    } else {
+      throw new Error(`Skill "${skillId}" is no longer in the catalog and has no source URL`)
+    }
+  } else if (source === 'url' && sourceUrl) {
+    row = await installFromUrl(sourceUrl)
+  } else {
+    throw new Error(`Skill "${skillId}" has no remote source to update from`)
   }
-  if (source === 'url' && sourceUrl) {
-    return installFromUrl(sourceUrl)
-  }
-  throw new Error(`Skill "${skillId}" has no remote source to update from`)
+
+  skillAudit('skill_updated', { skill_id: skillId, version: row.manifest.version, source: row.source })
+  return row
 }
 
 async function uninstall(skillId: string): Promise<void> {
@@ -383,17 +404,60 @@ async function uninstall(skillId: string): Promise<void> {
     throw new Error(`Cannot uninstall "${skillId}": still used by ${usage.length} worker(s): ${where}`)
   }
   const dir = join(Paths.skills, skillId)
-  if (await pathExists(dir)) {
-    await fs.rm(dir, { recursive: true, force: true })
+  if (await pathExists(dir)) await fs.rm(dir, { recursive: true, force: true })
+  skillAudit('skill_uninstalled', { skill_id: skillId })
+}
+
+// ── Launch revalidation (quarantine check) ────────────────────────────────────
+
+export async function revalidateAll(): Promise<{ skillId: string; quarantined: boolean }[]> {
+  if (!(await pathExists(Paths.skills))) return []
+  const entries = await fs.readdir(Paths.skills, { withFileTypes: true })
+  const results: { skillId: string; quarantined: boolean }[] = []
+
+  for (const e of entries) {
+    if (!e.isDirectory() || e.name === '_system') continue
+    const dir = join(Paths.skills, e.name)
+    const manifestPath = join(dir, 'skill.json')
+    if (!(await pathExists(manifestPath))) continue
+
+    const { hasFail } = await validateOnDisk(dir)
+
+    let manifest: SkillManifest | null = null
+    try {
+      manifest = validateManifestContent(JSON.parse(await fs.readFile(manifestPath, 'utf-8')))
+    } catch { /* manifest itself is unreadable */ }
+
+    const wasQuarantined = manifest?._trayline?.quarantined === true
+    if (hasFail !== wasQuarantined && manifest) {
+      // Update quarantine flag in skill.json
+      const updated: SkillManifest = {
+        ...manifest,
+        _trayline: { ...(manifest._trayline ?? {}), quarantined: hasFail },
+      }
+      await fs.writeFile(manifestPath, JSON.stringify(updated, null, 2), 'utf-8').catch(() => {})
+      if (hasFail) {
+        skillAudit('skill_quarantined', { skill_id: e.name, reason: 'on-disk revalidation failed' })
+      }
+    }
+
+    results.push({ skillId: e.name, quarantined: hasFail })
   }
+
+  return results
 }
 
 export const skillService = {
+  seedCatalog,
   fetchCatalog,
   listInstalled,
   installFromCatalog,
   installFromUrl,
+  validateFromUrl: validateSkillFromUrl,
+  confirmInstall,
+  cancelValidation,
   update,
   uninstall,
   findUsage,
+  revalidateAll,
 }

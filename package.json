@@ -47,6 +47,7 @@
     "electron-store": "^8.2.0",
     "electron-updater": "^6.8.3",
     "fast-glob": "^3.3.2",
+    "keytar": "^7.9.0",
     "lucide-react": "^0.469.0",
     "node-cron": "^4.2.1",
     "node-pty": "^1.1.0",

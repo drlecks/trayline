@@ -8,12 +8,19 @@ import { adapterRegistry } from '../ai-terminals/registry'
 import { stepService } from '../services/step-service'
 import { cardService } from '../services/card-service'
 import { workerRunner } from '../services/worker-runner'
-import { watcherService } from '../services/watcher-service'
-import { schedulerService } from '../services/scheduler-service'
+import { sourceRunner } from '../services/source-runner'
+import { sourceScheduler } from '../services/source-scheduler'
 import { skillService } from '../services/skill-service'
-import { queueService } from '../services/queue-service'
+import { mcpRegistry } from '../services/mcp-registry'
+import { mcpCredentials } from '../services/mcp-credentials'
+import { testConnection } from '../services/mcp-connection-test'
 import { exportService } from '../services/export-service'
-import type { BootstrapInfo, ProviderInstallSuggestion, ProviderReadyResult, ExportOptions, ImportSuccess } from '../../shared/types'
+import { orchestrator } from '../services/orchestrator'
+import { queueService } from '../services/queue-service'
+import { join } from 'path'
+import fs from 'fs/promises'
+import { fsService } from '../services/fs-service'
+import type { BootstrapInfo, ProviderInstallSuggestion, ProviderReadyResult, ExportOptions, ImportSuccess, SourceStepConfig, McpStatus } from '../../shared/types'
 import type { CardStatus } from '../../shared/card'
 
 export type { BootstrapInfo }
@@ -88,39 +95,99 @@ export function registerIpcHandlers(
     projectService.deleteContextFile(project, file),
   )
   ipcMain.handle('project:create', async (_: unknown, description: string, opts?: { regenerateOf?: string }) => {
-    // If regenerating, tear down watchers for the old project's workflows
-    // before scaffolding overwrites the folders.
     if (opts?.regenerateOf) {
-      const oldWorkflows = await projectService.listWorkflows(opts.regenerateOf).catch(() => [])
-      for (const w of oldWorkflows) {
-        await watcherService.unmountWorkflow(opts.regenerateOf, w.name)
-        schedulerService.unmountWorkflow(opts.regenerateOf, w.name)
-        await queueService.unmountWorkflow(opts.regenerateOf, w.name)
-      }
+      await orchestrator.unmountProject(opts.regenerateOf)
     }
     const result = await projectCreateService.createFromDescription(description, opts)
     if (result.ok) {
-      // Mount watchers + scheduler + queue for every workflow in the new project so
-      // `on_ready` cards trigger workers without needing an app restart.
-      const workflows = await projectService.listWorkflows(result.project.name).catch(() => [])
-      for (const w of workflows) {
-        await watcherService.mountWorkflow(result.project.name, w.name)
-        await schedulerService.mountWorkflow(result.project.name, w.name)
-        await queueService.mountWorkflow(result.project.name, w.name)
-      }
+      await orchestrator.mountProject(result.project.name)
     }
     return result
   })
-  ipcMain.handle('project:setStatus', (_: unknown, name: string, status: 'active' | 'inactive') =>
-    projectService.setStatus(name, status),
-  )
-  ipcMain.handle('project:delete', async (_: unknown, name: string) => {
-    const workflows = await projectService.listWorkflows(name).catch(() => [])
-    for (const w of workflows) {
-      await watcherService.unmountWorkflow(name, w.name)
-      schedulerService.unmountWorkflow(name, w.name)
-      await queueService.unmountWorkflow(name, w.name)
+  ipcMain.handle('project:setStatus', async (_: unknown, name: string, status: 'active' | 'inactive') => {
+    const meta = await projectService.setStatus(name, status)
+    if (status === 'active') {
+      await orchestrator.mountProject(name)
+    } else {
+      await orchestrator.unmountProject(name)
     }
+    const mounted = orchestrator.isMounted(name)
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) win.webContents.send('project:onStatusChanged', { name, status, mounted })
+    }
+    return meta
+  })
+  ipcMain.handle('project:getOrchestration', (_: unknown, name: string) => ({
+    name,
+    mounted: orchestrator.isMounted(name),
+  }))
+
+  ipcMain.handle('project:live-stats', async (_: unknown, projectName: string) => {
+    async function countJsonFiles(dir: string): Promise<number> {
+      try {
+        const files = await fs.readdir(dir)
+        return files.filter((f) => f.endsWith('.json') && !f.endsWith('.tmp')).length
+      } catch { return 0 }
+    }
+
+    let pendingCards = 0, readyCards = 0, errorCards = 0
+    const workflows = await projectService.listWorkflows(projectName).catch(() => [])
+    for (const wf of workflows) {
+      const steps = await projectService.listSteps(projectName, wf.name)
+      for (const step of steps) {
+        const stepPath = projectService.paths.stepDir(projectName, wf.name, step.id)
+        if (step.id === '99-errors') {
+          errorCards += await countJsonFiles(join(stepPath, 'cards', 'pending'))
+        } else if (step.kind === 'tray') {
+          pendingCards += await countJsonFiles(join(stepPath, 'cards', 'pending'))
+          readyCards += await countJsonFiles(join(stepPath, 'cards', 'ready'))
+        } else if (step.kind === 'source') {
+          readyCards += await countJsonFiles(join(stepPath, 'cards', 'ready'))
+        }
+      }
+    }
+    return {
+      pendingCards,
+      readyCards,
+      errorCards,
+      runningWorkers: workerRunner.activeRunCount(projectName),
+      runningSources: sourceRunner.activeRunCount(projectName),
+    }
+  })
+
+  ipcMain.handle('project:check-readiness', async (_: unknown, projectName: string) => {
+    const blockers: string[] = []
+
+    let adapterOk = false
+    for (const a of adapterRegistry.list()) {
+      if (a.kind !== 'production') continue
+      if (await a.detectInstalled()) { adapterOk = true; break }
+    }
+    if (!adapterOk) blockers.push('No AI adapter installed')
+
+    const workflows = await projectService.listWorkflows(projectName).catch(() => [])
+    const checkedMcps = new Set<string>()
+    for (const wf of workflows) {
+      const steps = await projectService.listSteps(projectName, wf.name)
+      for (const step of steps) {
+        if (step.kind !== 'worker') continue
+        const mcpIds = (step.raw as { mcps?: string[] }).mcps ?? []
+        for (const mcpId of mcpIds) {
+          if (checkedMcps.has(mcpId)) continue
+          checkedMcps.add(mcpId)
+          const status = await mcpRegistry.readStatus(mcpId).catch(() => null)
+          if (!status?.configured) {
+            blockers.push(`MCP '${mcpId}' not configured`)
+          }
+        }
+      }
+    }
+
+    return { ready: blockers.length === 0, blockers }
+  })
+
+  ipcMain.handle('project:delete', async (_: unknown, name: string) => {
+    await orchestrator.unmountProject(name)
     await projectCreateService.deleteProject(name)
   })
 
@@ -146,28 +213,14 @@ export function registerIpcHandlers(
     const result = await exportService.importProject(filePaths[0])
     // Only mount if immediately committed (clean scan); needs_review defers to importCommit
     if (result.ok === true) {
-      const workflows = await projectService.listWorkflows(result.projectName).catch(() => [])
-      for (const w of workflows) {
-        await watcherService.mountWorkflow(result.projectName, w.name)
-        await schedulerService.mountWorkflow(result.projectName, w.name)
-        await queueService.mountWorkflow(result.projectName, w.name)
-      }
+      await orchestrator.mountProject(result.projectName)
     }
     return result
   })
 
-  const mountProject = async (projectName: string) => {
-    const workflows = await projectService.listWorkflows(projectName).catch(() => [])
-    for (const w of workflows) {
-      await watcherService.mountWorkflow(projectName, w.name)
-      await schedulerService.mountWorkflow(projectName, w.name)
-      await queueService.mountWorkflow(projectName, w.name)
-    }
-  }
-
   ipcMain.handle('project:importCommit', async (_: unknown, token: string): Promise<ImportSuccess> => {
     const result = await exportService.commitImport(token)
-    await mountProject(result.projectName)
+    await orchestrator.mountProject(result.projectName)
     return result
   })
 
@@ -177,7 +230,7 @@ export function registerIpcHandlers(
 
   ipcMain.handle('project:openExample', async () => {
     const result = await exportService.openExampleProject()
-    await mountProject(result.projectName)
+    await orchestrator.mountProject(result.projectName)
     return result
   })
 
@@ -257,14 +310,11 @@ export function registerIpcHandlers(
     }
   })
 
-  // ── Steps (trays/workers) ─────────────────────────────────────────────────
+  // ── Steps (trays/workers/sources) ────────────────────────────────────────
   // Wrap mutating handlers so the workflow's watchers are re-mounted after
   // structural changes (added/removed step, new worker trigger config).
-  const remount = async (i: { project: string; workflow: string }) => {
-    await watcherService.remountWorkflow(i.project, i.workflow)
-    await schedulerService.remountWorkflow(i.project, i.workflow)
-    await queueService.remountWorkflow(i.project, i.workflow)
-  }
+  const remount = (i: { project: string; workflow: string }) =>
+    orchestrator.remountWorkflow(i.project, i.workflow)
 
   ipcMain.handle('step:addTray', async (_: unknown, input: Parameters<typeof stepService.addTray>[0]) => {
     const r = await stepService.addTray(input)
@@ -273,6 +323,11 @@ export function registerIpcHandlers(
   })
   ipcMain.handle('step:addWorker', async (_: unknown, input: Parameters<typeof stepService.addWorker>[0]) => {
     const r = await stepService.addWorker(input)
+    await remount(input)
+    return r
+  })
+  ipcMain.handle('step:addSource', async (_: unknown, input: Parameters<typeof stepService.addSource>[0]) => {
+    const r = await stepService.addSource(input)
     await remount(input)
     return r
   })
@@ -289,6 +344,48 @@ export function registerIpcHandlers(
   )
   ipcMain.handle('step:updateProcess', (_: unknown, input: Parameters<typeof stepService.updateWorkerProcess>[0]) =>
     stepService.updateWorkerProcess(input),
+  )
+
+  // ── Source steps ──────────────────────────────────────────────────────────
+  ipcMain.handle('source:create', async (_: unknown, input: Parameters<typeof stepService.addSource>[0]) => {
+    const r = await stepService.addSource(input)
+    await remount(input)
+    return r
+  })
+  ipcMain.handle('source:run-now', async (_: unknown, project: string, workflow: string, stepId: string) => {
+    const stepDir = projectService.paths.stepDir(project, workflow, stepId)
+    const cfg = await fsService.readJson<SourceStepConfig>(join(stepDir, 'step.json'))
+    void sourceRunner.runSource({ project, workflow, stepId, stepConfig: cfg }).catch((e) => {
+      // eslint-disable-next-line no-console
+      console.error('[source:run-now] failed:', e)
+    })
+    return { ok: true }
+  })
+  ipcMain.handle('source:pause', async (_: unknown, project: string, workflow: string, stepId: string) => {
+    await stepService.updateStep({ project, workflow, stepId, patch: { paused: true } })
+    sourceScheduler.unmountWorkflow(project, workflow)
+    return { ok: true }
+  })
+  ipcMain.handle('source:resume', async (_: unknown, project: string, workflow: string, stepId: string) => {
+    await stepService.updateStep({ project, workflow, stepId, patch: { paused: false } })
+    await sourceScheduler.remountWorkflow(project, workflow)
+    return { ok: true }
+  })
+  ipcMain.handle('source:get-state', async (_: unknown, project: string, workflow: string, stepId: string) => {
+    const state = await sourceRunner.getState(project, workflow, stepId)
+    return {
+      ...state,
+      nextRunAt: sourceScheduler.getNextRunAt(project, workflow, stepId),
+    }
+  })
+  ipcMain.handle('source:read-instructions', (_: unknown, project: string, workflow: string, stepId: string) =>
+    stepService.readSourceInstructions(project, workflow, stepId),
+  )
+  ipcMain.handle('source:update-instructions', (_: unknown, input: Parameters<typeof stepService.updateSourceInstructions>[0]) =>
+    stepService.updateSourceInstructions(input),
+  )
+  ipcMain.handle('source:list-runs', (_: unknown, project: string, workflow: string, stepId: string) =>
+    sourceRunner.listRuns(project, workflow, stepId),
   )
 
   // ── Worker runs ───────────────────────────────────────────────────────────
@@ -314,7 +411,7 @@ export function registerIpcHandlers(
     workerRunner.openExternalTerminal(project, workflow, stepId, runId),
   )
 
-  // ── Skill Finder ──────────────────────────────────────────────────────────
+  // ── Skills ────────────────────────────────────────────────────────────────
   ipcMain.handle('skills:fetchCatalog', (_: unknown, opts?: { forceRefresh?: boolean }) =>
     skillService.fetchCatalog(opts),
   )
@@ -325,10 +422,41 @@ export function registerIpcHandlers(
   ipcMain.handle('skills:installFromUrl', (_: unknown, url: string) =>
     skillService.installFromUrl(url),
   )
+  ipcMain.handle('skills:validateFromUrl', (_: unknown, url: string) =>
+    skillService.validateFromUrl(url),
+  )
+  ipcMain.handle('skills:confirmInstall', (
+    _: unknown,
+    tempDir: string,
+    acceptedWarnings: string[],
+    sourceUrl: string,
+    source: 'url' | 'catalog',
+  ) => skillService.confirmInstall(tempDir, acceptedWarnings, sourceUrl, source))
+  ipcMain.handle('skills:cancelValidation', (_: unknown, tempDir: string) =>
+    skillService.cancelValidation(tempDir),
+  )
   ipcMain.handle('skills:update', (_: unknown, skillId: string) => skillService.update(skillId))
   ipcMain.handle('skills:uninstall', (_: unknown, skillId: string) =>
     skillService.uninstall(skillId),
   )
+  ipcMain.handle('skills:revalidateAll', () => skillService.revalidateAll())
+
+  // ── MCPs ──────────────────────────────────────────────────────────────────────
+  ipcMain.handle('mcp:list-installed', () => mcpRegistry.listInstalled())
+  ipcMain.handle('mcp:list-catalog', () => mcpRegistry.listCatalog())
+  ipcMain.handle('mcp:install', (_: unknown, mcpId: string) => mcpRegistry.install(mcpId))
+  ipcMain.handle('mcp:uninstall', (_: unknown, mcpId: string) => mcpRegistry.uninstall(mcpId))
+  ipcMain.handle('mcp:read-status', (_: unknown, mcpId: string) => mcpRegistry.readStatus(mcpId))
+  ipcMain.handle('mcp:write-status', (_: unknown, mcpId: string, partial: Partial<McpStatus>) =>
+    mcpRegistry.writeStatus(mcpId, partial),
+  )
+  ipcMain.handle('mcp:save-credential', async (_: unknown, mcpId: string, credId: string, value: string) => {
+    await mcpCredentials.storeCredential(mcpId, credId, value)
+  })
+  ipcMain.handle('mcp:delete-credentials', async (_: unknown, mcpId: string) => {
+    await mcpCredentials.deleteAllForMcp(mcpId)
+  })
+  ipcMain.handle('mcp:test-connection', (_: unknown, mcpId: string) => testConnection(mcpId))
 
   // ── Cards ─────────────────────────────────────────────────────────────────
   ipcMain.handle('card:list', (_: unknown, project: string, workflow: string, stepId: string, status: CardStatus) =>

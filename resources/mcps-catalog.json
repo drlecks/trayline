@@ -1,0 +1,173 @@
+{
+  "schema_version": 2,
+  "generated_at": "2026-05-15T00:00:00Z",
+  "mcps": [
+    {
+      "id": "filesystem",
+      "name": "Filesystem",
+      "version": "1.0.0",
+      "description": "Read and write files in configured directories on your computer.",
+      "install_method": "npm",
+      "command_template": "npx -y @modelcontextprotocol/server-filesystem {allowed_dirs}",
+      "instructions": "Enter the full paths of the directories you want the AI agent to access. Separate multiple paths with a space.\n\nExample: /Users/you/Documents /Users/you/Desktop\n\nThe agent will only be able to read and write files inside these folders.",
+      "credentials_schema": [
+        {
+          "id": "allowed_dirs",
+          "label": "Allowed Directories",
+          "description": "Space-separated full paths the agent can access.",
+          "kind": "text_field"
+        }
+      ],
+      "has_test": false,
+      "tags": ["files", "storage"]
+    },
+    {
+      "id": "fetch",
+      "name": "Fetch",
+      "version": "1.0.0",
+      "description": "Make arbitrary HTTP requests and extract content from web pages.",
+      "install_method": "npm",
+      "command_template": "npx -y @modelcontextprotocol/server-fetch",
+      "instructions": "No credentials required. Once installed this MCP is ready to use.",
+      "credentials_schema": [],
+      "has_test": false,
+      "tags": ["web", "http"]
+    },
+    {
+      "id": "memory",
+      "name": "Memory",
+      "version": "1.0.0",
+      "description": "Persistent key-value memory store for the agent across runs.",
+      "install_method": "npm",
+      "command_template": "npx -y @modelcontextprotocol/server-memory",
+      "instructions": "No credentials required. Once installed the agent has a persistent memory store it can read and write across runs.",
+      "credentials_schema": [],
+      "has_test": false,
+      "tags": ["memory", "storage"]
+    },
+    {
+      "id": "github",
+      "name": "GitHub",
+      "version": "1.0.0",
+      "description": "Read and write GitHub issues, pull requests, repositories, and files.",
+      "install_method": "npm",
+      "command_template": "npx -y @modelcontextprotocol/server-github",
+      "instructions": "Create a Personal Access Token at github.com/settings/tokens.\n\nGrant the repo scope (and read:org if you need organisation repositories). The token is stored securely in your OS keychain — never in any file.",
+      "credentials_schema": [
+        {
+          "id": "GITHUB_PERSONAL_ACCESS_TOKEN",
+          "label": "Personal Access Token",
+          "description": "GitHub PAT with repo scope.",
+          "kind": "api_key"
+        }
+      ],
+      "has_test": true,
+      "tags": ["github", "code", "devops"],
+      "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/github"
+    },
+    {
+      "id": "brave-search",
+      "name": "Brave Search",
+      "version": "1.0.0",
+      "description": "Web and local search powered by the Brave Search API.",
+      "install_method": "npm",
+      "command_template": "npx -y @modelcontextprotocol/server-brave-search",
+      "instructions": "Get a free API key at brave.com/search/api/\n\nThe key is stored securely in your OS keychain.",
+      "credentials_schema": [
+        {
+          "id": "BRAVE_API_KEY",
+          "label": "Brave Search API Key",
+          "description": "Free key from brave.com/search/api/",
+          "kind": "api_key"
+        }
+      ],
+      "has_test": true,
+      "tags": ["search", "web"],
+      "homepage": "https://brave.com/search/api/"
+    },
+    {
+      "id": "slack",
+      "name": "Slack",
+      "version": "1.0.0",
+      "description": "Read Slack channels, list messages, and post as a bot.",
+      "install_method": "npm",
+      "command_template": "npx -y @modelcontextprotocol/server-slack",
+      "instructions": "Create a Slack app at api.slack.com/apps and install it to your workspace.\n\n1. Go to api.slack.com/apps → Create New App\n2. Add Bot Token Scopes: channels:read, chat:write, channels:history\n3. Install to Workspace → copy the Bot User OAuth Token (xoxb-...)\n4. Find your Team ID in your Slack workspace URL (e.g. T012AB3CD)\n\nBoth values are stored securely in your OS keychain.",
+      "credentials_schema": [
+        {
+          "id": "SLACK_BOT_TOKEN",
+          "label": "Bot Token",
+          "description": "Starts with xoxb-",
+          "kind": "api_key"
+        },
+        {
+          "id": "SLACK_TEAM_ID",
+          "label": "Team ID",
+          "description": "e.g. T012AB3CD — found in your workspace URL",
+          "kind": "text_field"
+        }
+      ],
+      "has_test": true,
+      "tags": ["slack", "messaging", "team"]
+    },
+    {
+      "id": "notion",
+      "name": "Notion",
+      "version": "1.0.0",
+      "description": "Read and edit Notion pages, databases, and blocks.",
+      "install_method": "npm",
+      "command_template": "npx -y @modelcontextprotocol/server-notion",
+      "instructions": "Create an internal integration at notion.so/my-integrations.\n\n1. Go to notion.so/my-integrations → New integration\n2. Copy the Internal Integration Token\n3. Share the Notion pages or databases you want the agent to access with that integration (Share → Invite → your integration name)\n\nThe token is stored securely in your OS keychain.",
+      "credentials_schema": [
+        {
+          "id": "NOTION_API_TOKEN",
+          "label": "Integration Token",
+          "description": "Internal integration token from notion.so/my-integrations",
+          "kind": "api_key"
+        }
+      ],
+      "has_test": true,
+      "tags": ["notion", "docs", "database"]
+    },
+    {
+      "id": "web-browse",
+      "name": "Web Browse",
+      "version": "1.0.0",
+      "description": "Full-browser automation — navigate pages, click elements, fill forms, and extract content with JavaScript support.",
+      "install_method": "npm",
+      "command_template": "npx -y @playwright/mcp@latest",
+      "instructions": "No credentials required. Once installed the agent can open web pages, interact with elements, and extract content from any site.\n\nThe first run downloads a browser automatically. Requires Node.js and an internet connection for that initial download.",
+      "credentials_schema": [],
+      "has_test": false,
+      "tags": ["web", "browser", "automation"]
+    },
+    {
+      "id": "macos-apps",
+      "name": "macOS Apps",
+      "version": "1.0.0",
+      "description": "Read and manage Calendar events, Mail, Reminders, and Files through your Mac's native apps — works with iCloud, Google, Exchange, or any account signed in.",
+      "install_method": "npm",
+      "command_template": "npx -y @l22-io/orchard-mcp",
+      "instructions": "No credentials needed. The agent works through your Mac's native Calendar, Mail, Reminders, and Files apps using whichever accounts are already signed in via System Settings → Internet Accounts.\n\nRequires macOS 14 (Sonoma) or later.\n\nWhen you first run a worker with this MCP, macOS will ask for permission to access your calendar and mail. Click Allow.",
+      "credentials_schema": [],
+      "has_test": false,
+      "platforms": ["darwin"],
+      "tags": ["calendar", "email", "macos", "apple"],
+      "homepage": "https://github.com/l22-io/orchard-mcp"
+    },
+    {
+      "id": "outlook-calendar",
+      "name": "Outlook Calendar",
+      "version": "1.0.0",
+      "description": "Read and create calendar events through your locally installed Outlook — works with Microsoft 365, Exchange, or any account signed into Outlook.",
+      "install_method": "npm",
+      "command_template": "npx -y outlook-calendar-mcp",
+      "instructions": "No credentials needed. The agent reads and creates calendar events through your locally installed Outlook desktop app using whichever account is already signed in.\n\nRequires Microsoft Outlook to be installed on this computer.\n\nOn first use, Outlook may show a security prompt to allow script access — click Allow.",
+      "credentials_schema": [],
+      "has_test": false,
+      "platforms": ["win32"],
+      "tags": ["calendar", "outlook", "microsoft"],
+      "homepage": "https://github.com/merajmehrabi/Outlook_Calendar_MCP"
+    }
+  ]
+}

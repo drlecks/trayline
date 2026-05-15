@@ -157,7 +157,7 @@ Clicking an example fills the textbox so the user can edit before submitting.
 2. Installed MCPs shown with status badges (✓ Ready / ⚠ Setup needed / ⚠ Auth expired / ✗ Error / ⏸ Disabled)
 3. Available (not installed) MCPs from the curated catalog shown below
 4. **Install** → chains to **Setup Wizard** (linear next/back/cancel modal)
-5. Wizard steps: `info`, `api_key`, `text_field`, `select`, `oauth` (opens browser, captures callback), `test_connection`
+5. Wizard steps are derived from `mcp.json` fields: `instructions` → info screen; each `credentials_schema` entry → one masked input (`api_key`) or plain input (`text_field` / `select`); `has_test: true` → connection test screen at the end. No OAuth flows — all credentials are simple key/value pairs.
 6. Credentials stored in OS keychain via keytar — never in plain files
 7. If a worker has an MCP marked but not Ready, the rail card shows a ⚠ triangle with tooltip before the user can run it
 

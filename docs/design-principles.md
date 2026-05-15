@@ -47,7 +47,7 @@
 - **Left rail** — the workflow as a vertical stack of step cards. Each card shows name, type icon, and a live status indicator (card count / running / idle / error).
 - **Right canvas** — when a step is selected, this panel shows everything about it: its cards, its config, its runs.
 - **Top bar** — project switcher, skills, MCPs, notifications.
-- **Footer** — always present, full-width strip across the bottom. Right side shows live AI usage indicators. See **Footer** section below.
+- **Footer** — always present, full-width strip across the bottom. Right side shows active Provider · Model · Effort and live usage indicators. See **Footer** section below.
 
 ---
 
@@ -84,21 +84,20 @@ This makes type immediately scannable in peripheral vision — users distinguish
 
 A persistent strip at the bottom of every screen. Height ~28 px, same background as the rest of the chrome, separated by a 1 px subtle border on top.
 
-The footer is **always present** — it does not get hidden when a project is open or when the user is deep in a workflow. The left half is reserved for future use (breadcrumbs, status text, version info). The right side currently displays live AI usage indicators:
+The footer is **always present** — it does not get hidden when a project is open or when the user is deep in a workflow. The left half is reserved for future use (breadcrumbs, status text, version info). The right side shows the active adapter selection and usage indicators:
 
-- **5h window** — percentage of the active AI agent's 5-hour rolling rate-limit window consumed.
-- **Weekly window** — percentage of the agent's weekly rate-limit window consumed.
+- **Provider · Model · Effort** — the active AI Terminal Adapter, selected model, and effort tier. Always visible.
+- **5h window** — percentage of the 5-hour rolling rate-limit window consumed. Hidden for adapters that don't implement `getUsage()`.
+- **Weekly window** — percentage of the weekly rate-limit window consumed. Hidden when unavailable.
 
-Both values update every **10 seconds** via a poll to the main process. The values turn amber once they cross 80 %. When usage data is unavailable, each indicator shows `—` and the tooltip explains why.
-
-**Current status:** Claude Code does not yet expose window state to other processes (the `/usage` command only works inside the TUI, and the CLI's JSON envelope only carries per-call token counts). The footer therefore shows `—` until either (a) an upstream CLI flag lands or (b) Trayline accumulates enough per-worker token data to estimate locally — see Phase 4.
+Values refresh whenever a worker run completes (main process broadcasts `adapters:onUsageUpdate`) and via manual refresh in Settings. Usage values turn amber once they cross 80 %.
 
 Layout:
 ```
-                                              5h 12% · Weekly 38%
+                  claude-code · claude-opus-4-5 · auto · 5h 12% · Weekly 38%
 ```
 
-Typography: 11 px monospace (JetBrains Mono), tabular numerals so digits don't reflow on each refresh. Hover tooltip shows the data source (`claude-code` / `placeholder` / `unavailable`) and the snapshot timestamp.
+Typography: 11 px monospace (JetBrains Mono), tabular numerals so digits don't reflow on each refresh. Hover tooltip shows the snapshot timestamp.
 
 ---
 
