@@ -363,6 +363,8 @@ export interface McpManifest {
   credentials_schema: McpCredentialSchemaEntry[]
   /** When true the setup wizard appends a live connection-test step at the end. */
   has_test?: boolean
+  /** If set, MCP is only shown in the catalog on the listed platforms. Absent = all platforms. */
+  platforms?: ('darwin' | 'win32' | 'linux')[]
   tags?: string[]
   homepage?: string
 }
@@ -397,6 +399,7 @@ export interface McpCatalogEntry {
   instructions?: string
   credentials_schema: McpCredentialSchemaEntry[]
   has_test?: boolean
+  platforms?: ('darwin' | 'win32' | 'linux')[]
   tags?: string[]
   homepage?: string
 }
