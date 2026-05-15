@@ -6,6 +6,7 @@ import type {
   ModelInfo,
   EffortInfo,
   AdapterUsageSnapshot,
+  MCPDefinition,
 } from './adapter'
 
 /**
@@ -17,6 +18,7 @@ import type {
 let scriptedOutput: object | string = { summary: 'mock-result', fields: {} }
 let scriptedExitCode = 0
 let clearContextCalls = 0
+let lastSpawnedMcps: MCPDefinition[] = []
 
 export function setMockScript(opts: { output?: object | string; exitCode?: number }) {
   if (opts.output !== undefined) scriptedOutput = opts.output
@@ -25,6 +27,8 @@ export function setMockScript(opts: { output?: object | string; exitCode?: numbe
 
 export function getMockClearContextCalls(): number { return clearContextCalls }
 export function resetMockClearContextCalls(): void { clearContextCalls = 0 }
+export function getLastSpawnedMcps(): MCPDefinition[] { return lastSpawnedMcps }
+export function resetLastSpawnedMcps(): void { lastSpawnedMcps = [] }
 
 async function* lines(strs: string[]): AsyncIterable<string> {
   for (const s of strs) yield s
@@ -92,7 +96,8 @@ export const mockAdapter: AITerminalAdapter = {
     }
   },
   async clearContext() { clearContextCalls++ },
-  async spawn(_opts: SpawnOptions): Promise<AISession> {
+  async spawn(opts: SpawnOptions): Promise<AISession> {
+    lastSpawnedMcps = opts.mcps
     return new MockSession()
   },
 }
