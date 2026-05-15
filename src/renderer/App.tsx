@@ -9,6 +9,7 @@ import ProjectListScreen from './components/projects/ProjectListScreen'
 import ProjectScreen from './components/project/ProjectScreen'
 import SettingsScreen from './components/settings/SettingsScreen'
 import SkillsScreen from './components/skills/SkillsScreen'
+import McpsScreen from './components/mcps/McpsScreen'
 import ProviderNotInstalledModal from './components/layout/ProviderNotInstalledModal'
 import OnboardingTour from './components/onboarding/OnboardingTour'
 import ShortcutsDialog from './components/shortcuts/ShortcutsDialog'
@@ -122,6 +123,11 @@ export default function App() {
         {screen === 'skills' && (
           <div className="flex-1 overflow-y-auto">
             <SkillsScreen />
+          </div>
+        )}
+        {screen === 'mcps' && (
+          <div className="flex-1 overflow-y-auto">
+            <McpsScreen />
           </div>
         )}
       </main>

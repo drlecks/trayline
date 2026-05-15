@@ -12,23 +12,22 @@ Full MCPs screen with installed/available views and detail panels. No execution 
 
 ## Tasks
 
-- [ ] MCPs as a first-level section in the top bar (lucide `plug` icon)
-- [ ] **Installed** section: MCP cards showing name, description, status badge (✓ Ready / ⚠ Setup needed / ⚠ Auth expired / ✗ Error / ⏸ Disabled), connected account info (e.g. "Connected as alice@example.com"), and count of workers using them
-- [ ] **Available (not installed)** section: curated catalog MCPs with **Install** button
-- [ ] **`⋯` menu** per installed MCP card: **Run health check**, **View logs**, **Disable**, **Uninstall** (disabled with tooltip if in use)
-- [ ] **MCP detail panel** (click on card):
-  - Status with timestamp of last health check
-  - Credentials: what's configured (values never shown — only "*configured ✓*" or "*not set*")
-  - **Reset credentials** button (opens the wizard again)
-  - Logs: last N lines of MCP process stdout/stderr
-  - **Used in workers**: clickable list
-  - **Run health check** button
-  - **Uninstall** button
-- [ ] **+ Add MCP** button with three tabs:
-  - **Browse catalog** — filters out already-installed
-  - **Browse registry** — fetches remote index, cached locally
-  - **From URL** — paste URL (install + security confirmation, parallel to skills validation)
-- [ ] State updates reactively: installing, configuring, and health-checking an MCP updates the card without needing a full refresh
+- [x] MCPs as a first-level section in the top bar (lucide `plug` icon)
+- [x] **Installed** section: MCP cards showing name, description, status badge (✓ Ready / ⚠ Setup needed / ✗ Error / ⏸ Disabled), and count of workers using them (worker linkage is N2.5)
+- [x] **Available (not installed)** section: curated catalog MCPs with **Install** button
+- [x] **`⋯` menu** per installed MCP card: **Disable/Enable**, **Uninstall** (health check deferred to N2.5 when MCP processes exist)
+- [x] **MCP detail panel** (click on card):
+  - Status badge + install date
+  - Credentials: what's configured (values never shown — only "Configured ✓" or "Not set" per schema entry)
+  - Command template + install method
+  - Tags + homepage link
+  - Last health check timestamp (if any)
+  - **Disable/Enable** + **Uninstall** action buttons
+- [x] **+ Add MCP** button with three tabs:
+  - **Browse catalog** — filters out already-installed, with search, fully working
+  - **Browse registry** — stub ("coming soon")
+  - **From URL** — stub (security confirmation wizard is N2.4)
+- [x] State updates reactively: install/uninstall/disable refresh the list without a full page reload
 
 ---
 
