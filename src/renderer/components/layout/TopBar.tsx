@@ -1,6 +1,7 @@
 import { Moon, Sun, Monitor, Settings as SettingsIcon, Package, Plug } from 'lucide-react'
 import { useThemeStore } from '../../stores/theme-store'
 import { useProjectStore } from '../../stores/project-store'
+import { useActiveRunsStore } from '../../stores/active-runs-store'
 import WindowControls from './WindowControls'
 import ProjectSwitcher from './ProjectSwitcher'
 import QueueBadge from './QueueBadge'
@@ -18,6 +19,7 @@ const THEME_ICON = {
 export default function TopBar() {
   const { theme, setTheme } = useThemeStore()
   const setScreen = useProjectStore((s) => s.setScreen)
+  const activeRunCount = useActiveRunsStore((s) => s.activeRuns.length)
 
   function cycleTheme() {
     const idx = THEME_CYCLE.indexOf(theme)
@@ -52,6 +54,15 @@ export default function TopBar() {
       {/* Right controls */}
       <div className="flex items-center">
         <div className="flex items-center gap-1 px-2 no-drag">
+          {activeRunCount > 0 && (
+            <button
+              onClick={() => setScreen('projectList')}
+              title={`${activeRunCount} run${activeRunCount > 1 ? 's' : ''} in progress`}
+              className="p-1.5 rounded-md hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors duration-150"
+            >
+              <span className="block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            </button>
+          )}
           <QueueBadge />
           <button
             onClick={cycleTheme}
