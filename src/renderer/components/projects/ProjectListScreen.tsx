@@ -57,7 +57,7 @@ export default function ProjectListScreen() {
       await refreshProjects()
       if (result.ok === 'needs_review') {
         setImportAudit(result)
-      } else if (result.missingSkills.length > 0) {
+      } else if (result.missingSkills.length > 0 || result.missingMcps.length > 0) {
         setImportResult(result)
       }
     } catch (e) {
@@ -71,7 +71,7 @@ export default function ProjectListScreen() {
     const committed = await window.trayline.project.importCommit(token)
     setImportAudit(null)
     await refreshProjects()
-    if (committed.missingSkills.length > 0) {
+    if (committed.missingSkills.length > 0 || committed.missingMcps.length > 0) {
       setImportResult(committed)
     }
   }
@@ -257,6 +257,7 @@ export default function ProjectListScreen() {
         <ImportMissingSkillsDialog
           projectName={importResult.projectName}
           missingSkills={importResult.missingSkills}
+          missingMcps={importResult.missingMcps}
           open={!!importResult}
           onOpenChange={(o) => { if (!o) setImportResult(null) }}
           onDone={handleMissingSkillsDone}

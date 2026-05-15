@@ -457,6 +457,8 @@ export interface ImportSuccess {
   ok: true
   projectName: string
   missingSkills: Array<{ id: string; version: string }>
+  /** MCP ids referenced by the project that are not installed on this machine. */
+  missingMcps: string[]
 }
 
 /**
