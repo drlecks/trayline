@@ -17,12 +17,14 @@ export default function Footer() {
   const [modelLabel, setModelLabel] = useState<string | null>(null)
   const [effortLabel, setEffortLabel] = useState<string | null>(null)
   const [usage, setUsage] = useState<AdapterUsageSnapshot | null>(null)
+  const [appVersion, setAppVersion] = useState<string | null>(null)
 
-  // Load adapter list once.
+  // Load adapter list and app version once.
   useEffect(() => {
     void window.trayline.adapters.list().then((list) =>
       setAdapters(list.map((a) => ({ id: a.id, displayName: a.displayName }))),
     )
+    void window.trayline.app.bootstrapInfo().then((info) => setAppVersion(info.appVersion))
   }, [])
 
   // Load settings + listen for changes that happen elsewhere (Settings screen
@@ -91,28 +93,31 @@ export default function Footer() {
 
   return (
     <footer
-      role="button"
-      tabIndex={0}
-      onClick={() => setScreen('settings')}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setScreen('settings') }}
-      title="Open AI Terminal settings"
       className="
-        flex items-center justify-end shrink-0
-        h-7 px-4 gap-3
+        flex items-center justify-between shrink-0
+        h-7 px-4
         border-t border-black/[0.06] dark:border-white/[0.06]
         bg-[var(--bg)]
         text-[11px] text-neutral-500 dark:text-neutral-400
         font-mono tabular-nums
-        select-none cursor-pointer
-        hover:text-neutral-700 dark:hover:text-neutral-200
+        select-none
       "
     >
-      {segments.map((seg, i) => (
-        <span key={i} className="flex items-center gap-3">
-          {i > 0 && <span className="text-neutral-300 dark:text-neutral-700">·</span>}
-          {seg}
-        </span>
-      ))}
+      {appVersion && (
+        <span className="text-neutral-400 dark:text-neutral-500">v{appVersion}</span>
+      )}
+      <button
+        onClick={() => setScreen('settings')}
+        title="Open AI Terminal settings"
+        className="flex items-center gap-3 cursor-pointer hover:text-neutral-700 dark:hover:text-neutral-200 ml-auto"
+      >
+        {segments.map((seg, i) => (
+          <span key={i} className="flex items-center gap-3">
+            {i > 0 && <span className="text-neutral-300 dark:text-neutral-700">·</span>}
+            {seg}
+          </span>
+        ))}
+      </button>
     </footer>
   )
 }

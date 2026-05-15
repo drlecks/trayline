@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Check, ExternalLink, RefreshCw, X } from 'lucide-react'
+import { ArrowLeft, Check, ExternalLink, Github, RefreshCw, X } from 'lucide-react'
 import { useThemeStore } from '@/stores/theme-store'
 import { useProjectStore } from '@/stores/project-store'
 import type { AdapterUsageSnapshot, Settings } from '../../../shared/types'
@@ -135,7 +135,7 @@ export default function SettingsScreen() {
       </button>
 
       <h1 className="text-xl font-semibold tracking-tight mb-1">Settings</h1>
-      <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-8">General preferences for the app.</p>
+      <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-8"></p>
 
       {/* Theme */}
       <Section title="Appearance" subtitle="How Trayline looks on your screen.">
@@ -311,7 +311,7 @@ export default function SettingsScreen() {
         )}
       </Section>
 
-      <Section title="Help" subtitle="Reminders and a way back to the onboarding tour.">
+      <Section title="Help" subtitle="">
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
@@ -335,6 +335,23 @@ export default function SettingsScreen() {
           >
             Keyboard shortcuts
           </button>
+        </div>
+      </Section>
+
+      <Section title="About" subtitle="">
+        <div className="flex flex-col gap-2">
+          <p className="text-xs text-neutral-700 dark:text-neutral-300">
+            Built by <span className="font-medium">Alex Cabrera</span>
+          </p>
+          <a
+            href="https://github.com/drlecks/trayline"
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1.5 text-xs text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200 w-fit"
+          >
+            <Github size={13} strokeWidth={1.75} />
+            github.com/drlecks/trayline
+          </a>
         </div>
       </Section>
     </div>
