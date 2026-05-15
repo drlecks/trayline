@@ -377,19 +377,15 @@ function normalizeBase(url: string): string {
 
 // ── GitHub API helpers (for catalog installs with subdirectory trees) ─────────
 
-interface GitHubParsed {
-  owner: string; repo: string; ref: string; path: string; contentsApiUrl: string
-}
-
-function parseGitHubRawUrl(url: string): GitHubParsed | null {
-  const m = url.match(/^https:\/\/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/([^/]+)\/(.+?)\/?$/)
-  if (!m) return null
-  const [, owner, repo, ref, path] = m
-  const cleanPath = path!.replace(/\/$/, '')
-  return {
-    owner: owner!, repo: repo!, ref: ref!, path: cleanPath,
-    contentsApiUrl: `https://api.github.com/repos/${owner}/${repo}/contents/${cleanPath}?ref=${ref}`,
-  }
+/** Finds the primary instruction file in a bundle by looking for a root-level .md file. */
+function detectInstructionFile(files: BundleFile[]): string {
+  const rootMd = files.filter((f) => !f.name.includes('/') && f.name.toLowerCase().endsWith('.md'))
+  return (
+    rootMd.find((f) => f.name === 'SKILL.md')?.name ??
+    rootMd.find((f) => f.name.toLowerCase() === 'skill.md')?.name ??
+    rootMd[0]?.name ??
+    'skill.md'
+  )
 }
 
 interface GitHubFileEntry {
@@ -487,17 +483,15 @@ export async function validateFromUrl(url: string): Promise<SkillValidationResul
 
 /**
  * Validates a catalog skill by listing its full GitHub directory tree via the
- * GitHub Contents API, downloading every file recursively, and synthesizing a
- * skill.json from the catalog manifest (these repos don't ship their own).
- * Stores `_trayline.instruction_file` in the synthesized manifest so that
- * `validateOnDisk` can re-derive the instruction file name on quarantine checks.
+ * GitHub Contents API URL stored in the catalog entry, downloading every file
+ * recursively, and synthesizing a skill.json from the catalog manifest (those
+ * repos don't ship their own). The instruction file is auto-detected from the
+ * listing as the root-level .md file — no `skill_md` declaration needed.
  */
 export async function validateFromGitHubCatalog(
-  baseUrl: string,
+  apiUrl: string,
   manifest: SkillManifest,
-  instructionFile = 'SKILL.md',
 ): Promise<SkillValidationResult> {
-  const base = normalizeBase(baseUrl)
   const tempDir = join(os.tmpdir(), `trayline-skill-${crypto.randomUUID()}`)
   await fs.mkdir(tempDir, { recursive: true })
 
@@ -505,11 +499,8 @@ export async function validateFromGitHubCatalog(
   const bundleFiles: BundleFile[] = []
 
   try {
-    const parsed = parseGitHubRawUrl(base)
-    if (!parsed) throw new Error(`URL is not a raw.githubusercontent.com URL: ${base}`)
-
     // List all files in the remote skill directory tree
-    const remoteFiles = await listGitHubDirRecursive(parsed.contentsApiUrl)
+    const remoteFiles = await listGitHubDirRecursive(apiUrl)
     if (remoteFiles.length === 0) throw new Error('GitHub directory listing returned no files')
 
     for (const { relativePath, downloadUrl } of remoteFiles) {
@@ -524,12 +515,8 @@ export async function validateFromGitHubCatalog(
       fetchedFiles.push({ name: relativePath, sizeBytes: buf.length })
     }
 
-    // Synthesize skill.json from catalog-authoritative manifest.
-    // Preserve _trayline.instruction_file so validateOnDisk can recover it.
-    const synthManifest: SkillManifest = {
-      ...manifest,
-      _trayline: { ...(manifest._trayline ?? {}), instruction_file: instructionFile },
-    }
+    // Synthesize skill.json from catalog-authoritative manifest
+    const synthManifest: SkillManifest = { ...manifest }
     const manifestBuf = Buffer.from(JSON.stringify(synthManifest, null, 2), 'utf-8')
     const existingIdx = bundleFiles.findIndex((f) => f.name === 'skill.json')
     if (existingIdx >= 0) {
@@ -547,12 +534,14 @@ export async function validateFromGitHubCatalog(
       await fs.writeFile(dest, bf.content)
     }
 
+    // Detect instruction file from the listing (root-level .md file)
+    const instructionFile = detectInstructionFile(bundleFiles)
     const { checks, manifest: parsedManifest } = runChecks(bundleFiles, { instructionFile })
     const hasFail = checks.some((c) => c.status === 'fail')
 
     if (hasFail) await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {})
 
-    return { checks, manifest: parsedManifest, fileList: fetchedFiles, hasFail, pendingTempDir: hasFail ? undefined : tempDir, sourceUrl: base }
+    return { checks, manifest: parsedManifest, fileList: fetchedFiles, hasFail, pendingTempDir: hasFail ? undefined : tempDir, sourceUrl: apiUrl }
   } catch (err) {
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {})
     return {
@@ -560,7 +549,7 @@ export async function validateFromGitHubCatalog(
       manifest: null,
       fileList: fetchedFiles,
       hasFail: true,
-      sourceUrl: base,
+      sourceUrl: apiUrl,
     }
   }
 }
@@ -577,18 +566,8 @@ export async function validateOnDisk(dir: string): Promise<{
     return { checks: [{ id: 'read_dir', label: 'Read skill directory', status: 'fail', message: 'Could not read skill directory' }], manifest: null, hasFail: true }
   }
 
-  // Recover the instruction file name stored by validateFromGitHubCatalog
-  let instructionFile: string | undefined
-  const mf = bundleFiles.find((f) => f.name === 'skill.json')
-  if (mf) {
-    try {
-      const raw = JSON.parse(mf.content.toString('utf-8')) as Record<string, unknown>
-      const tl = raw._trayline as Record<string, unknown> | undefined
-      if (typeof tl?.instruction_file === 'string') instructionFile = tl.instruction_file
-    } catch { /* ignore */ }
-  }
-
-  const { checks, manifest } = runChecks(bundleFiles, instructionFile ? { instructionFile } : undefined)
+  const instructionFile = detectInstructionFile(bundleFiles)
+  const { checks, manifest } = runChecks(bundleFiles, { instructionFile })
   return { checks, manifest, hasFail: checks.some((c) => c.status === 'fail') }
 }
 

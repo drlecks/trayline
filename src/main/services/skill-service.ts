@@ -26,11 +26,8 @@ export interface CatalogEntry {
   description: string
   author?: string
   tags?: string[]
-  /** Directory URL where the skill's files live (must end with `/`). */
+  /** GitHub Contents API URL for listing this skill's files (includes `?ref=`). */
   base_url: string
-  /** Instruction file name inside base_url. Defaults to "skill.md". */
-  skill_md?: string
-  /** Extra files to download from base_url. */
   files?: string[]
 }
 
@@ -295,9 +292,6 @@ async function installFromCatalog(skillId: string): Promise<InstalledSkillRow> {
   const entry = index.skills.find((s) => s.id === skillId)
   if (!entry) throw new Error(`Skill not found in catalog: ${skillId}`)
 
-  const base = normalizeBaseUrl(entry.base_url)
-  const instructionFile = entry.skill_md ?? 'SKILL.md'
-
   // Build catalog-authoritative manifest (these repos don't ship their own skill.json)
   const catalogManifest: SkillManifest = {
     id: entry.id,
@@ -307,8 +301,8 @@ async function installFromCatalog(skillId: string): Promise<InstalledSkillRow> {
     tags: entry.tags,
   }
 
-  // Use GitHub API to list + download the full directory tree, then run security checks
-  const result = await validateFromGitHubCatalog(base, catalogManifest, instructionFile)
+  // Use GitHub Contents API URL to list + download the full directory tree, then run security checks
+  const result = await validateFromGitHubCatalog(entry.base_url, catalogManifest)
   if (result.hasFail) {
     const failing = result.checks.filter((c) => c.status === 'fail').map((c) => c.message ?? c.label)
     throw new Error(`Catalog skill "${skillId}" failed validation: ${failing.join('; ')}`)
@@ -316,7 +310,7 @@ async function installFromCatalog(skillId: string): Promise<InstalledSkillRow> {
 
   return finalizeFromTemp(
     result.pendingTempDir!,
-    { source: 'catalog', sourceUrl: base },
+    { source: 'catalog', sourceUrl: entry.base_url },
     [],
     'skill_installed',
   )

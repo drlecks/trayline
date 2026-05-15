@@ -120,22 +120,21 @@ describe('skillService', () => {
   })
 
   it('installFromCatalog fetches files via GitHub API, writes manifest + md, and stamps _trayline metadata', async () => {
-    const baseUrl = 'https://raw.githubusercontent.com/test-owner/test-skills/main/skills/demo-skill/'
     const apiUrl = 'https://api.github.com/repos/test-owner/test-skills/contents/skills/demo-skill?ref=main'
     const rawMdUrl = 'https://raw.githubusercontent.com/test-owner/test-skills/main/skills/demo-skill/SKILL.md'
 
-    // Catalog index with a real GitHub raw URL so validateFromGitHubCatalog can parse it
+    // Catalog index using GitHub Contents API URL directly as base_url
     const githubIndex: CatalogIndex = {
       schema_version: 1,
       skills: [
-        { ...SAMPLE_INDEX.skills[0]!, base_url: baseUrl, skill_md: 'SKILL.md' },
+        { ...SAMPLE_INDEX.skills[0]!, base_url: apiUrl },
         SAMPLE_INDEX.skills[1]!,
       ],
     }
 
     vi.stubGlobal('fetch', makeFakeFetch({
       [REAL_CATALOG_URL]: { body: JSON.stringify(githubIndex) },
-      // GitHub Contents API returns a flat file listing for this skill directory
+      // GitHub Contents API returns a flat file listing
       [apiUrl]: {
         body: JSON.stringify([
           { name: 'SKILL.md', type: 'file', download_url: rawMdUrl, url: `${apiUrl}/SKILL.md` },
@@ -151,9 +150,9 @@ describe('skillService', () => {
     const dir = join(Paths.skills, 'demo-skill')
     const manifest = JSON.parse(await fs.readFile(join(dir, 'skill.json'), 'utf-8'))
     expect(manifest._trayline.source).toBe('catalog')
-    expect(manifest._trayline.source_url).toBe(baseUrl)
+    expect(manifest._trayline.source_url).toBe(apiUrl)
     expect(typeof manifest._trayline.installed_at).toBe('string')
-    // File is stored with its original GitHub name (SKILL.md)
+    // File stored under its original GitHub name (SKILL.md), auto-detected as instruction file
     expect(await fs.readFile(join(dir, 'SKILL.md'), 'utf-8')).toBe(DEMO_MD)
   })
 
