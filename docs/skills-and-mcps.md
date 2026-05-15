@@ -109,8 +109,13 @@ Initial catalog:
 - **Brave Search** — web search using Brave Search API key
 - **Slack** — read channels, post messages via Bot Token
 - **Notion** — read and edit pages and databases via Integration Token
+- **macOS Calendar** *(macOS only)* — read and create events through the native Calendar app; no credentials — uses whichever accounts are signed in
+- **macOS Mail** *(macOS only)* — read and send mail through the native Mail app; no credentials — uses whichever accounts are signed in
+- **Outlook** *(Windows only)* — read and send email and calendar events through locally installed Outlook; no credentials — uses whichever account is signed in
 
 Trayline does not support OAuth-based MCPs. All credentials are simple key/value pairs (API keys, tokens, paths) stored in the OS keychain via keytar. MCPs that require a developer account or app review process (Google, Meta/Instagram, etc.) are intentionally excluded.
+
+Platform-specific MCPs (those with a `platforms` field in their catalog entry) are filtered server-side and only appear in the catalog on the matching OS.
 
 Showing an MCP in the catalog doesn't mean it's installed — it means Trayline knows how to install and configure it.
 

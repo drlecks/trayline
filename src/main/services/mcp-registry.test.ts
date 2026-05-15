@@ -159,6 +159,41 @@ describe('listCatalog', () => {
     expect(result).toHaveLength(2)
     expect(result[0].id).toBe('no-creds-mcp')
   })
+
+  it('includes entries with no platforms field', async () => {
+    const catalog: McpCatalogIndex = {
+      schema_version: 2,
+      generated_at: '2026-01-01T00:00:00Z',
+      mcps: [{ ...SAMPLE_CATALOG.mcps[0] }],
+    }
+    await writeJson(join(Paths.appData, 'mcps-catalog.json'), catalog)
+    const result = await mcpRegistry.listCatalog()
+    expect(result).toHaveLength(1)
+  })
+
+  it('excludes entries whose platforms do not include the current platform', async () => {
+    const otherPlatform = process.platform === 'darwin' ? 'win32' : 'darwin'
+    const catalog: McpCatalogIndex = {
+      schema_version: 2,
+      generated_at: '2026-01-01T00:00:00Z',
+      mcps: [{ ...SAMPLE_CATALOG.mcps[0], platforms: [otherPlatform] }],
+    }
+    await writeJson(join(Paths.appData, 'mcps-catalog.json'), catalog)
+    const result = await mcpRegistry.listCatalog()
+    expect(result).toHaveLength(0)
+  })
+
+  it('includes entries whose platforms include the current platform', async () => {
+    const currentPlatform = process.platform as 'darwin' | 'win32' | 'linux'
+    const catalog: McpCatalogIndex = {
+      schema_version: 2,
+      generated_at: '2026-01-01T00:00:00Z',
+      mcps: [{ ...SAMPLE_CATALOG.mcps[0], platforms: [currentPlatform] }],
+    }
+    await writeJson(join(Paths.appData, 'mcps-catalog.json'), catalog)
+    const result = await mcpRegistry.listCatalog()
+    expect(result).toHaveLength(1)
+  })
 })
 
 // ── listInstalled ─────────────────────────────────────────────────────────────

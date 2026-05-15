@@ -33,6 +33,7 @@ const McpManifestSchema = z.object({
   instructions: z.string().optional(),
   credentials_schema: z.array(McpCredentialSchemaEntrySchema),
   has_test: z.boolean().optional(),
+  platforms: z.array(z.enum(['darwin', 'win32', 'linux'])).optional(),
   tags: z.array(z.string()).optional(),
   homepage: z.string().optional(),
 })
@@ -111,7 +112,9 @@ async function listCatalog(): Promise<McpCatalogEntry[]> {
   if (!(await pathExists(CATALOG_PATH))) return []
   try {
     const index = await fsService.readJson<McpCatalogIndex>(CATALOG_PATH)
-    return index.mcps ?? []
+    const all = index.mcps ?? []
+    const plat = process.platform as 'darwin' | 'win32' | 'linux'
+    return all.filter((e) => !e.platforms || e.platforms.includes(plat))
   } catch {
     return []
   }
@@ -203,6 +206,7 @@ async function install(mcpId: string): Promise<InstalledMcpRow> {
     instructions: entry.instructions,
     credentials_schema: entry.credentials_schema,
     has_test: entry.has_test,
+    platforms: entry.platforms,
     tags: entry.tags,
     homepage: entry.homepage,
   }

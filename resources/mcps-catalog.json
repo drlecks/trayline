@@ -128,6 +128,45 @@
       ],
       "has_test": true,
       "tags": ["notion", "docs", "database"]
+    },
+    {
+      "id": "macos-calendar",
+      "name": "macOS Calendar",
+      "version": "1.0.0",
+      "description": "Read and create events in your Mac's Calendar app — works with iCloud, Google Calendar, Exchange, or any account synced locally.",
+      "install_method": "npm",
+      "command_template": "npx -y mcp-apple-calendar",
+      "instructions": "No credentials needed. The agent reads from your Mac's Calendar app directly, using whichever accounts are already signed in.\n\nWhen you first run a worker with this MCP, macOS will ask for permission to access your calendars. Click Allow.",
+      "credentials_schema": [],
+      "has_test": false,
+      "platforms": ["darwin"],
+      "tags": ["calendar", "macos", "apple"]
+    },
+    {
+      "id": "macos-mail",
+      "name": "macOS Mail",
+      "version": "1.0.0",
+      "description": "Read and send emails through your Mac's Mail app — works with iCloud, Gmail, Exchange, or any account synced locally.",
+      "install_method": "npm",
+      "command_template": "npx -y mcp-apple-mail",
+      "instructions": "No credentials needed. The agent reads and sends mail through your Mac's Mail app directly, using whichever accounts are already signed in.\n\nWhen you first run a worker with this MCP, macOS will ask for permission to access Mail. Click Allow.",
+      "credentials_schema": [],
+      "has_test": false,
+      "platforms": ["darwin"],
+      "tags": ["email", "macos", "apple"]
+    },
+    {
+      "id": "outlook",
+      "name": "Outlook",
+      "version": "1.0.0",
+      "description": "Read and send emails and calendar events through your locally installed Outlook — works with Microsoft 365, Exchange, or any account signed into Outlook.",
+      "install_method": "npm",
+      "command_template": "npx -y mcp-outlook",
+      "instructions": "No credentials needed. The agent works through your locally installed Outlook app, using whichever account is already signed in.\n\nRequires Microsoft Outlook to be installed on this computer.",
+      "credentials_schema": [],
+      "has_test": false,
+      "platforms": ["win32"],
+      "tags": ["email", "calendar", "outlook", "microsoft"]
     }
   ]
 }
