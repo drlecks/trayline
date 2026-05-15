@@ -17,7 +17,7 @@ const TOUR_STEPS: TourStep[] = [
   {
     target: '[data-tour="topbar"]',
     title: 'Top bar',
-    body: 'Switch projects, change theme, install skills, and open settings from here. Notifications about queued runs surface here too.',
+    body: 'Switch projects, install skills and MCPs, and open settings from here. MCPs connect workers to real tools like GitHub, Slack, and the web.',
     placement: 'bottom',
   },
   {
@@ -34,7 +34,7 @@ const TOUR_STEPS: TourStep[] = [
   },
   {
     title: "You're ready",
-    body: 'Anything else you need is in Settings (⌘/Ctrl+,). You can re-run this tour anytime from the Settings screen.',
+    body: 'Workers can use Skills (reusable instructions) and MCPs (real-world connections to apps like GitHub and Slack). Browse both in Settings. Re-run this tour from Settings → Help anytime.',
   },
 ]
 
