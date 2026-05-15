@@ -6,11 +6,11 @@ import { useProjectStore } from '@/stores/project-store'
 import type { ProjectCreateOutcome, ProjectCreateSuccess } from '../../../shared/types'
 
 const EXAMPLES = [
-  'Read incoming sales emails and qualify leads.',
+  'Monitor a GitHub repo for new issues and triage them.',
+  'Browse competitor websites weekly and summarise price changes.',
   'Turn long YouTube videos into short-form scripts.',
   'Process PDF invoices and post them to my accounting tool.',
   'Triage support tickets and draft responses.',
-  'Read meeting transcripts and extract action items.',
   'Poll Instagram comments every hour and draft a reply for each new one.',
   'Fetch the top Hacker News stories every 30 minutes and send a daily digest.',
 ]
@@ -74,12 +74,7 @@ export default function WorkflowAuthorScreen() {
     }
     await refreshProjects()
     setUnconfiguredMcps(outcome.unconfiguredMcps)
-
-    if (outcome.hasSourceStep) {
-      setPostGenOutcome(outcome)
-    } else {
-      setActive(outcome.project)
-    }
+    setPostGenOutcome(outcome)
   }
 
   function openProject() {
@@ -211,23 +206,32 @@ function LoadingPanel() {
 
 function PostGenBanner({ outcome, onOpen }: { outcome: ProjectCreateSuccess; onOpen: () => void }) {
   const hasMcps = outcome.unconfiguredMcps.length > 0
-  const mcpName = hasMcps ? outcome.unconfiguredMcps[0] : null
+  const hasSource = outcome.hasSourceStep
 
-  const title = "Here's a starting point."
-  const body = hasMcps && mcpName
-    ? `Set up ${mcpName} and write your fetch instructions to get started.`
-    : "Your source step is ready — click it to write your fetch instructions and set your schedule."
+  let body: string
+  if (hasSource && hasMcps) {
+    body = `Set up ${outcome.unconfiguredMcps.join(', ')} and configure your source step to get started.`
+  } else if (hasSource) {
+    body = "Click your source step to write your fetch instructions and set the schedule."
+  } else if (hasMcps) {
+    body = `To run it, set up ${outcome.unconfiguredMcps.join(', ')} — click any worker with a ⚠ to start.`
+  } else {
+    body = "Edit anything you want, then click Run to process your first card."
+  }
 
   return (
     <div className="flex flex-col items-center justify-center w-full max-w-lg mx-auto px-8 text-center">
-      <div className="w-14 h-14 rounded-2xl bg-emerald-500 flex items-center justify-center mb-6">
-        <Rss size={28} strokeWidth={1.75} className="text-white" />
+      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-6 ${hasSource ? 'bg-emerald-500' : 'bg-neutral-800 dark:bg-neutral-200'}`}>
+        {hasSource
+          ? <Rss size={28} strokeWidth={1.75} className="text-white" />
+          : <Sparkles size={28} strokeWidth={1.75} className="text-white dark:text-neutral-900" />
+        }
       </div>
-      <h2 className="text-xl font-semibold tracking-tight mb-2">{title}</h2>
+      <h2 className="text-xl font-semibold tracking-tight mb-2">{"Here's a starting point."}</h2>
       <p className="text-sm text-neutral-500 dark:text-neutral-400 mb-8 leading-relaxed">{body}</p>
       {hasMcps && (
         <div className="w-full rounded-lg border border-amber-200 dark:border-amber-800/40 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 mb-6 text-xs text-amber-800 dark:text-amber-300 text-left">
-          <strong>MCPs needed:</strong> {outcome.unconfiguredMcps.join(', ')} — set them up in Settings → MCPs before running.
+          <strong>MCPs needed:</strong> {outcome.unconfiguredMcps.join(', ')} — set them up in the MCPs screen before running.
         </div>
       )}
       <Button size="lg" onClick={onOpen}>
