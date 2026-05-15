@@ -73,6 +73,7 @@ export interface AuditRow {
 export interface BootstrapInfo {
   dataDir: string
   systemSkillsRestored: string[]
+  appVersion: string
 }
 
 // ── Project metadata ──────────────────────────────────────────────────────────

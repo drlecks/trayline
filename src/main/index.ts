@@ -65,6 +65,7 @@ process.on('unhandledRejection', (reason) => {
 interface BootstrapInfo {
   dataDir: string
   systemSkillsRestored: string[]
+  appVersion: string
 }
 
 let bootstrapInfo: BootstrapInfo
@@ -178,7 +179,7 @@ app.whenReady().then(async () => {
     setRunEventBroadcast(() => BrowserWindow.getAllWindows())
     setSourceEventBroadcast(() => BrowserWindow.getAllWindows())
 
-    bootstrapInfo = { dataDir: Paths.root, systemSkillsRestored: restored }
+    bootstrapInfo = { dataDir: Paths.root, systemSkillsRestored: restored, appVersion: app.getVersion() }
     registerIpcHandlers(ipcMain, () => bootstrapInfo)
     stage('registerIpcHandlers done')
 
