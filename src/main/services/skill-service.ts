@@ -129,11 +129,22 @@ function skillAudit(event: 'skill_installed' | 'skill_updated' | 'skill_uninstal
 
 // ── Catalog seeding + fetch ───────────────────────────────────────────────────
 
-/** Copy bundled skills-catalog.json to app-data on first launch. No-op if already present. */
+/**
+ * Seed skills-index-cache.json from the bundled catalog on launch.
+ * Overwrites an empty cache (e.g. stale remote-fetched empty array) so the
+ * app is never left with a blank catalog when bundled skills are available.
+ */
 async function seedCatalog(): Promise<void> {
-  if (await pathExists(CACHE_PATH)) return
   const src = getBundledCatalogPath()
   if (!(await pathExists(src))) return
+
+  if (await pathExists(CACHE_PATH)) {
+    try {
+      const existing = await fsService.readJson<CatalogIndex>(CACHE_PATH)
+      if ((existing.skills?.length ?? 0) > 0) return // Cache already has real data
+    } catch { /* corrupt — fall through and reseed */ }
+  }
+
   const raw = await fs.readFile(src, 'utf-8')
   await fs.mkdir(Paths.appData, { recursive: true })
   await fs.writeFile(CACHE_PATH, raw, 'utf-8')
@@ -144,9 +155,11 @@ async function fetchCatalog(opts?: { forceRefresh?: boolean }): Promise<CatalogF
   try {
     const res = await fetchWithTimeout(CATALOG_URL, { headers: { Accept: 'application/json' } })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    const text = await res.text()
-    const parsed = JSON.parse(text) as CatalogIndex
+    const parsed = JSON.parse(await res.text()) as CatalogIndex
     if (!parsed || !Array.isArray(parsed.skills)) throw new Error('catalog: missing `skills` array')
+    // Don't cache or return a remote catalog with no skills — treat it the same
+    // as a failed fetch so the bundled / cached catalog continues to show.
+    if (parsed.skills.length === 0) throw new Error('remote catalog has no skills')
     await fs.mkdir(Paths.appData, { recursive: true })
     await fsService.writeJsonAtomic(CACHE_PATH, parsed)
     return { index: parsed, source: 'remote' }
@@ -158,7 +171,7 @@ async function fetchCatalog(opts?: { forceRefresh?: boolean }): Promise<CatalogF
 
   if (await pathExists(CACHE_PATH)) {
     const cached = await fsService.readJson<CatalogIndex>(CACHE_PATH)
-    return { index: cached, source: 'cache', remoteError }
+    if ((cached.skills?.length ?? 0) > 0) return { index: cached, source: 'cache', remoteError }
   }
   // Last resort: read from the bundled file shipped with the app
   const bundled = getBundledCatalogPath()
