@@ -42,7 +42,7 @@ Each task corresponds to a phase file in this folder. Check off tasks as they ar
 ## N2 Phases (Skills & MCPs)
 
 - [x] [Phase N2.1 — Skills Enhanced](./phase-n2-1-skills-enhanced.md)
-- [ ] [Phase N2.2 — MCP Foundations](./phase-n2-2-mcp-foundations.md)
+- [x] [Phase N2.2 — MCP Foundations](./phase-n2-2-mcp-foundations.md)
 - [ ] [Phase N2.3 — MCP UI](./phase-n2-3-mcp-ui.md)
 - [ ] [Phase N2.4 — Setup Wizard](./phase-n2-4-setup-wizard.md)
 - [ ] [Phase N2.5 — Worker Engine Integration (MCPs)](./phase-n2-5-worker-engine.md)
