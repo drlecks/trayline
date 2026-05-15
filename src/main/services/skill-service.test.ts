@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vite
 import fs from 'node:fs/promises'
 import { join } from 'node:path'
 import { Paths } from './fs-service'
+import { auditDb } from './audit-db'
 import { skillService, type CatalogIndex } from './skill-service'
 
 async function writeJson(path: string, data: unknown) {
@@ -65,6 +66,7 @@ describe('skillService', () => {
   beforeAll(async () => {
     await fs.mkdir(Paths.skills, { recursive: true })
     await fs.mkdir(Paths.appData, { recursive: true })
+    auditDb.init()
   })
 
   beforeEach(async () => {

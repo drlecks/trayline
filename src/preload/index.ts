@@ -15,6 +15,7 @@ import type {
   ProviderReadyResult,
   SkillCatalogFetchResult,
   InstalledSkillRow,
+  SkillValidationResult,
   ExportOptions,
   ImportResult,
   ImportSuccess,
@@ -184,10 +185,18 @@ const api = {
       ipcRenderer.invoke(IPC.skills.install, skillId),
     installFromUrl: (url: string): Promise<InstalledSkillRow> =>
       ipcRenderer.invoke(IPC.skills.installFromUrl, url),
+    validateFromUrl: (url: string): Promise<SkillValidationResult> =>
+      ipcRenderer.invoke(IPC.skills.validateFromUrl, url),
+    confirmInstall: (tempDir: string, acceptedWarnings: string[], sourceUrl: string, source: 'url' | 'catalog'): Promise<InstalledSkillRow> =>
+      ipcRenderer.invoke(IPC.skills.confirmInstall, tempDir, acceptedWarnings, sourceUrl, source),
+    cancelValidation: (tempDir: string): Promise<void> =>
+      ipcRenderer.invoke(IPC.skills.cancelValidation, tempDir),
     update: (skillId: string): Promise<InstalledSkillRow> =>
       ipcRenderer.invoke(IPC.skills.update, skillId),
     uninstall: (skillId: string): Promise<void> =>
       ipcRenderer.invoke(IPC.skills.uninstall, skillId),
+    revalidateAll: (): Promise<{ skillId: string; quarantined: boolean }[]> =>
+      ipcRenderer.invoke(IPC.skills.revalidateAll),
   },
   card: {
     list: (project: string, workflow: string, stepId: string, status: CardStatus): Promise<Card[]> =>
