@@ -16,6 +16,11 @@ vi.mock('keytar', () => {
       setPassword: vi.fn(async (s: string, a: string, v: string) => { store.set(key(s, a), v) }),
       getPassword: vi.fn(async (s: string, a: string) => store.get(key(s, a)) ?? null),
       deletePassword: vi.fn(async (s: string, a: string) => { store.delete(key(s, a)) }),
+      findCredentials: vi.fn(async (s: string) =>
+        [...store.entries()]
+          .filter(([k]) => k.startsWith(`${s}:`))
+          .map(([k, password]) => ({ account: k.slice(s.length + 1), password }))
+      ),
     },
   }
 })
@@ -32,7 +37,7 @@ async function pathExists(p: string): Promise<boolean> {
 }
 
 const SAMPLE_CATALOG: McpCatalogIndex = {
-  schema_version: 1,
+  schema_version: 2,
   generated_at: '2026-01-01T00:00:00Z',
   mcps: [
     {
@@ -42,10 +47,9 @@ const SAMPLE_CATALOG: McpCatalogIndex = {
       description: 'An MCP that needs no credentials',
       install_method: 'npm',
       command_template: 'npx -y @test/no-creds',
+      instructions: 'No setup required.',
       credentials_schema: [],
-      setup_steps: [
-        { id: 'intro', type: 'info', title: 'Welcome' },
-      ],
+      has_test: false,
     },
     {
       id: 'creds-mcp',
@@ -54,13 +58,11 @@ const SAMPLE_CATALOG: McpCatalogIndex = {
       description: 'An MCP that requires an API key',
       install_method: 'npm',
       command_template: 'npx -y @test/creds',
+      instructions: 'Get your API key from the dashboard.',
       credentials_schema: [
         { id: 'API_KEY', label: 'API Key', kind: 'api_key' },
       ],
-      setup_steps: [
-        { id: 'intro', type: 'info', title: 'Connect' },
-        { id: 'key', type: 'api_key', title: 'API Key', credential_id: 'API_KEY' },
-      ],
+      has_test: false,
     },
   ] as McpCatalogEntry[],
 }
@@ -93,7 +95,6 @@ describe('validateMcpManifest', () => {
       install_method: 'npm',
       command_template: 'npx -y @test/mcp',
       credentials_schema: [],
-      setup_steps: [],
     }
     expect(() => validateMcpManifest(raw)).not.toThrow()
   })
@@ -108,7 +109,6 @@ describe('validateMcpManifest', () => {
       install_method: 'chocolatey',
       command_template: 'cmd',
       credentials_schema: [],
-      setup_steps: [],
     })).toThrow()
   })
 })

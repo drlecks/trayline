@@ -15,7 +15,6 @@ import { schedulerService } from '../services/scheduler-service'
 import { skillService } from '../services/skill-service'
 import { mcpRegistry } from '../services/mcp-registry'
 import { mcpCredentials } from '../services/mcp-credentials'
-import { startOAuth, cancelOAuth } from '../services/mcp-oauth'
 import { testConnection } from '../services/mcp-connection-test'
 import { queueService } from '../services/queue-service'
 import { exportService } from '../services/export-service'
@@ -417,15 +416,6 @@ export function registerIpcHandlers(
   ipcMain.handle('mcp:delete-credentials', async (_: unknown, mcpId: string) => {
     await mcpCredentials.deleteAllForMcp(mcpId)
   })
-  ipcMain.handle('mcp:start-oauth', (
-    _: unknown,
-    mcpId: string,
-    credId: string,
-    provider: string,
-    scopes: string[],
-    opts?: { clientIdKey?: string; clientSecretKey?: string },
-  ) => startOAuth(mcpId, credId, provider, scopes, opts))
-  ipcMain.handle('mcp:cancel-oauth', (_: unknown, mcpId: string) => { cancelOAuth(mcpId) })
   ipcMain.handle('mcp:test-connection', (_: unknown, mcpId: string) => testConnection(mcpId))
 
   // ── Cards ─────────────────────────────────────────────────────────────────
