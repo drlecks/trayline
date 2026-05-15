@@ -49,7 +49,6 @@ Populate the curated MCP catalog and validate the full end-to-end execution path
 
 Appear in the catalog UI; install and execution validated in a later phase.
 
-- [x] Google Drive — stub with OAuth credentials schema defined
 - [x] GitHub — defined with PAT credential
 - [x] Slack — defined with bot token + team ID
 - [x] Notion — defined with integration token
