@@ -61,12 +61,6 @@ Each task corresponds to a phase file in this folder. Check off tasks as they ar
 
 ---
 
-## N4 Phases (Observability)
-
-- [ ] [Phase N4.1 — Run History & Audit Log UI](./phase-n4-1-audit-log.md)
-
----
-
 ## N5 Phases (Global Orchestration & Live Dashboard)
 
 - [x] [Phase N5.1 — Orchestration Engine](./phase-n5-1-orchestration-engine.md)
@@ -82,7 +76,6 @@ Each task corresponds to a phase file in this folder. Check off tasks as they ar
 | MVP (Phases 0–13) | ~11–13 weeks (1 developer) |
 | N2 (Phases N2.1–N2.8) | ~6–7 weeks (1 developer) |
 | N3 (Phases N3.1–N3.4) | ~3–4 weeks (1 developer) |
-| N4 (Phase N4.1) | ~3 days (1 developer) |
 | N5 (Phases N5.1–N5.3) | ~1 week (1 developer) |
 | **Total** | **~21–25 weeks** |
 
