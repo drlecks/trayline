@@ -115,5 +115,8 @@ export const IPC = {
     uninstall: 'mcp:uninstall',
     readStatus: 'mcp:read-status',
     writeStatus: 'mcp:write-status',
+    saveCredential: 'mcp:save-credential',
+    deleteCredentials: 'mcp:delete-credentials',
+    testConnection: 'mcp:test-connection',
   },
 } as const

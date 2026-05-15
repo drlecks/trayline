@@ -16,22 +16,11 @@ import type {
 
 // ── Zod schema ────────────────────────────────────────────────────────────────
 
-const McpSetupStepSchema = z.object({
-  id: z.string(),
-  type: z.enum(['info', 'api_key', 'text_field', 'select', 'oauth', 'test_connection']),
-  title: z.string(),
-  body: z.string().optional(),
-  credential_id: z.string().optional(),
-  options: z.array(z.object({ label: z.string(), value: z.string() })).optional(),
-  provider: z.string().optional(),
-  scopes: z.array(z.string()).optional(),
-})
-
 const McpCredentialSchemaEntrySchema = z.object({
   id: z.string(),
   label: z.string(),
   description: z.string().optional(),
-  kind: z.enum(['api_key', 'text_field', 'oauth']),
+  kind: z.enum(['api_key', 'text_field']),
 })
 
 const McpManifestSchema = z.object({
@@ -41,8 +30,10 @@ const McpManifestSchema = z.object({
   description: z.string().min(1),
   install_method: z.enum(['npm', 'binary', 'docker', 'local']),
   command_template: z.string().min(1),
+  instructions: z.string().optional(),
   credentials_schema: z.array(McpCredentialSchemaEntrySchema),
-  setup_steps: z.array(McpSetupStepSchema),
+  has_test: z.boolean().optional(),
+  platforms: z.array(z.enum(['darwin', 'win32', 'linux'])).optional(),
   tags: z.array(z.string()).optional(),
   homepage: z.string().optional(),
 })
@@ -121,7 +112,9 @@ async function listCatalog(): Promise<McpCatalogEntry[]> {
   if (!(await pathExists(CATALOG_PATH))) return []
   try {
     const index = await fsService.readJson<McpCatalogIndex>(CATALOG_PATH)
-    return index.mcps ?? []
+    const all = index.mcps ?? []
+    const plat = process.platform as 'darwin' | 'win32' | 'linux'
+    return all.filter((e) => !e.platforms || e.platforms.includes(plat))
   } catch {
     return []
   }
@@ -210,8 +203,10 @@ async function install(mcpId: string): Promise<InstalledMcpRow> {
     description: entry.description,
     install_method: entry.install_method,
     command_template: entry.command_template,
+    instructions: entry.instructions,
     credentials_schema: entry.credentials_schema,
-    setup_steps: entry.setup_steps,
+    has_test: entry.has_test,
+    platforms: entry.platforms,
     tags: entry.tags,
     homepage: entry.homepage,
   }
