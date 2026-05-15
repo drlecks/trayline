@@ -488,4 +488,12 @@ export const sourceRunner = {
   listRuns,
   recoverOrphanedRuns,
   isRunning: (project: string, workflow: string, stepId: string) => inFlight.has(stepKey(project, workflow, stepId)),
+  activeRunCount: (project: string): number => {
+    const prefix = project + '/'
+    let count = 0
+    for (const k of inFlight) {
+      if (k.startsWith(prefix)) count++
+    }
+    return count
+  },
 }

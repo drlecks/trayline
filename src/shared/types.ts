@@ -411,6 +411,22 @@ export interface McpCatalogIndex {
   mcps: McpCatalogEntry[]
 }
 
+// ── Project live stats & readiness (N5.2) ────────────────────────────────────
+
+export interface ProjectLiveStats {
+  pendingCards: number
+  readyCards: number
+  errorCards: number
+  runningWorkers: number
+  runningSources: number
+}
+
+export interface ProjectReadiness {
+  ready: boolean
+  /** Human-readable reasons why the project cannot run. Empty when ready. */
+  blockers: string[]
+}
+
 // ── Import / Export (Phase 11) ────────────────────────────────────────────────
 
 export interface ExportOptions {
