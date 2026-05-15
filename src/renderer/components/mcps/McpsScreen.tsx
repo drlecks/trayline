@@ -490,7 +490,6 @@ export default function McpsScreen() {
   const all = useProjectStore((s) => s.all)
 
   const [installed, setInstalled] = useState<InstalledMcpRow[] | null>(null)
-  const [catalog, setCatalog] = useState<McpCatalogEntry[] | null>(null)
   const [detail, setDetail] = useState<InstalledMcpRow | null>(null)
   const [addOpen, setAddOpen] = useState(false)
   const [wizardManifest, setWizardManifest] = useState<McpManifest | null>(null)
@@ -498,12 +497,8 @@ export default function McpsScreen() {
   const [error, setError] = useState<string | null>(null)
 
   async function refresh() {
-    const [inst, cat] = await Promise.all([
-      window.trayline.mcp.listInstalled(),
-      window.trayline.mcp.listCatalog(),
-    ])
+    const inst = await window.trayline.mcp.listInstalled()
     setInstalled(inst)
-    setCatalog(cat)
     // Sync detail panel if it's open
     setDetail((prev) => prev ? inst.find((r) => r.manifest.id === prev.manifest.id) ?? null : null)
   }
@@ -511,11 +506,6 @@ export default function McpsScreen() {
   useEffect(() => { void refresh() }, [])
 
   const installedIds = useMemo(() => new Set((installed ?? []).map((r) => r.manifest.id)), [installed])
-
-  const available = useMemo(() => {
-    if (!catalog) return []
-    return catalog.filter((e) => !installedIds.has(e.id))
-  }, [catalog, installedIds])
 
   async function handleUninstall(row: InstalledMcpRow) {
     if (!window.confirm(`Uninstall "${row.manifest.name}"?`)) return
@@ -624,41 +614,6 @@ export default function McpsScreen() {
         </ul>
       )}
 
-      {/* Available from catalog */}
-      {available.length > 0 && (
-        <>
-          <h2 className="text-sm font-medium mb-3">Available</h2>
-          <ul className="flex flex-col gap-2">
-            {available.map((entry) => (
-              <li key={entry.id} className="rounded-md border border-neutral-100 dark:border-neutral-900 px-3 py-2.5 flex items-start gap-3 opacity-80">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs font-medium">{entry.name}</span>
-                    {entry.credentials_schema.length === 0 && (
-                      <span className="text-[10px] text-green-700 dark:text-green-500">No credentials needed</span>
-                    )}
-                  </div>
-                  <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-0.5">{entry.description}</p>
-                  {entry.tags && entry.tags.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {entry.tags.map((t) => <TagChip key={t} tag={t} />)}
-                    </div>
-                  )}
-                </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="shrink-0"
-                  onClick={() => setAddOpen(true)}
-                >
-                  <Download size={12} strokeWidth={2} className="mr-1" />
-                  Install
-                </Button>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
 
       {/* Detail panel */}
       <McpDetailDialog

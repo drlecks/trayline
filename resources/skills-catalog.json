@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-15T00:00:00Z",
+  "skills": [
+    {
+      "id": "pdf",
+      "name": "PDF Tools",
+      "version": "1.0.0",
+      "description": "Extract text, tables, and metadata from PDF files.",
+      "author": "Anthropic",
+      "tags": ["pdf", "document", "extract"],
+      "base_url": "https://api.github.com/repos/anthropics/skills/contents/skills/pdf?ref=main"
+    },
+    {
+      "id": "docx",
+      "name": "Word Document Tools",
+      "version": "1.0.0",
+      "description": "Read and manipulate Microsoft Word (.docx) files.",
+      "author": "Anthropic",
+      "tags": ["word", "docx", "document"],
+      "base_url": "https://api.github.com/repos/anthropics/skills/contents/skills/docx?ref=main"
+    },
+    {
+      "id": "xlsx",
+      "name": "Excel Spreadsheet Tools",
+      "version": "1.0.0",
+      "description": "Read and analyze Microsoft Excel (.xlsx) spreadsheets.",
+      "author": "Anthropic",
+      "tags": ["excel", "xlsx", "spreadsheet"],
+      "base_url": "https://api.github.com/repos/anthropics/skills/contents/skills/xlsx?ref=main"
+    },
+    {
+      "id": "canvas-design",
+      "name": "Canvas Design",
+      "version": "1.0.0",
+      "description": "Create and edit images on an HTML canvas.",
+      "author": "Anthropic",
+      "tags": ["design", "canvas", "image"],
+      "base_url": "https://api.github.com/repos/anthropics/skills/contents/skills/canvas-design?ref=main"
+    },
+    {
+      "id": "marketing-psychology",
+      "name": "Marketing Psychology",
+      "version": "1.0.0",
+      "description": "Apply consumer psychology frameworks to marketing content.",
+      "author": "Corey Haines",
+      "tags": ["marketing", "psychology", "copywriting"],
+      "base_url": "https://api.github.com/repos/coreyhaines31/marketingskills/contents/skills/marketing-psychology?ref=main"
+    },
+    {
+      "id": "social-content",
+      "name": "Social Media Content",
+      "version": "1.0.0",
+      "description": "Create engaging social media content across platforms.",
+      "author": "Corey Haines",
+      "tags": ["social", "content", "marketing"],
+      "base_url": "https://api.github.com/repos/coreyhaines31/marketingskills/contents/skills/social?ref=main"
+    },
+    {
+      "id": "triage",
+      "name": "Issue Triage",
+      "version": "1.0.0",
+      "description": "Triage and prioritize issues, bugs, and support requests.",
+      "author": "Matt Pocock",
+      "tags": ["triage", "issues", "engineering"],
+      "base_url": "https://api.github.com/repos/mattpocock/skills/contents/skills/engineering/triage?ref=main"
+    }
+  ]
+}
