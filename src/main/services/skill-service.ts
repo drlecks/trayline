@@ -5,6 +5,7 @@ import { projectService } from './project-service'
 import { auditDb } from './audit-db'
 import {
   validateFromUrl as validatorFromUrl,
+  validateFromGitHubCatalog,
   validateOnDisk,
   cleanupTemp,
   VALIDATOR_VERSION,
@@ -295,29 +296,22 @@ async function installFromCatalog(skillId: string): Promise<InstalledSkillRow> {
   if (!entry) throw new Error(`Skill not found in catalog: ${skillId}`)
 
   const base = normalizeBaseUrl(entry.base_url)
+  const instructionFile = entry.skill_md ?? 'SKILL.md'
 
-  // Validate via the full pipeline (catalog is not exempt from security checks)
-  const result = await validatorFromUrl(base)
+  // Build catalog-authoritative manifest (these repos don't ship their own skill.json)
+  const catalogManifest: SkillManifest = {
+    id: entry.id,
+    name: entry.name,
+    version: entry.version,
+    description: entry.description,
+    tags: entry.tags,
+  }
+
+  // Use GitHub API to list + download the full directory tree, then run security checks
+  const result = await validateFromGitHubCatalog(base, catalogManifest, instructionFile)
   if (result.hasFail) {
     const failing = result.checks.filter((c) => c.status === 'fail').map((c) => c.message ?? c.label)
     throw new Error(`Catalog skill "${skillId}" failed validation: ${failing.join('; ')}`)
-  }
-
-  // Catalog entries synthesize the manifest from catalog metadata (may override what's in skill.json)
-  // Overwrite skill.json in temp with catalog-authoritative data
-  if (result.pendingTempDir) {
-    const catalogManifest: SkillManifest = {
-      id: entry.id,
-      name: entry.name,
-      version: entry.version,
-      description: entry.description,
-      tags: entry.tags,
-    }
-    await fs.writeFile(
-      join(result.pendingTempDir, 'skill.json'),
-      JSON.stringify(catalogManifest, null, 2),
-      'utf-8',
-    )
   }
 
   return finalizeFromTemp(

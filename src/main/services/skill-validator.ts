@@ -30,17 +30,18 @@ const BINARY_THRESHOLD = 0.003             // 0.3 %
 const ALLOWED_EXTS = new Set([
   '.json', '.md', '.markdown', '.txt', '.yaml', '.yml',
   '.png', '.jpg', '.jpeg', '.svg', '.gif', '.webp',
+  '.py', // Python agent-tool scripts (not executed by Trayline; only invoked by the AI)
 ])
 
 const EXECUTABLE_EXTS = new Set([
   '.exe', '.dll', '.so', '.dylib', '.bin', '.bat', '.cmd', '.ps1', '.psm1',
   '.sh', '.bash', '.zsh', '.fish', '.app', '.command', '.scpt', '.msi',
   '.deb', '.rpm', '.apk', '.jar', '.class', '.pyc', '.wasm', '.scr',
-  '.com', '.vbs', '.vbe', '.js', '.mjs', '.cjs', '.ts', '.py', '.rb',
+  '.com', '.vbs', '.vbe', '.js', '.mjs', '.cjs', '.ts', '.rb',
   '.pl', '.php', '.lua',
 ])
 
-const TEXT_EXTS = new Set(['.json', '.md', '.markdown', '.txt', '.yaml', '.yml'])
+const TEXT_EXTS = new Set(['.json', '.md', '.markdown', '.txt', '.yaml', '.yml', '.py'])
 
 // ── Junk patterns ─────────────────────────────────────────────────────────────
 
@@ -202,10 +203,13 @@ function scanSkillMd(content: string): SafetyMatch[] {
 
 // ── Core validation ───────────────────────────────────────────────────────────
 
-function runChecks(files: BundleFile[]): {
+function runChecks(files: BundleFile[], opts?: { instructionFile?: string }): {
   checks: ValidationCheck[]
   manifest: SkillManifest | null
 } {
+  const instructionFile = opts?.instructionFile ?? 'skill.md'
+  const instructionFileLower = instructionFile.toLowerCase()
+
   const p = (id: string, label: string): ValidationCheck => ({ id, label, status: 'pass' })
   const f = (id: string, label: string, message: string): ValidationCheck => ({ id, label, status: 'fail', message })
   const w = (id: string, label: string, message: string, matches?: string[]): ValidationCheck =>
@@ -227,14 +231,14 @@ function runChecks(files: BundleFile[]): {
     }
   }
 
-  // 2. skill.md
-  const mdFile = files.find((x) => x.name === 'skill.md')
+  // 2. Instruction file (SKILL.md, skill.md, or whatever the catalog declares)
+  const mdFile = files.find((x) => x.name.toLowerCase() === instructionFileLower)
   if (!mdFile) {
-    checks.push(f('skill_md_present', 'skill.md present and non-empty', 'skill.md not found'))
+    checks.push(f('skill_md_present', `${instructionFile} present and non-empty`, `${instructionFile} not found`))
   } else if (!mdFile.content.toString('utf-8').trim()) {
-    checks.push(f('skill_md_present', 'skill.md present and non-empty', 'skill.md is empty'))
+    checks.push(f('skill_md_present', `${instructionFile} present and non-empty`, `${instructionFile} is empty`))
   } else {
-    checks.push(p('skill_md_present', 'skill.md present and non-empty'))
+    checks.push(p('skill_md_present', `${instructionFile} present and non-empty`))
   }
 
   // 3. File count
@@ -279,8 +283,9 @@ function runChecks(files: BundleFile[]): {
       badExt.push(`${file.name} (${ext})`)
     }
 
-    const sizeLimit = lname === 'skill.md' ? MAX_SKILL_MD_BYTES : MAX_PER_FILE_BYTES
-    const sizeLimitLabel = lname === 'skill.md' ? '500 KB' : '1 MB'
+    const isInstructionFile = lname === instructionFileLower
+    const sizeLimit = isInstructionFile ? MAX_SKILL_MD_BYTES : MAX_PER_FILE_BYTES
+    const sizeLimitLabel = isInstructionFile ? '500 KB' : '1 MB'
     if (file.content.length > sizeLimit) {
       oversized.push(`${file.name} (${Math.round(file.content.length / 1024)} KB > ${sizeLimitLabel})`)
     }
@@ -297,7 +302,7 @@ function runChecks(files: BundleFile[]): {
           try { JSON.parse(text) } catch { badJson.push(`${file.name} (invalid JSON)`) }
         }
         if (hasBinaryContent(file.content)) binaryText.push(file.name)
-        if (file.name === 'skill.md') safetyMatches = scanSkillMd(text)
+        if (isInstructionFile) safetyMatches = scanSkillMd(text)
       }
     }
   }
@@ -320,8 +325,8 @@ function runChecks(files: BundleFile[]): {
       ? f('no_symlinks', 'No symbolic links', `Symlinks: ${symlinks.join(', ')}`)
       : p('no_symlinks', 'No symbolic links'),
     oversized.length > 0
-      ? f('per_file_size', 'Per-file size limits (skill.md ≤ 500 KB, others ≤ 1 MB)', `Oversized: ${oversized.join(', ')}`)
-      : p('per_file_size', 'Per-file size limits (skill.md ≤ 500 KB, others ≤ 1 MB)'),
+      ? f('per_file_size', `Per-file size limits (${instructionFile} ≤ 500 KB, others ≤ 1 MB)`, `Oversized: ${oversized.join(', ')}`)
+      : p('per_file_size', `Per-file size limits (${instructionFile} ≤ 500 KB, others ≤ 1 MB)`),
     magicFails.length > 0
       ? f('magic_bytes', 'No executable or archive signatures', `Suspicious content: ${magicFails.join(', ')}`)
       : p('magic_bytes', 'No executable or archive signatures'),
@@ -336,17 +341,17 @@ function runChecks(files: BundleFile[]): {
       : p('no_embedded_binary', 'No binary content in text files'),
   )
 
-  // 15. skill.md safety scan (warn, not fail)
+  // 15. Instruction-file safety scan (warn, not fail)
   if (safetyMatches.length > 0) {
     const matchLines = safetyMatches.map((m) => `line ${m.lineNo}: [${m.label}] ${m.text}`)
     checks.push(w(
       'skill_md_safety',
-      'skill.md safety scan',
+      `${instructionFile} safety scan`,
       `${safetyMatches.length} potentially dangerous pattern(s) — review before installing`,
       matchLines,
     ))
   } else {
-    checks.push(p('skill_md_safety', 'skill.md safety scan'))
+    checks.push(p('skill_md_safety', `${instructionFile} safety scan`))
   }
 
   return { checks, manifest }
@@ -368,6 +373,48 @@ async function fetchBytes(url: string): Promise<Buffer> {
 
 function normalizeBase(url: string): string {
   return url.endsWith('/') ? url : url + '/'
+}
+
+// ── GitHub API helpers (for catalog installs with subdirectory trees) ─────────
+
+interface GitHubParsed {
+  owner: string; repo: string; ref: string; path: string; contentsApiUrl: string
+}
+
+function parseGitHubRawUrl(url: string): GitHubParsed | null {
+  const m = url.match(/^https:\/\/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/([^/]+)\/(.+?)\/?$/)
+  if (!m) return null
+  const [, owner, repo, ref, path] = m
+  const cleanPath = path!.replace(/\/$/, '')
+  return {
+    owner: owner!, repo: repo!, ref: ref!, path: cleanPath,
+    contentsApiUrl: `https://api.github.com/repos/${owner}/${repo}/contents/${cleanPath}?ref=${ref}`,
+  }
+}
+
+interface GitHubFileEntry {
+  name: string; type: 'file' | 'dir' | 'symlink'; download_url: string | null; url: string
+}
+
+async function listGitHubDirRecursive(
+  apiUrl: string,
+  prefix = '',
+): Promise<{ relativePath: string; downloadUrl: string }[]> {
+  const res = await fetch(apiUrl, {
+    headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'trayline-skill-validator' },
+  })
+  if (!res.ok) throw new Error(`GitHub API HTTP ${res.status} — ${apiUrl}`)
+  const items = (await res.json()) as GitHubFileEntry[]
+  const result: { relativePath: string; downloadUrl: string }[] = []
+  for (const item of items) {
+    const relPath = prefix ? `${prefix}/${item.name}` : item.name
+    if (item.type === 'file' && item.download_url) {
+      result.push({ relativePath: relPath, downloadUrl: item.download_url })
+    } else if (item.type === 'dir') {
+      result.push(...await listGitHubDirRecursive(item.url, relPath))
+    }
+  }
+  return result
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -438,6 +485,86 @@ export async function validateFromUrl(url: string): Promise<SkillValidationResul
   }
 }
 
+/**
+ * Validates a catalog skill by listing its full GitHub directory tree via the
+ * GitHub Contents API, downloading every file recursively, and synthesizing a
+ * skill.json from the catalog manifest (these repos don't ship their own).
+ * Stores `_trayline.instruction_file` in the synthesized manifest so that
+ * `validateOnDisk` can re-derive the instruction file name on quarantine checks.
+ */
+export async function validateFromGitHubCatalog(
+  baseUrl: string,
+  manifest: SkillManifest,
+  instructionFile = 'SKILL.md',
+): Promise<SkillValidationResult> {
+  const base = normalizeBase(baseUrl)
+  const tempDir = join(os.tmpdir(), `trayline-skill-${crypto.randomUUID()}`)
+  await fs.mkdir(tempDir, { recursive: true })
+
+  const fetchedFiles: { name: string; sizeBytes: number }[] = []
+  const bundleFiles: BundleFile[] = []
+
+  try {
+    const parsed = parseGitHubRawUrl(base)
+    if (!parsed) throw new Error(`URL is not a raw.githubusercontent.com URL: ${base}`)
+
+    // List all files in the remote skill directory tree
+    const remoteFiles = await listGitHubDirRecursive(parsed.contentsApiUrl)
+    if (remoteFiles.length === 0) throw new Error('GitHub directory listing returned no files')
+
+    for (const { relativePath, downloadUrl } of remoteFiles) {
+      if (checkPath(relativePath) !== null) {
+        bundleFiles.push({ name: relativePath, content: Buffer.alloc(0), isSymlink: false })
+        fetchedFiles.push({ name: relativePath, sizeBytes: 0 })
+        continue
+      }
+      const buf = await fetchBytes(downloadUrl).catch(() => null)
+      if (!buf) continue
+      bundleFiles.push({ name: relativePath, content: buf, isSymlink: false })
+      fetchedFiles.push({ name: relativePath, sizeBytes: buf.length })
+    }
+
+    // Synthesize skill.json from catalog-authoritative manifest.
+    // Preserve _trayline.instruction_file so validateOnDisk can recover it.
+    const synthManifest: SkillManifest = {
+      ...manifest,
+      _trayline: { ...(manifest._trayline ?? {}), instruction_file: instructionFile },
+    }
+    const manifestBuf = Buffer.from(JSON.stringify(synthManifest, null, 2), 'utf-8')
+    const existingIdx = bundleFiles.findIndex((f) => f.name === 'skill.json')
+    if (existingIdx >= 0) {
+      bundleFiles[existingIdx] = { name: 'skill.json', content: manifestBuf, isSymlink: false }
+      fetchedFiles[existingIdx] = { name: 'skill.json', sizeBytes: manifestBuf.length }
+    } else {
+      bundleFiles.unshift({ name: 'skill.json', content: manifestBuf, isSymlink: false })
+      fetchedFiles.unshift({ name: 'skill.json', sizeBytes: manifestBuf.length })
+    }
+
+    // Stage to temp dir
+    for (const bf of bundleFiles) {
+      const dest = join(tempDir, bf.name.replace(/\.\.\//g, '').replace(/^\//, ''))
+      await fs.mkdir(join(dest, '..'), { recursive: true }).catch(() => {})
+      await fs.writeFile(dest, bf.content)
+    }
+
+    const { checks, manifest: parsedManifest } = runChecks(bundleFiles, { instructionFile })
+    const hasFail = checks.some((c) => c.status === 'fail')
+
+    if (hasFail) await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {})
+
+    return { checks, manifest: parsedManifest, fileList: fetchedFiles, hasFail, pendingTempDir: hasFail ? undefined : tempDir, sourceUrl: base }
+  } catch (err) {
+    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {})
+    return {
+      checks: [{ id: 'fetch', label: 'Fetch skill files', status: 'fail', message: err instanceof Error ? err.message : String(err) }],
+      manifest: null,
+      fileList: fetchedFiles,
+      hasFail: true,
+      sourceUrl: base,
+    }
+  }
+}
+
 export async function validateOnDisk(dir: string): Promise<{
   checks: ValidationCheck[]
   manifest: SkillManifest | null
@@ -449,7 +576,19 @@ export async function validateOnDisk(dir: string): Promise<{
   } catch {
     return { checks: [{ id: 'read_dir', label: 'Read skill directory', status: 'fail', message: 'Could not read skill directory' }], manifest: null, hasFail: true }
   }
-  const { checks, manifest } = runChecks(bundleFiles)
+
+  // Recover the instruction file name stored by validateFromGitHubCatalog
+  let instructionFile: string | undefined
+  const mf = bundleFiles.find((f) => f.name === 'skill.json')
+  if (mf) {
+    try {
+      const raw = JSON.parse(mf.content.toString('utf-8')) as Record<string, unknown>
+      const tl = raw._trayline as Record<string, unknown> | undefined
+      if (typeof tl?.instruction_file === 'string') instructionFile = tl.instruction_file
+    } catch { /* ignore */ }
+  }
+
+  const { checks, manifest } = runChecks(bundleFiles, instructionFile ? { instructionFile } : undefined)
   return { checks, manifest, hasFail: checks.some((c) => c.status === 'fail') }
 }
 
