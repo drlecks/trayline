@@ -19,8 +19,10 @@ import { projectService } from './project-service'
 import { auditDb } from './audit-db'
 import { settingsStore } from './settings-store'
 import { adapterRegistry } from '../ai-terminals/registry'
+import { mcpRegistry } from './mcp-registry'
+import { mcpCredentials } from './mcp-credentials'
 import { IPC } from '../../shared/ipc-channels'
-import type { AISession } from '../ai-terminals/adapter'
+import type { AISession, MCPDefinition } from '../ai-terminals/adapter'
 import type { Card, CardHistoryEntry } from '../../shared/card'
 import type { WorkerRunEvent, WorkerRunMeta, WorkerRunStatus } from '../../shared/worker-run'
 
@@ -247,6 +249,56 @@ async function nextCardIdForStep(project: string, workflow: string, stepId: stri
   return `card_${date}_${String(max + 1).padStart(3, '0')}`
 }
 
+// ── MCP pre-flight ────────────────────────────────────────────────────────────
+
+/**
+ * For each MCP id listed by the worker, verify it is installed and in Ready
+ * state, then read credentials from the OS keychain. Returns the full
+ * MCPDefinition array ready to pass to the adapter. Throws with a user-facing
+ * message and logs `run_aborted_mcp_not_ready` when any MCP blocks the run.
+ */
+async function resolveMcps(
+  project: string, workflow: string, stepId: string, cardId: string, runId: string,
+  mcpIds: string[],
+): Promise<MCPDefinition[]> {
+  const defs: MCPDefinition[] = []
+  for (const id of mcpIds) {
+    const manifest = await mcpRegistry.readManifest(id)
+    if (!manifest) {
+      auditDb.insert({
+        project_id: project, workflow_id: workflow, step_id: stepId, card_id: cardId,
+        event: 'run_aborted_mcp_not_ready', actor: 'system',
+        details_json: JSON.stringify({ run_id: runId, mcp_id: id, reason: 'not_installed' }),
+      })
+      throw new Error(`MCP "${id}" is not installed. Set it up in the MCPs screen before running.`)
+    }
+    const status = await mcpRegistry.readStatus(id)
+    if (status.disabled) {
+      auditDb.insert({
+        project_id: project, workflow_id: workflow, step_id: stepId, card_id: cardId,
+        event: 'run_aborted_mcp_not_ready', actor: 'system',
+        details_json: JSON.stringify({ run_id: runId, mcp_id: id, reason: 'disabled' }),
+      })
+      throw new Error(`MCP "${manifest.name}" is disabled. Enable it in the MCPs screen before running.`)
+    }
+    if (!status.configured && manifest.credentials_schema.length > 0) {
+      auditDb.insert({
+        project_id: project, workflow_id: workflow, step_id: stepId, card_id: cardId,
+        event: 'run_aborted_mcp_not_ready', actor: 'system',
+        details_json: JSON.stringify({ run_id: runId, mcp_id: id, reason: 'not_configured' }),
+      })
+      throw new Error(`MCP "${manifest.name}" needs credentials. Configure it in the MCPs screen before running.`)
+    }
+    const credentials: Record<string, string> = {}
+    for (const cred of manifest.credentials_schema) {
+      const val = await mcpCredentials.readCredential(id, cred.id)
+      if (val) credentials[cred.id] = val
+    }
+    defs.push({ id, manifest: manifest as unknown as Record<string, unknown>, credentials })
+  }
+  return defs
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 export interface TriggerRunInput {
@@ -313,6 +365,8 @@ async function runInner(input: TriggerRunInput): Promise<TriggerRunResult> {
   }
   const sourceCard = await fsService.readJson<Card>(sourceCardPath)
 
+  const mcpIds = worker.mcps ?? []
+
   // 1. Allocate run + write input.json, meta.json (status=running)
   const workerDir = projectService.paths.stepDir(project, workflow, stepId)
   const runId = await nextRunId(workerDir)
@@ -329,6 +383,7 @@ async function runInner(input: TriggerRunInput): Promise<TriggerRunResult> {
     workflow,
     started_at: startedAt,
     status: 'running',
+    ...(mcpIds.length > 0 ? { mcps_active: mcpIds } : {}),
   }
   await fsService.writeJsonAtomic(join(runDir, 'meta.json'), meta)
 
@@ -390,12 +445,17 @@ async function runInner(input: TriggerRunInput): Promise<TriggerRunResult> {
   const sessionKey = runKey(project, workflow, stepId, runId)
   let session: AISession | null = null
   try {
+    // 3c. Pre-flight check + credential injection for MCPs
+    const mcpDefs = mcpIds.length > 0
+      ? await resolveMcps(project, workflow, stepId, cardId, runId, mcpIds)
+      : []
+
     session = await adapter.spawn({
       processFile,
       cardData: sourceCard.data,
       skills,
       contextPacks,
-      mcps: [],  // N2.5
+      mcps: mcpDefs,
       workingDir: runDir,
       timeout: timeoutMs,
       onAwaitingInputChange: (awaiting) => {
@@ -645,11 +705,13 @@ async function runBatchInner(input: TriggerBatchRunInput): Promise<TriggerRunRes
   await fs.mkdir(runDir, { recursive: true })
   await fsService.writeJsonAtomic(join(runDir, 'input.json'), batchData)
 
+  const batchMcpIds = worker.mcps ?? []
   const startedAt = new Date().toISOString()
   const meta: WorkerRunMeta = {
     run_id: runId, worker_id: stepId, card_id: 'batch',
     project, workflow, started_at: startedAt, status: 'running',
     batch_card_count: sourceCards.length,
+    ...(batchMcpIds.length > 0 ? { mcps_active: batchMcpIds } : {}),
   }
   await fsService.writeJsonAtomic(join(runDir, 'meta.json'), meta)
 
@@ -691,8 +753,13 @@ async function runBatchInner(input: TriggerBatchRunInput): Promise<TriggerRunRes
   const sessionKey = runKey(project, workflow, stepId, runId)
   let session: AISession | null = null
   try {
+    // Pre-flight check + credential injection for MCPs
+    const batchMcpDefs = batchMcpIds.length > 0
+      ? await resolveMcps(project, workflow, stepId, 'batch', runId, batchMcpIds)
+      : []
+
     session = await adapter.spawn({
-      processFile, cardData: batchData, skills, contextPacks, mcps: [],
+      processFile, cardData: batchData, skills, contextPacks, mcps: batchMcpDefs,
       workingDir: runDir, timeout: timeoutMs,
       onAwaitingInputChange: (awaiting) => {
         emit({ type: 'awaiting_input', project, workflow, stepId, runId, awaiting })
