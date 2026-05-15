@@ -16,7 +16,9 @@ import { mcpCredentials } from '../services/mcp-credentials'
 import { testConnection } from '../services/mcp-connection-test'
 import { exportService } from '../services/export-service'
 import { orchestrator } from '../services/orchestrator'
+import { queueService } from '../services/queue-service'
 import { join } from 'path'
+import fs from 'fs/promises'
 import { fsService } from '../services/fs-service'
 import type { BootstrapInfo, ProviderInstallSuggestion, ProviderReadyResult, ExportOptions, ImportSuccess, SourceStepConfig, McpStatus } from '../../shared/types'
 import type { CardStatus } from '../../shared/card'
@@ -119,6 +121,71 @@ export function registerIpcHandlers(
     name,
     mounted: orchestrator.isMounted(name),
   }))
+
+  ipcMain.handle('project:live-stats', async (_: unknown, projectName: string) => {
+    async function countJsonFiles(dir: string): Promise<number> {
+      try {
+        const files = await fs.readdir(dir)
+        return files.filter((f) => f.endsWith('.json') && !f.endsWith('.tmp')).length
+      } catch { return 0 }
+    }
+
+    let pendingCards = 0, readyCards = 0, errorCards = 0
+    const workflows = await projectService.listWorkflows(projectName).catch(() => [])
+    for (const wf of workflows) {
+      const steps = await projectService.listSteps(projectName, wf.name)
+      for (const step of steps) {
+        const stepPath = projectService.paths.stepDir(projectName, wf.name, step.id)
+        if (step.id === '99-errors') {
+          errorCards += await countJsonFiles(join(stepPath, 'cards', 'pending'))
+        } else if (step.kind === 'tray') {
+          pendingCards += await countJsonFiles(join(stepPath, 'cards', 'pending'))
+          readyCards += await countJsonFiles(join(stepPath, 'cards', 'ready'))
+        } else if (step.kind === 'source') {
+          readyCards += await countJsonFiles(join(stepPath, 'cards', 'ready'))
+        }
+      }
+    }
+    return {
+      pendingCards,
+      readyCards,
+      errorCards,
+      runningWorkers: workerRunner.activeRunCount(projectName),
+      runningSources: sourceRunner.activeRunCount(projectName),
+    }
+  })
+
+  ipcMain.handle('project:check-readiness', async (_: unknown, projectName: string) => {
+    const blockers: string[] = []
+
+    let adapterOk = false
+    for (const a of adapterRegistry.list()) {
+      if (a.kind !== 'production') continue
+      if (await a.detectInstalled()) { adapterOk = true; break }
+    }
+    if (!adapterOk) blockers.push('No AI adapter installed')
+
+    const workflows = await projectService.listWorkflows(projectName).catch(() => [])
+    const checkedMcps = new Set<string>()
+    for (const wf of workflows) {
+      const steps = await projectService.listSteps(projectName, wf.name)
+      for (const step of steps) {
+        if (step.kind !== 'worker') continue
+        const mcpIds = (step.raw as { mcps?: string[] }).mcps ?? []
+        for (const mcpId of mcpIds) {
+          if (checkedMcps.has(mcpId)) continue
+          checkedMcps.add(mcpId)
+          const status = await mcpRegistry.readStatus(mcpId).catch(() => null)
+          if (!status?.configured) {
+            blockers.push(`MCP '${mcpId}' not configured`)
+          }
+        }
+      }
+    }
+
+    return { ready: blockers.length === 0, blockers }
+  })
+
   ipcMain.handle('project:delete', async (_: unknown, name: string) => {
     await orchestrator.unmountProject(name)
     await projectCreateService.deleteProject(name)

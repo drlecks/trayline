@@ -27,6 +27,8 @@ export const IPC = {
     setStatus: 'project:setStatus',
     getOrchestration: 'project:getOrchestration',
     onStatusChanged: 'project:onStatusChanged',
+    liveStats: 'project:live-stats',
+    checkReadiness: 'project:check-readiness',
     listWorkflows: 'project:listWorkflows',
     listSteps: 'project:listSteps',
     listSkills: 'project:listSkills',
