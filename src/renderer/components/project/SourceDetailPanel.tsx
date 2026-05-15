@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label'
 import SchedulePicker from '@/components/shared/SchedulePicker'
 import { useProjectStore } from '@/stores/project-store'
 import { useProviderGuard } from '@/stores/provider-guard-store'
-import type { StepMeta, SourceState, SourceRunMeta, SourceRunEvent, SourceStepConfig } from '../../../shared/types'
+import type { StepMeta, SourceState, SourceRunMeta, SourceRunEvent, SourceStepConfig, InstalledMcpRow, McpHealthState } from '../../../shared/types'
 
 type Tab = 'source' | 'config' | 'runs'
 
@@ -288,6 +288,22 @@ function SourceInstructionsTab({ project, workflow, stepId }: { project: string;
 
 // ── Config tab ────────────────────────────────────────────────────────────────
 
+const MCP_HEALTH_LABEL: Record<McpHealthState, string> = {
+  ready: 'Ready',
+  unconfigured: 'Needs setup',
+  error: 'Error',
+  unknown: 'Not checked',
+  disabled: 'Disabled',
+}
+
+const MCP_HEALTH_CLASS: Record<McpHealthState, string> = {
+  ready: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300',
+  unconfigured: 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300',
+  error: 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300',
+  unknown: 'bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400',
+  disabled: 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-500',
+}
+
 function SourceConfigTab({
   project, workflow, step, onStateChange,
 }: {
@@ -298,19 +314,32 @@ function SourceConfigTab({
 }) {
   const refreshSteps = useProjectStore((s) => s.refreshSteps)
   const setSelectedStepId = useProjectStore((s) => s.setSelectedStepId)
+  const setScreen = useProjectStore((s) => s.setScreen)
   const [config, setConfig] = useState<Partial<SourceStepConfig>>({})
   const [loaded, setLoaded] = useState(false)
   const [saving, setSaving] = useState(false)
 
+  // MCPs
+  const [installedMcps, setInstalledMcps] = useState<InstalledMcpRow[]>([])
+  const [selectedMcps, setSelectedMcps] = useState<string[]>([])
+
+  // Adapters
+  const [installedAdapters, setInstalledAdapters] = useState<{ id: string; displayName: string }[]>([])
+
   useEffect(() => {
     let cancelled = false
     void (async () => {
-      // Read config via the step's raw data
       const steps = await window.trayline.project.listSteps(project, workflow)
       if (cancelled) return
       const found = steps.find((s) => s.id === step.id)
-      if (found) setConfig(found.raw as Partial<SourceStepConfig>)
+      if (found) {
+        const raw = found.raw as Partial<SourceStepConfig>
+        setConfig(raw)
+        setSelectedMcps(raw.mcps ?? [])
+      }
       setLoaded(true)
+      void window.trayline.mcp.listInstalled().then(setInstalledMcps)
+      void window.trayline.adapters.list().then(setInstalledAdapters)
     })()
     return () => { cancelled = true }
   }, [project, workflow, step.id])
@@ -326,6 +355,19 @@ function SourceConfigTab({
     }
   }
 
+  async function addMcp(id: string) {
+    if (!id || selectedMcps.includes(id)) return
+    const next = [...selectedMcps, id]
+    setSelectedMcps(next)
+    await save({ mcps: next })
+  }
+
+  async function removeMcp(id: string) {
+    const next = selectedMcps.filter((m) => m !== id)
+    setSelectedMcps(next)
+    await save({ mcps: next })
+  }
+
   async function handleDelete() {
     if (!confirm(`Delete source "${step.name}"? This cannot be undone.`)) return
     setSaving(true)
@@ -338,6 +380,14 @@ function SourceConfigTab({
       alert(e instanceof Error ? e.message : String(e))
     }
   }
+
+  const mcpsToAdd = installedMcps.filter((m) => !selectedMcps.includes(m.manifest.id))
+  const selectedMcpEntries = selectedMcps.map((id) => {
+    const row = installedMcps.find((m) => m.manifest.id === id)
+    return row
+      ? { found: true as const, id, row }
+      : { found: false as const, id }
+  })
 
   if (!loaded) return <div className="p-6 text-xs text-neutral-500">Loading…</div>
 
@@ -427,6 +477,21 @@ function SourceConfigTab({
       <div className="flex flex-col gap-3 rounded-md border border-neutral-200 dark:border-neutral-800 p-4">
         <div className="text-[11px] uppercase tracking-wider text-neutral-400">Execution</div>
 
+        {installedAdapters.length > 0 && (
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-xs">Adapter</Label>
+            <select
+              value={config.execution?.adapter ?? 'claude-code'}
+              onChange={(e) => void save({ execution: { ...config.execution, adapter: e.target.value } })}
+              className="h-8 w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-2 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-300 dark:focus:ring-neutral-700"
+            >
+              {installedAdapters.map((a) => (
+                <option key={a.id} value={a.id}>{a.displayName}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
         <div className="flex flex-col gap-1.5">
           <Label className="text-xs">Timeout (seconds)</Label>
           <Input
@@ -439,6 +504,80 @@ function SourceConfigTab({
             className="h-8 text-sm"
           />
         </div>
+      </div>
+
+      <div className="flex flex-col gap-3 rounded-md border border-neutral-200 dark:border-neutral-800 p-4">
+        <div className="text-[11px] uppercase tracking-wider text-neutral-400">MCPs</div>
+        <p className="text-xs text-neutral-500 -mt-1">Tools the AI can use while fetching data.</p>
+
+        {mcpsToAdd.length > 0 && (
+          <select
+            defaultValue=""
+            onChange={(e) => { void addMcp(e.target.value); e.target.value = '' }}
+            className="rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-3 py-1.5 text-xs"
+          >
+            <option value="" disabled>Add an MCP…</option>
+            {mcpsToAdd.map((m) => (
+              <option key={m.manifest.id} value={m.manifest.id}>{m.manifest.name}</option>
+            ))}
+          </select>
+        )}
+
+        {selectedMcpEntries.length > 0 ? (
+          <ul className="flex flex-col gap-1">
+            {selectedMcpEntries.map((entry) => (
+              <li
+                key={entry.id}
+                className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md border bg-white dark:bg-neutral-950 ${
+                  entry.found
+                    ? 'border-neutral-200 dark:border-neutral-800'
+                    : 'border-amber-300 dark:border-amber-700/60 bg-amber-50/50 dark:bg-amber-950/20'
+                }`}
+              >
+                {!entry.found && (
+                  <AlertTriangle size={13} strokeWidth={1.75} className="shrink-0 text-amber-500 dark:text-amber-400" />
+                )}
+                <div className="flex-1 min-w-0 flex items-baseline gap-1.5 overflow-hidden">
+                  {entry.found ? (
+                    <>
+                      <span className="text-xs font-medium shrink-0">{entry.row.manifest.name}</span>
+                      <span className={`text-[10px] font-medium px-1.5 py-0 rounded-full shrink-0 ${MCP_HEALTH_CLASS[entry.row.healthState]}`}>
+                        {MCP_HEALTH_LABEL[entry.row.healthState]}
+                      </span>
+                      {entry.row.healthState !== 'ready' && (
+                        <button
+                          type="button"
+                          onClick={() => setScreen('mcps')}
+                          className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline shrink-0"
+                        >
+                          Configure →
+                        </button>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-xs font-medium font-mono">{entry.id}</span>
+                      <span className="text-xs text-amber-600 dark:text-amber-400 ml-1.5">Not installed</span>
+                    </>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void removeMcp(entry.id)}
+                  className="shrink-0 text-neutral-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                >
+                  <Trash2 size={13} strokeWidth={1.75} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          installedMcps.length === 0 && mcpsToAdd.length === 0 && (
+            <p className="text-xs text-neutral-400 dark:text-neutral-600 italic">
+              No MCPs installed — visit the MCPs screen to add integrations.
+            </p>
+          )
+        )}
       </div>
 
       <div className="flex items-center justify-between pt-2">

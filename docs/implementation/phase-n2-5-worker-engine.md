@@ -31,7 +31,7 @@ MCPs participate in worker runs. Workers with unconfigured MCPs are blocked befo
 - [x] **`meta.json` in run folder** records active MCPs: `"mcps_active": ["gmail", "google-calendar"]`
 - [x] Run summary (Layer 2) shows "MCPs used: Gmail, Calendar"
 - [x] **Mock adapter updated** — simulates MCPs without launching real processes; scriptable responses for testing
-- [ ] **Source step MCP support (follow-on):** extend `SourceStepConfig` to include `mcps: string[]`; wire the same pre-flight check (abort if any MCP is not Ready, log `run_aborted_mcp_not_ready`) and credential-injection path into `source-runner.ts`. UI work tracked in N3.2.
+- [x] **Source step MCP support (follow-on):** extend `SourceStepConfig` to include `mcps: string[]`; wire the same pre-flight check (abort if any MCP is not Ready, log `run_aborted_mcp_not_ready`) and credential-injection path into `source-runner.ts`. UI work tracked in N3.2.
 
 ---
 

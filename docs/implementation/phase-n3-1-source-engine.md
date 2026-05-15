@@ -54,9 +54,9 @@ Build the complete backend for Source steps: scheduling, AI execution, JSON pars
 
 ### MCP Support
 
-- [ ] Add `mcps: string[]` field to `SourceStepConfig` (default `[]`)
-- [ ] Pre-flight check before each source run: resolve each MCP id; if any is not installed or not in Ready state → abort the run, emit `source_run_failed` with code `run_aborted_mcp_not_ready`, log the blocking MCP name
-- [ ] Credential injection: read credentials from keychain and pass to the adapter's `spawn()` call exactly as workers do (N2.5 path)
+- [x] Add `mcps?: string[]` field to `SourceStepConfig` (defaults to `[]` at runtime)
+- [x] Pre-flight check before each source run: resolve each MCP id; if any is not installed, disabled, or not configured → abort, log `run_aborted_mcp_not_ready`, throw with the blocking MCP name
+- [x] Credential injection: read credentials from keychain and pass to the adapter's `spawn()` call exactly as workers do (N2.5 path)
 - [ ] Update `source:get-state` IPC response to include `mcps: string[]` so the UI can display the assigned MCPs
 
 ### Crash Recovery
