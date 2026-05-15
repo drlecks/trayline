@@ -29,7 +29,7 @@
           "id": "dirs",
           "type": "text_field",
           "title": "Allowed Directories",
-          "body": "Enter the full paths of directories to allow, separated by commas. For example: /Users/you/Documents, /Users/you/Desktop",
+          "body": "Enter the full paths of directories to allow, separated by commas.\nExample: /Users/you/Documents, /Users/you/Desktop",
           "credential_id": "allowed_dirs"
         }
       ]
@@ -243,6 +243,18 @@
       "tags": ["google", "drive", "files", "oauth"],
       "credentials_schema": [
         {
+          "id": "GOOGLE_CLIENT_ID",
+          "label": "Google OAuth Client ID",
+          "description": "From a Google Cloud project with Drive API enabled. See console.cloud.google.com.",
+          "kind": "text_field"
+        },
+        {
+          "id": "GOOGLE_CLIENT_SECRET",
+          "label": "Google OAuth Client Secret",
+          "description": "From the same Google Cloud OAuth application.",
+          "kind": "api_key"
+        },
+        {
           "id": "google_oauth_token",
           "label": "Google Account",
           "description": "Sign in with Google to grant Drive access.",
@@ -254,17 +266,34 @@
           "id": "intro",
           "type": "info",
           "title": "Connect Google Drive",
-          "body": "Trayline will request permission to access your Google Drive. Your credentials are stored securely in your OS keychain."
+          "body": "Trayline connects to Google Drive via your own Google Cloud OAuth application. This gives you full control over permissions.\n\n1. Go to console.cloud.google.com\n2. Create a project, enable the Drive API\n3. Create OAuth 2.0 credentials (type: Desktop app)\n4. Copy the Client ID and Client Secret below"
+        },
+        {
+          "id": "client_id",
+          "type": "text_field",
+          "title": "OAuth Client ID",
+          "body": "Paste the Client ID from your Google Cloud OAuth credentials.",
+          "credential_id": "GOOGLE_CLIENT_ID"
+        },
+        {
+          "id": "client_secret",
+          "type": "api_key",
+          "title": "OAuth Client Secret",
+          "body": "Paste the Client Secret from your Google Cloud OAuth credentials.",
+          "credential_id": "GOOGLE_CLIENT_SECRET"
         },
         {
           "id": "oauth",
           "type": "oauth",
           "title": "Sign in with Google",
+          "body": "Click the button below to open Google's authorization page in your browser.",
           "provider": "google",
           "scopes": [
             "https://www.googleapis.com/auth/drive"
           ],
-          "credential_id": "google_oauth_token"
+          "credential_id": "google_oauth_token",
+          "client_id_key": "GOOGLE_CLIENT_ID",
+          "client_secret_key": "GOOGLE_CLIENT_SECRET"
         },
         {
           "id": "verify",
@@ -283,6 +312,18 @@
       "tags": ["google", "email", "gmail", "oauth"],
       "credentials_schema": [
         {
+          "id": "GOOGLE_CLIENT_ID",
+          "label": "Google OAuth Client ID",
+          "description": "From a Google Cloud project with Gmail API enabled.",
+          "kind": "text_field"
+        },
+        {
+          "id": "GOOGLE_CLIENT_SECRET",
+          "label": "Google OAuth Client Secret",
+          "description": "From the same Google Cloud OAuth application.",
+          "kind": "api_key"
+        },
+        {
           "id": "google_oauth_token",
           "label": "Google Account",
           "description": "Sign in with Google to grant Gmail access.",
@@ -294,18 +335,35 @@
           "id": "intro",
           "type": "info",
           "title": "Connect Gmail",
-          "body": "Trayline will request permission to read and send email via your Gmail account. Your credentials are stored securely in your OS keychain."
+          "body": "Trayline connects to Gmail via your own Google Cloud OAuth application.\n\n1. Go to console.cloud.google.com\n2. Create a project, enable the Gmail API\n3. Create OAuth 2.0 credentials (type: Desktop app)\n4. Copy the Client ID and Client Secret below"
+        },
+        {
+          "id": "client_id",
+          "type": "text_field",
+          "title": "OAuth Client ID",
+          "body": "Paste the Client ID from your Google Cloud OAuth credentials.",
+          "credential_id": "GOOGLE_CLIENT_ID"
+        },
+        {
+          "id": "client_secret",
+          "type": "api_key",
+          "title": "OAuth Client Secret",
+          "body": "Paste the Client Secret from your Google Cloud OAuth credentials.",
+          "credential_id": "GOOGLE_CLIENT_SECRET"
         },
         {
           "id": "oauth",
           "type": "oauth",
           "title": "Sign in with Google",
+          "body": "Click the button below to open Google's authorization page in your browser.",
           "provider": "google",
           "scopes": [
             "https://www.googleapis.com/auth/gmail.readonly",
             "https://www.googleapis.com/auth/gmail.send"
           ],
-          "credential_id": "google_oauth_token"
+          "credential_id": "google_oauth_token",
+          "client_id_key": "GOOGLE_CLIENT_ID",
+          "client_secret_key": "GOOGLE_CLIENT_SECRET"
         },
         {
           "id": "verify",
@@ -324,6 +382,18 @@
       "tags": ["google", "calendar", "scheduling", "oauth"],
       "credentials_schema": [
         {
+          "id": "GOOGLE_CLIENT_ID",
+          "label": "Google OAuth Client ID",
+          "description": "From a Google Cloud project with Calendar API enabled.",
+          "kind": "text_field"
+        },
+        {
+          "id": "GOOGLE_CLIENT_SECRET",
+          "label": "Google OAuth Client Secret",
+          "description": "From the same Google Cloud OAuth application.",
+          "kind": "api_key"
+        },
+        {
           "id": "google_oauth_token",
           "label": "Google Account",
           "description": "Sign in with Google to grant Calendar access.",
@@ -335,17 +405,34 @@
           "id": "intro",
           "type": "info",
           "title": "Connect Google Calendar",
-          "body": "Trayline will request permission to read and write your Google Calendar. Your credentials are stored securely in your OS keychain."
+          "body": "Trayline connects to Google Calendar via your own Google Cloud OAuth application.\n\n1. Go to console.cloud.google.com\n2. Create a project, enable the Calendar API\n3. Create OAuth 2.0 credentials (type: Desktop app)\n4. Copy the Client ID and Client Secret below"
+        },
+        {
+          "id": "client_id",
+          "type": "text_field",
+          "title": "OAuth Client ID",
+          "body": "Paste the Client ID from your Google Cloud OAuth credentials.",
+          "credential_id": "GOOGLE_CLIENT_ID"
+        },
+        {
+          "id": "client_secret",
+          "type": "api_key",
+          "title": "OAuth Client Secret",
+          "body": "Paste the Client Secret from your Google Cloud OAuth credentials.",
+          "credential_id": "GOOGLE_CLIENT_SECRET"
         },
         {
           "id": "oauth",
           "type": "oauth",
           "title": "Sign in with Google",
+          "body": "Click the button below to open Google's authorization page in your browser.",
           "provider": "google",
           "scopes": [
             "https://www.googleapis.com/auth/calendar"
           ],
-          "credential_id": "google_oauth_token"
+          "credential_id": "google_oauth_token",
+          "client_id_key": "GOOGLE_CLIENT_ID",
+          "client_secret_key": "GOOGLE_CLIENT_SECRET"
         },
         {
           "id": "verify",
@@ -361,7 +448,7 @@
       "description": "Read comments and mentions, reply to comments, and send DMs on Instagram Business or Creator accounts.",
       "install_method": "npm",
       "command_template": "npx -y mcp-instagram",
-      "tags": ["instagram", "social", "comments", "messaging", "oauth"],
+      "tags": ["instagram", "social", "comments", "messaging"],
       "homepage": "https://developers.facebook.com/docs/instagram-api",
       "credentials_schema": [
         {
@@ -395,7 +482,7 @@
           "id": "account_id",
           "type": "text_field",
           "title": "Business Account ID",
-          "body": "Enter your Instagram Business Account ID. Find it in the Meta Business Suite under Account Settings, or via the Graph API Explorer: GET /me/accounts → select your page → GET /{page-id}?fields=instagram_business_account.",
+          "body": "Enter your Instagram Business Account ID. Find it in the Meta Business Suite under Account Settings, or via the Graph API Explorer.",
           "credential_id": "INSTAGRAM_BUSINESS_ACCOUNT_ID"
         },
         {

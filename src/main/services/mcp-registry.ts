@@ -25,6 +25,8 @@ const McpSetupStepSchema = z.object({
   options: z.array(z.object({ label: z.string(), value: z.string() })).optional(),
   provider: z.string().optional(),
   scopes: z.array(z.string()).optional(),
+  client_id_key: z.string().optional(),
+  client_secret_key: z.string().optional(),
 })
 
 const McpCredentialSchemaEntrySchema = z.object({
