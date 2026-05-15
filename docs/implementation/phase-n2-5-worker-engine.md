@@ -9,8 +9,6 @@
 
 MCPs participate in worker runs. Workers with unconfigured MCPs are blocked before execution starts.
 
-> **Note — Source step MCP gap:** Source steps (`source-runner.ts`) currently hard-code `mcps: []` and `SourceStepConfig` has no `mcps` field. This means a source step cannot poll an external API (e.g. Instagram comments) via an MCP. The workaround is OS environment variables, but the proper fix is to extend this phase (or add a follow-on task) to support MCP injection in source runs using the same pre-flight + credential-injection path as workers.
-
 ---
 
 ## Tasks
@@ -33,6 +31,7 @@ MCPs participate in worker runs. Workers with unconfigured MCPs are blocked befo
 - [x] **`meta.json` in run folder** records active MCPs: `"mcps_active": ["gmail", "google-calendar"]`
 - [x] Run summary (Layer 2) shows "MCPs used: Gmail, Calendar"
 - [x] **Mock adapter updated** — simulates MCPs without launching real processes; scriptable responses for testing
+- [ ] **Source step MCP support (follow-on):** extend `SourceStepConfig` to include `mcps: string[]`; wire the same pre-flight check (abort if any MCP is not Ready, log `run_aborted_mcp_not_ready`) and credential-injection path into `source-runner.ts`. UI work tracked in N3.2.
 
 ---
 

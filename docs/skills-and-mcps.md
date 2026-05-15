@@ -93,9 +93,11 @@ This enables **Update** (re-clone and revalidate for URL-sourced skills) and ful
 
 ### What an MCP Is in Trayline
 
-An MCP is an installable global dependency (like a skill) that a worker can activate (like a skill). The key difference: **an MCP is a real process that runs**, while a skill is text injected into a prompt. A skill tells the agent *how* to do something; an MCP gives it *the power* to do it.
+An MCP is an installable global dependency (like a skill) that a worker or source step can activate. The key difference from skills: **an MCP is a real process that runs**, while a skill is text injected into a prompt. A skill tells the agent *how* to do something; an MCP gives it *the power* to do it.
 
-When a worker runs with MCPs activated, the AI Terminal Adapter launches the corresponding MCP processes (or reuses already-running ones) and connects them to the agent session via stdio — the adapter handles the details. The worker learns what tools are available because the MCP announces them automatically to the agent on connect.
+When a worker (or source step — see below) runs with MCPs activated, the AI Terminal Adapter launches the corresponding MCP processes (or reuses already-running ones) and connects them to the agent session via stdio — the adapter handles the details. The worker learns what tools are available because the MCP announces them automatically to the agent on connect.
+
+**Source steps and MCPs:** Source steps run the same AI Terminal Adapter as workers and therefore benefit from MCP access in the same way — e.g., an Instagram Comments source needs an Instagram MCP to authenticate and fetch data. The `SourceStepConfig` schema and pre-flight/credential-injection path are being extended to support `mcps: string[]` (tracked in N3.1 / N3.2). Until that work lands, sources must use OS environment variables as a workaround.
 
 ### Curated Catalog
 
