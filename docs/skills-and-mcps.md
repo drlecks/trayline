@@ -102,17 +102,15 @@ When a worker runs with MCPs activated, the AI Terminal Adapter launches the cor
 Trayline embeds a curated catalog of well-known MCPs shown to the user even if not installed. Catalog lives in `app-data/mcps-catalog.json` (seeded from app bundle on first launch).
 
 Initial catalog:
-- **Gmail** — read, search, send emails via SMTP + App Password (no Google Cloud project needed)
-- **Brave Search** — web search using Brave Search API
-- **GitHub** — issues, PRs, repos, files
-- **Slack** — read channels, post messages
-- **Notion** — read and edit pages and databases
-- **Instagram** — post and manage content
 - **Filesystem** — read/write files with a configurable root directory (works great with Google Drive's local sync folder)
 - **Fetch** — arbitrary HTTP requests
 - **Memory** — persistent key-value store for the agent
+- **GitHub** — issues, PRs, repos, files via Personal Access Token
+- **Brave Search** — web search using Brave Search API key
+- **Slack** — read channels, post messages via Bot Token
+- **Notion** — read and edit pages and databases via Integration Token
 
-Trayline does not support OAuth-based MCPs. All credentials are simple key/value pairs (API keys, passwords, tokens) stored in the OS keychain via keytar. Google Drive and Google Calendar are not in the catalog — access Google Drive content via the Filesystem MCP pointed at the local Google Drive sync folder.
+Trayline does not support OAuth-based MCPs. All credentials are simple key/value pairs (API keys, tokens, paths) stored in the OS keychain via keytar. MCPs that require a developer account or app review process (Google, Meta/Instagram, etc.) are intentionally excluded.
 
 Showing an MCP in the catalog doesn't mean it's installed — it means Trayline knows how to install and configure it.
 
