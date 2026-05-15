@@ -10,14 +10,12 @@ import { cardService } from '../services/card-service'
 import { workerRunner } from '../services/worker-runner'
 import { sourceRunner } from '../services/source-runner'
 import { sourceScheduler } from '../services/source-scheduler'
-import { watcherService } from '../services/watcher-service'
-import { schedulerService } from '../services/scheduler-service'
 import { skillService } from '../services/skill-service'
 import { mcpRegistry } from '../services/mcp-registry'
 import { mcpCredentials } from '../services/mcp-credentials'
 import { testConnection } from '../services/mcp-connection-test'
-import { queueService } from '../services/queue-service'
 import { exportService } from '../services/export-service'
+import { orchestrator } from '../services/orchestrator'
 import { join } from 'path'
 import { fsService } from '../services/fs-service'
 import type { BootstrapInfo, ProviderInstallSuggestion, ProviderReadyResult, ExportOptions, ImportSuccess, SourceStepConfig, McpStatus } from '../../shared/types'
@@ -95,40 +93,34 @@ export function registerIpcHandlers(
     projectService.deleteContextFile(project, file),
   )
   ipcMain.handle('project:create', async (_: unknown, description: string, opts?: { regenerateOf?: string }) => {
-    // If regenerating, tear down watchers for the old project's workflows
-    // before scaffolding overwrites the folders.
     if (opts?.regenerateOf) {
-      const oldWorkflows = await projectService.listWorkflows(opts.regenerateOf).catch(() => [])
-      for (const w of oldWorkflows) {
-        await watcherService.unmountWorkflow(opts.regenerateOf, w.name)
-        schedulerService.unmountWorkflow(opts.regenerateOf, w.name)
-        sourceScheduler.unmountWorkflow(opts.regenerateOf, w.name)
-        await queueService.unmountWorkflow(opts.regenerateOf, w.name)
-      }
+      await orchestrator.unmountProject(opts.regenerateOf)
     }
     const result = await projectCreateService.createFromDescription(description, opts)
     if (result.ok) {
-      const workflows = await projectService.listWorkflows(result.project.name).catch(() => [])
-      for (const w of workflows) {
-        await watcherService.mountWorkflow(result.project.name, w.name)
-        await schedulerService.mountWorkflow(result.project.name, w.name)
-        await sourceScheduler.mountWorkflow(result.project.name, w.name)
-        await queueService.mountWorkflow(result.project.name, w.name)
-      }
+      await orchestrator.mountProject(result.project.name)
     }
     return result
   })
-  ipcMain.handle('project:setStatus', (_: unknown, name: string, status: 'active' | 'inactive') =>
-    projectService.setStatus(name, status),
-  )
-  ipcMain.handle('project:delete', async (_: unknown, name: string) => {
-    const workflows = await projectService.listWorkflows(name).catch(() => [])
-    for (const w of workflows) {
-      await watcherService.unmountWorkflow(name, w.name)
-      schedulerService.unmountWorkflow(name, w.name)
-      sourceScheduler.unmountWorkflow(name, w.name)
-      await queueService.unmountWorkflow(name, w.name)
+  ipcMain.handle('project:setStatus', async (_: unknown, name: string, status: 'active' | 'inactive') => {
+    const meta = await projectService.setStatus(name, status)
+    if (status === 'active') {
+      await orchestrator.mountProject(name)
+    } else {
+      await orchestrator.unmountProject(name)
     }
+    const mounted = orchestrator.isMounted(name)
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) win.webContents.send('project:onStatusChanged', { name, status, mounted })
+    }
+    return meta
+  })
+  ipcMain.handle('project:getOrchestration', (_: unknown, name: string) => ({
+    name,
+    mounted: orchestrator.isMounted(name),
+  }))
+  ipcMain.handle('project:delete', async (_: unknown, name: string) => {
+    await orchestrator.unmountProject(name)
     await projectCreateService.deleteProject(name)
   })
 
@@ -154,29 +146,14 @@ export function registerIpcHandlers(
     const result = await exportService.importProject(filePaths[0])
     // Only mount if immediately committed (clean scan); needs_review defers to importCommit
     if (result.ok === true) {
-      const workflows = await projectService.listWorkflows(result.projectName).catch(() => [])
-      for (const w of workflows) {
-        await watcherService.mountWorkflow(result.projectName, w.name)
-        await schedulerService.mountWorkflow(result.projectName, w.name)
-        await queueService.mountWorkflow(result.projectName, w.name)
-      }
+      await orchestrator.mountProject(result.projectName)
     }
     return result
   })
 
-  const mountProject = async (projectName: string) => {
-    const workflows = await projectService.listWorkflows(projectName).catch(() => [])
-    for (const w of workflows) {
-      await watcherService.mountWorkflow(projectName, w.name)
-      await schedulerService.mountWorkflow(projectName, w.name)
-      await sourceScheduler.mountWorkflow(projectName, w.name)
-      await queueService.mountWorkflow(projectName, w.name)
-    }
-  }
-
   ipcMain.handle('project:importCommit', async (_: unknown, token: string): Promise<ImportSuccess> => {
     const result = await exportService.commitImport(token)
-    await mountProject(result.projectName)
+    await orchestrator.mountProject(result.projectName)
     return result
   })
 
@@ -186,7 +163,7 @@ export function registerIpcHandlers(
 
   ipcMain.handle('project:openExample', async () => {
     const result = await exportService.openExampleProject()
-    await mountProject(result.projectName)
+    await orchestrator.mountProject(result.projectName)
     return result
   })
 
@@ -269,12 +246,8 @@ export function registerIpcHandlers(
   // ── Steps (trays/workers/sources) ────────────────────────────────────────
   // Wrap mutating handlers so the workflow's watchers are re-mounted after
   // structural changes (added/removed step, new worker trigger config).
-  const remount = async (i: { project: string; workflow: string }) => {
-    await watcherService.remountWorkflow(i.project, i.workflow)
-    await schedulerService.remountWorkflow(i.project, i.workflow)
-    await sourceScheduler.remountWorkflow(i.project, i.workflow)
-    await queueService.remountWorkflow(i.project, i.workflow)
-  }
+  const remount = (i: { project: string; workflow: string }) =>
+    orchestrator.remountWorkflow(i.project, i.workflow)
 
   ipcMain.handle('step:addTray', async (_: unknown, input: Parameters<typeof stepService.addTray>[0]) => {
     const r = await stepService.addTray(input)

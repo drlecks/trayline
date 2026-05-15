@@ -12,7 +12,7 @@ Make `project.status` a real on/off gate for orchestration. Today all three moun
 
 ## Tasks
 
-- [ ] **`orchestrator` service** (`src/main/services/orchestrator.ts`):
+- [x] **`orchestrator` service** (`src/main/services/orchestrator.ts`):
   - `mountProject(name)` — mounts watchers + scheduler + source-scheduler + queue for all of the project's workflows. No-op if already mounted.
   - `unmountProject(name)` — reverses all mounts. No-op if not mounted.
   - `isMounted(name) → boolean`
@@ -20,17 +20,17 @@ Make `project.status` a real on/off gate for orchestration. Today all three moun
   - `unmountAll()` — calls `unmountProject` for every currently mounted project
   - Internal `mounted: Set<string>` tracks which projects are currently live
 
-- [ ] **Replace the four separate `mountAll()` / `stopAll()` calls** in `src/main/index.ts`:
+- [x] **Replace the four separate `mountAll()` / `stopAll()` calls** in `src/main/index.ts`:
   - Startup `whenReady`: replace `watcherService.mountAll()` + `schedulerService.mountAll()` + `sourceScheduler.mountAll()` + `queueService.mountAll()` with a single `await orchestrator.mountAll()`
   - `before-quit`: replace the four unmount/stop calls with `await orchestrator.unmountAll()`
 
-- [ ] **Remove the local `mountProject` helper from `handlers.ts`** and replace all callers (`project:create`, `project:import`, `project:importCommit`, `project:openExample`) with `orchestrator.mountProject(projectName)`
+- [x] **Remove the local `mountProject` helper from `handlers.ts`** and replace all callers (`project:create`, `project:import`, `project:importCommit`, `project:openExample`) with `orchestrator.mountProject(projectName)`
 
-- [ ] **Wire `project:setStatus` handler** in `handlers.ts`: after writing status to disk, call `orchestrator.mountProject(name)` (active) or `orchestrator.unmountProject(name)` (inactive), then broadcast `project:status-changed` to all renderer windows: `{ name, status, mounted: boolean }`
+- [x] **Wire `project:setStatus` handler** in `handlers.ts`: after writing status to disk, call `orchestrator.mountProject(name)` (active) or `orchestrator.unmountProject(name)` (inactive), then broadcast `project:status-changed` to all renderer windows: `{ name, status, mounted: boolean }`
 
-- [ ] **`project:get-orchestration` IPC handler** — returns `{ name, mounted: boolean }` for a given project name. Used by the renderer to show accurate state on initial load.
+- [x] **`project:get-orchestration` IPC handler** — returns `{ name, mounted: boolean }` for a given project name. Used by the renderer to show accurate state on initial load.
 
-- [ ] **Tests** for `orchestrator.ts`:
+- [x] **Tests** for `orchestrator.ts`:
   - `mountAll` only mounts active projects (inactive ones stay unmounted)
   - `mountProject` is idempotent (double-mount is a no-op)
   - `unmountProject` tears down all four services for that project
