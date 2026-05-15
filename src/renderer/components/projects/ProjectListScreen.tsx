@@ -307,10 +307,10 @@ export default function ProjectListScreen() {
                 : 'Active — click to deactivate'
 
           const runningCount = (stats?.runningWorkers ?? 0) + (stats?.runningSources ?? 0)
+          const errorCount = stats?.errorCards ?? 0
           const statParts: string[] = []
           if (runningCount > 0) statParts.push(`⚙ ${runningCount} running`)
           if ((stats?.pendingCards ?? 0) > 0) statParts.push(`${stats!.pendingCards} pending`)
-          if ((stats?.errorCards ?? 0) > 0) statParts.push(`⚠ ${stats!.errorCards} error${stats!.errorCards > 1 ? 's' : ''}`)
 
           return (
             <li key={p.name}>
@@ -344,9 +344,15 @@ export default function ProjectListScreen() {
                         {p.description}
                       </div>
                     )}
-                    {statParts.length > 0 && (
-                      <div className="text-xs text-neutral-400 dark:text-neutral-500 truncate mt-0.5">
+                    {(statParts.length > 0 || errorCount > 0) && (
+                      <div className="text-xs text-neutral-400 dark:text-neutral-500 truncate mt-0.5 flex items-center gap-1">
                         {statParts.join('  •  ')}
+                        {statParts.length > 0 && errorCount > 0 && <span>•</span>}
+                        {errorCount > 0 && (
+                          <span className="text-red-500 dark:text-red-400">
+                            ⚠ {errorCount} error{errorCount > 1 ? 's' : ''}
+                          </span>
+                        )}
                       </div>
                     )}
                   </div>
