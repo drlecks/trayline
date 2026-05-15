@@ -86,8 +86,9 @@ export interface ProjectMeta {
   description: string
   created_at: string
   /**
-   * Workflow status. Hooks for future features (scheduling, watchers, etc.)
-   * may gate themselves on this. Defaults to 'active' on read when absent.
+   * Orchestration gate: 'active' projects have their watchers and schedulers
+   * mounted; 'inactive' projects do not run until re-activated.
+   * Defaults to 'active' on read when absent.
    */
   status: ProjectStatus
   /**

@@ -9,10 +9,7 @@ import { mcpRegistry } from './services/mcp-registry'
 import { skillService } from './services/skill-service'
 import { workerRunner, setRunEventBroadcast } from './services/worker-runner'
 import { sourceRunner, setSourceEventBroadcast } from './services/source-runner'
-import { sourceScheduler } from './services/source-scheduler'
-import { watcherService } from './services/watcher-service'
-import { schedulerService } from './services/scheduler-service'
-import { queueService } from './services/queue-service'
+import { orchestrator } from './services/orchestrator'
 import { setupAutoUpdater } from './services/auto-update-service'
 import { registerIpcHandlers } from './ipc/handlers'
 import { dirnameFromMeta } from './util/paths'
@@ -188,17 +185,8 @@ app.whenReady().then(async () => {
     createWindow()
     stage('createWindow returned')
 
-    await watcherService.mountAll()
-    stage('watcherService.mountAll done')
-
-    await schedulerService.mountAll()
-    stage('schedulerService.mountAll done')
-
-    await sourceScheduler.mountAll()
-    stage('sourceScheduler.mountAll done')
-
-    await queueService.mountAll()
-    stage('queueService.mountAll done')
+    await orchestrator.mountAll()
+    stage('orchestrator.mountAll done')
 
     setupAutoUpdater(stage)
 
@@ -225,8 +213,5 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
-  void watcherService.unmountAll()
-  void queueService.unmountAll()
-  schedulerService.stopAll()
-  sourceScheduler.stopAll()
+  void orchestrator.unmountAll()
 })
