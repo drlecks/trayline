@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from 'react'
-import { Rss, Play, Pause, RotateCcw, AlertTriangle } from 'lucide-react'
+import { Rss, Play, Pause, RotateCcw, AlertTriangle, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -296,6 +296,8 @@ function SourceConfigTab({
   step: StepMeta
   onStateChange: () => Promise<void>
 }) {
+  const refreshSteps = useProjectStore((s) => s.refreshSteps)
+  const setSelectedStepId = useProjectStore((s) => s.setSelectedStepId)
   const [config, setConfig] = useState<Partial<SourceStepConfig>>({})
   const [loaded, setLoaded] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -321,6 +323,19 @@ function SourceConfigTab({
       await onStateChange()
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function handleDelete() {
+    if (!confirm(`Delete source "${step.name}"? This cannot be undone.`)) return
+    setSaving(true)
+    try {
+      await window.trayline.step.delete({ project, workflow, stepId: step.id })
+      setSelectedStepId(null)
+      await refreshSteps()
+    } catch (e) {
+      setSaving(false)
+      alert(e instanceof Error ? e.message : String(e))
     }
   }
 
@@ -426,7 +441,12 @@ function SourceConfigTab({
         </div>
       </div>
 
-      {saving && <p className="text-xs text-neutral-500">Saving…</p>}
+      <div className="flex items-center justify-between pt-2">
+        <Button size="sm" variant="ghost" onClick={handleDelete} disabled={saving} className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/40">
+          <Trash2 size={13} strokeWidth={1.75} /> Delete source
+        </Button>
+        {saving && <p className="text-xs text-neutral-500">Saving…</p>}
+      </div>
     </div>
   )
 }
