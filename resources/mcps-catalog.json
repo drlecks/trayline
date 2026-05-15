@@ -142,26 +142,6 @@
       "tags": ["web", "browser", "automation"]
     },
     {
-      "id": "google-drive",
-      "name": "Google Drive",
-      "version": "1.0.0",
-      "description": "Read files, list folders, and search documents in Google Drive.",
-      "install_method": "npm",
-      "command_template": "npx -y @modelcontextprotocol/server-google-drive",
-      "instructions": "Google Drive requires OAuth credentials from a Google Cloud project.\n\n1. Go to console.cloud.google.com and create a project\n2. Enable the Google Drive API\n3. Create OAuth 2.0 credentials (Desktop app type)\n4. Download the credentials JSON and paste the full contents below\n\nThe credentials JSON is stored securely in your OS keychain.",
-      "credentials_schema": [
-        {
-          "id": "GDRIVE_OAUTH_CREDENTIALS",
-          "label": "OAuth Credentials JSON",
-          "description": "Paste the full JSON from the downloaded OAuth 2.0 credentials file.",
-          "kind": "api_key"
-        }
-      ],
-      "has_test": false,
-      "tags": ["google", "files", "storage"],
-      "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/gdrive"
-    },
-    {
       "id": "macos-apps",
       "name": "macOS Apps",
       "version": "1.0.0",
