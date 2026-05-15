@@ -102,16 +102,17 @@ When a worker runs with MCPs activated, the AI Terminal Adapter launches the cor
 Trayline embeds a curated catalog of well-known MCPs shown to the user even if not installed. Catalog lives in `app-data/mcps-catalog.json` (seeded from app bundle on first launch).
 
 Initial catalog:
-- **Gmail** — read, search, send emails
-- **Google Calendar** — read events, create events, modify
-- **Google Drive** — list, read, create, edit files
-- **Web Browse** — headless web browsing with content extraction
+- **Gmail** — read, search, send emails via SMTP + App Password (no Google Cloud project needed)
+- **Brave Search** — web search using Brave Search API
 - **GitHub** — issues, PRs, repos, files
 - **Slack** — read channels, post messages
 - **Notion** — read and edit pages and databases
-- **Filesystem** — read/write files (with configurable scope)
+- **Instagram** — post and manage content
+- **Filesystem** — read/write files with a configurable root directory (works great with Google Drive's local sync folder)
 - **Fetch** — arbitrary HTTP requests
 - **Memory** — persistent key-value store for the agent
+
+Trayline does not support OAuth-based MCPs. All credentials are simple key/value pairs (API keys, passwords, tokens) stored in the OS keychain via keytar. Google Drive and Google Calendar are not in the catalog — access Google Drive content via the Filesystem MCP pointed at the local Google Drive sync folder.
 
 Showing an MCP in the catalog doesn't mean it's installed — it means Trayline knows how to install and configure it.
 
@@ -121,7 +122,6 @@ Showing an MCP in the catalog doesn't mean it's installed — it means Trayline 
 |---|---|
 | ✓ Ready | Green — installed, configured, last health check OK |
 | ⚠ Setup needed | Amber — installed but credentials missing |
-| ⚠ Auth expired | Amber — OAuth credentials expired; "Reconnect" relaunches OAuth |
 | ✗ Error | Desaturated red — last health check failed; **View logs** + **Run health check** in `⋯` menu |
 | ⏸ Disabled | Gray — manually disabled; won't start even if a worker has it marked |
 
@@ -129,18 +129,15 @@ Showing an MCP in the catalog doesn't mean it's installed — it means Trayline 
 
 ### The Setup Wizard
 
-A linear next/back/cancel modal. Steps are declared in `mcp.json` under `setup_steps`. Supported step types in MVP:
+A linear next/back/cancel modal. Steps are derived dynamically from three fields in `mcp.json`:
 
-| Type | Behavior |
+| Source field | Wizard step |
 |---|---|
-| `info` | Text-only, with optional external links |
-| `api_key` | Single text field (secret), value stored in OS keychain |
-| `text_field` | Non-secret field (e.g. workspace URL), stored in MCP `state/` |
-| `select` | Dropdown (e.g. region) |
-| `oauth` | Opens OS browser to provider URL, spins up an ephemeral local server to capture callback, stores tokens in keychain. Supports Google (provider `google`) and generic OAuth 2.0 with PKCE |
-| `test_connection` | Spawns the MCP in dry-run mode, pings it, captures result |
+| `instructions?: string` | Info screen (plain text, shown first) |
+| `credentials_schema[]` (each entry) | One input per credential — masked for `api_key`, plain for `text_field` |
+| `has_test?: boolean` | Connection test screen (shown last if `true`) |
 
-Aborting the wizard at any step leaves the MCP in its previous state — nothing is persisted mid-wizard.
+All credential values are held in memory during the wizard and committed to the OS keychain only immediately before the test step (or on Finish if there is no test). Aborting the wizard at any step calls `delete-credentials` to clean up any partial keychain state — the MCP returns to *Setup needed*.
 
 ### MCP Execution Flow
 

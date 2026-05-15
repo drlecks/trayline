@@ -1,57 +1,47 @@
 # Phase N2.4 — Setup Wizard
 
-**Estimate:** 1 week  
-**High risk:** OAuth in Electron has OS-specific quirks (deep-link handling, ephemeral local server, browser open)
+**Estimate:** 1 week
 
 ---
 
 ## Goals
 
-A generic, reusable setup wizard that any MCP can drive through its `setup_steps` declaration.
+A generic, reusable setup wizard that any MCP can drive through three fields in its `mcp.json`:
+`instructions` (plain text intro), `credentials_schema` (list of required credentials), and `has_test` (whether to run a connection test at the end).
+
+No OAuth. All credentials are simple key/value pairs (API keys, tokens, usernames) stored in the OS keychain via keytar.
 
 ---
 
 ## Tasks
 
-- [x] **Generic wizard component** — linear next/back/cancel modal with progress bar; reads `setup_steps` from `mcp.json`
-- [x] **Step type: `info`** — text display with optional external links
-- [x] **Step type: `text_field`** — non-secret input (e.g. workspace URL), saved to OS keychain via keytar
-- [x] **Step type: `api_key`** — secret text input (masked), saved to OS keychain via keytar
-- [x] **Step type: `select`** — dropdown of options (e.g. region)
-- [x] **Step type: `oauth`**:
-  - Spin up an ephemeral local HTTP server on a random port to capture the OAuth callback
-  - Open the OS browser at the provider's authorization URL (with correct scopes, state, PKCE)
-  - Wait for callback, exchange code for tokens
-  - Store tokens in OS keychain under `credential_id`
-  - Support at least: `provider: "google"` (OAuth 2.0 with PKCE) and generic OAuth 2.0 with PKCE
-  - UI shows *"Waiting for you to authorize in your browser..."* with a **Cancel** button
-  - Handle timeout (after 5 minutes, cancel and show error)
-- [x] **Step type: `test_connection`**:
-  - Spawn the MCP process in dry-run/health-check mode
-  - Ping it with a standard test request
-  - Show result: success or error message
-  - Allow user to go back and re-enter credentials if it fails
-- [x] Aborting the wizard at any step: nothing is persisted mid-wizard — MCP stays in its previous state
-- [x] Auto-chain wizard after install from catalog (if the MCP has `setup_steps`)
+- [x] **Generic wizard component** — linear next/back/cancel modal with progress bar
+- [x] **Dynamic step generation** — wizard builds `InternalStep[]` at runtime from `manifest.instructions`, `manifest.credentials_schema`, and `manifest.has_test`; no `setup_steps` array in `mcp.json`
+- [x] **Step type: `info`** — plain text display from `manifest.instructions`
+- [x] **Step type: `credential`** — one input per `credentials_schema` entry; masked for `kind: 'api_key'`, plain for `kind: 'text_field'`
+- [x] **Step type: `test_connection`** — spawns the MCP process, sends JSON-RPC `initialize`, waits up to 15 s
+- [x] Credentials held in memory during wizard; committed to OS keychain immediately before test step (or on Finish if no test)
+- [x] Aborting the wizard at any step: calls `mcp:delete-credentials` to clean up partial keychain state
+- [x] Auto-chain wizard after install from catalog when `credentials_schema.length > 0`
 - [x] **Reset credentials** in the MCP detail panel re-runs the wizard from the start
+- [x] `mcp-connection-test.ts` — `testConnection(mcpId)`: reads manifest + reads all credentials from keychain, interpolates `{credId}` placeholders in `command_template`, remaining credentials become env vars, spawns with `shell: true`
 
 ---
 
 ## Acceptance Criteria
 
-- Completing the Gmail wizard (info → oauth → test_connection) results in MCP status changing to ✓ Ready
-- OAuth token is stored in OS keychain and not present in any file
+- Completing the GitHub wizard (instructions → token input → test_connection) results in MCP status changing to ✓ Ready
+- Completing the Filesystem wizard (instructions → folder path input) results in ✓ Ready without a test step
+- All credentials stored exclusively in OS keychain — never present in any file
 - Cancelling mid-wizard leaves the MCP in *Setup needed*
-- `test_connection` failure lets the user go back and fix credentials
+- `test_connection` failure shows an error and lets the user retry
 - Works on macOS, Windows, and Linux (with libsecret)
 
 ---
 
 ## Implementation Notes
 
-- OAuth flow: `mcp-oauth.ts` — ephemeral HTTP server on random port, PKCE (SHA-256), 5-minute timeout, stores full token JSON in keychain
-- Google OAuth MCPs (drive/gmail/calendar) updated in catalog to require user's own `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` (Desktop app type from Google Cloud Console); `client_id_key` / `client_secret_key` fields on the oauth step tell the handler which keychain entries to read
-- Connection test: `mcp-connection-test.ts` — spawns MCP with `shell:true`, sends JSON-RPC `initialize`, waits up to 15 s for a response
-- Cancel cleanup: wizard always calls `mcp:delete-credentials` on cancel (no-op if nothing committed)
-- Credentials flow: in-memory until the step before `oauth`/`test_connection`, then committed to keychain via `mcp:save-credential`
-- `McpSetupStep` type extended with `client_id_key?` and `client_secret_key?` optional fields
+- `McpSetupWizard.tsx` builds `InternalStep[]` from the manifest — no stored step declarations
+- `mcp-credentials.ts` — `deleteAllForMcp(mcpId)` uses `keytar.findCredentials` to purge all credentials for an MCP without needing the schema
+- `mcp-connection-test.ts` — spawns MCP with `shell: true`, sends JSON-RPC `initialize`, 15 s timeout
+- Catalog updated to schema v2: removed `setup_steps`, added `instructions` + `has_test`; removed Google Drive and Google Calendar; Gmail uses SMTP + App Password

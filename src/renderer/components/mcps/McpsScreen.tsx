@@ -678,7 +678,7 @@ export default function McpsScreen() {
         installedIds={installedIds}
         onInstalled={(row) => {
           void refresh()
-          if (row.manifest.setup_steps.length > 0 && row.manifest.credentials_schema.length > 0) {
+          if (row.manifest.credentials_schema.length > 0) {
             setWizardManifest(row.manifest)
           }
         }}

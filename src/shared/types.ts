@@ -343,28 +343,12 @@ export interface MissingSkillsEntry {
 
 export type McpInstallMethod = 'npm' | 'binary' | 'docker' | 'local'
 
-export type McpSetupStepType = 'info' | 'api_key' | 'text_field' | 'select' | 'oauth' | 'test_connection'
-
-export interface McpSetupStep {
-  id: string
-  type: McpSetupStepType
-  title: string
-  body?: string
-  credential_id?: string
-  options?: Array<{ label: string; value: string }>
-  provider?: string
-  scopes?: string[]
-  /** For oauth steps: which keychain credential holds the OAuth client_id. */
-  client_id_key?: string
-  /** For oauth steps: which keychain credential holds the OAuth client_secret. */
-  client_secret_key?: string
-}
-
 export interface McpCredentialSchemaEntry {
   id: string
   label: string
   description?: string
-  kind: 'api_key' | 'text_field' | 'oauth'
+  /** api_key → masked input; text_field → plain text input. Both stored in OS keychain. */
+  kind: 'api_key' | 'text_field'
 }
 
 export interface McpManifest {
@@ -374,8 +358,11 @@ export interface McpManifest {
   description: string
   install_method: McpInstallMethod
   command_template: string
+  /** Human-readable setup instructions shown before the credential inputs. */
+  instructions?: string
   credentials_schema: McpCredentialSchemaEntry[]
-  setup_steps: McpSetupStep[]
+  /** When true the setup wizard appends a live connection-test step at the end. */
+  has_test?: boolean
   tags?: string[]
   homepage?: string
 }
@@ -407,8 +394,9 @@ export interface McpCatalogEntry {
   description: string
   install_method: McpInstallMethod
   command_template: string
+  instructions?: string
   credentials_schema: McpCredentialSchemaEntry[]
-  setup_steps: McpSetupStep[]
+  has_test?: boolean
   tags?: string[]
   homepage?: string
 }

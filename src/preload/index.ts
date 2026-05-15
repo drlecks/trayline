@@ -274,16 +274,6 @@ const api = {
       ipcRenderer.invoke(IPC.mcp.saveCredential, mcpId, credId, value),
     deleteCredentials: (mcpId: string): Promise<void> =>
       ipcRenderer.invoke(IPC.mcp.deleteCredentials, mcpId),
-    startOAuth: (
-      mcpId: string,
-      credId: string,
-      provider: string,
-      scopes: string[],
-      opts?: { clientIdKey?: string; clientSecretKey?: string },
-    ): Promise<void> =>
-      ipcRenderer.invoke(IPC.mcp.startOAuth, mcpId, credId, provider, scopes, opts),
-    cancelOAuth: (mcpId: string): Promise<void> =>
-      ipcRenderer.invoke(IPC.mcp.cancelOAuth, mcpId),
     testConnection: (mcpId: string): Promise<{ ok: boolean; error?: string }> =>
       ipcRenderer.invoke(IPC.mcp.testConnection, mcpId),
   },

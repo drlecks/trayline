@@ -117,8 +117,6 @@ export const IPC = {
     writeStatus: 'mcp:write-status',
     saveCredential: 'mcp:save-credential',
     deleteCredentials: 'mcp:delete-credentials',
-    startOAuth: 'mcp:start-oauth',
-    cancelOAuth: 'mcp:cancel-oauth',
     testConnection: 'mcp:test-connection',
   },
 } as const

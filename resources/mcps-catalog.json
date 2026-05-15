@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "generated_at": "2026-05-15T00:00:00Z",
   "mcps": [
     {
@@ -9,30 +9,17 @@
       "description": "Read and write files in configured directories on your computer.",
       "install_method": "npm",
       "command_template": "npx -y @modelcontextprotocol/server-filesystem {allowed_dirs}",
-      "tags": ["files", "storage"],
+      "instructions": "Enter the full paths of the directories you want the AI agent to access. Separate multiple paths with a space.\n\nExample: /Users/you/Documents /Users/you/Desktop\n\nThe agent will only be able to read and write files inside these folders.",
       "credentials_schema": [
         {
           "id": "allowed_dirs",
           "label": "Allowed Directories",
-          "description": "Comma-separated list of directories the MCP can access.",
+          "description": "Space-separated full paths the agent can access.",
           "kind": "text_field"
         }
       ],
-      "setup_steps": [
-        {
-          "id": "intro",
-          "type": "info",
-          "title": "Filesystem Access",
-          "body": "This MCP lets the AI agent read and write files. You choose which directories it can access."
-        },
-        {
-          "id": "dirs",
-          "type": "text_field",
-          "title": "Allowed Directories",
-          "body": "Enter the full paths of directories to allow, separated by commas.\nExample: /Users/you/Documents, /Users/you/Desktop",
-          "credential_id": "allowed_dirs"
-        }
-      ]
+      "has_test": false,
+      "tags": ["files", "storage"]
     },
     {
       "id": "fetch",
@@ -41,16 +28,10 @@
       "description": "Make arbitrary HTTP requests and extract content from web pages.",
       "install_method": "npm",
       "command_template": "npx -y @modelcontextprotocol/server-fetch",
-      "tags": ["web", "http"],
+      "instructions": "No credentials required. Once installed this MCP is ready to use.",
       "credentials_schema": [],
-      "setup_steps": [
-        {
-          "id": "intro",
-          "type": "info",
-          "title": "Web Fetch",
-          "body": "This MCP lets the AI agent fetch URLs and extract page content. No credentials are required."
-        }
-      ]
+      "has_test": false,
+      "tags": ["web", "http"]
     },
     {
       "id": "memory",
@@ -59,16 +40,10 @@
       "description": "Persistent key-value memory store for the agent across runs.",
       "install_method": "npm",
       "command_template": "npx -y @modelcontextprotocol/server-memory",
-      "tags": ["memory", "storage"],
+      "instructions": "No credentials required. Once installed the agent has a persistent memory store it can read and write across runs.",
       "credentials_schema": [],
-      "setup_steps": [
-        {
-          "id": "intro",
-          "type": "info",
-          "title": "Agent Memory",
-          "body": "This MCP gives the AI agent a persistent memory store it can read and write across runs. No credentials are required."
-        }
-      ]
+      "has_test": false,
+      "tags": ["memory", "storage"]
     },
     {
       "id": "github",
@@ -77,36 +52,18 @@
       "description": "Read and write GitHub issues, pull requests, repositories, and files.",
       "install_method": "npm",
       "command_template": "npx -y @modelcontextprotocol/server-github",
-      "tags": ["github", "code", "devops"],
-      "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/github",
+      "instructions": "Create a Personal Access Token at github.com/settings/tokens.\n\nGrant the repo scope (and read:org if you need organisation repositories). The token is stored securely in your OS keychain — never in any file.",
       "credentials_schema": [
         {
           "id": "GITHUB_PERSONAL_ACCESS_TOKEN",
-          "label": "GitHub Personal Access Token",
-          "description": "A GitHub PAT with access to the repos you want to work with.",
+          "label": "Personal Access Token",
+          "description": "GitHub PAT with repo scope.",
           "kind": "api_key"
         }
       ],
-      "setup_steps": [
-        {
-          "id": "intro",
-          "type": "info",
-          "title": "Connect GitHub",
-          "body": "Trayline will use a Personal Access Token to access GitHub on your behalf. The token is stored securely in your OS keychain — never in any file."
-        },
-        {
-          "id": "token",
-          "type": "api_key",
-          "title": "Personal Access Token",
-          "body": "Create a token at github.com/settings/tokens. Grant repo scope (and optionally read:org for org repos).",
-          "credential_id": "GITHUB_PERSONAL_ACCESS_TOKEN"
-        },
-        {
-          "id": "verify",
-          "type": "test_connection",
-          "title": "Verifying connection..."
-        }
-      ]
+      "has_test": true,
+      "tags": ["github", "code", "devops"],
+      "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/github"
     },
     {
       "id": "brave-search",
@@ -115,36 +72,18 @@
       "description": "Web and local search powered by the Brave Search API.",
       "install_method": "npm",
       "command_template": "npx -y @modelcontextprotocol/server-brave-search",
-      "tags": ["search", "web"],
-      "homepage": "https://brave.com/search/api/",
+      "instructions": "Get a free API key at brave.com/search/api/\n\nThe key is stored securely in your OS keychain.",
       "credentials_schema": [
         {
           "id": "BRAVE_API_KEY",
           "label": "Brave Search API Key",
-          "description": "Get a free API key at brave.com/search/api/",
+          "description": "Free key from brave.com/search/api/",
           "kind": "api_key"
         }
       ],
-      "setup_steps": [
-        {
-          "id": "intro",
-          "type": "info",
-          "title": "Brave Search",
-          "body": "Trayline uses the Brave Search API to give the AI agent web search capabilities. The API key is stored securely in your OS keychain."
-        },
-        {
-          "id": "api_key",
-          "type": "api_key",
-          "title": "API Key",
-          "body": "Visit brave.com/search/api/ to get a free API key.",
-          "credential_id": "BRAVE_API_KEY"
-        },
-        {
-          "id": "verify",
-          "type": "test_connection",
-          "title": "Verifying connection..."
-        }
-      ]
+      "has_test": true,
+      "tags": ["search", "web"],
+      "homepage": "https://brave.com/search/api/"
     },
     {
       "id": "slack",
@@ -153,48 +92,23 @@
       "description": "Read Slack channels, list messages, and post as a bot.",
       "install_method": "npm",
       "command_template": "npx -y @modelcontextprotocol/server-slack",
-      "tags": ["slack", "messaging", "team"],
+      "instructions": "Create a Slack app at api.slack.com/apps and install it to your workspace.\n\n1. Go to api.slack.com/apps → Create New App\n2. Add Bot Token Scopes: channels:read, chat:write, channels:history\n3. Install to Workspace → copy the Bot User OAuth Token (xoxb-...)\n4. Find your Team ID in your Slack workspace URL (e.g. T012AB3CD)\n\nBoth values are stored securely in your OS keychain.",
       "credentials_schema": [
         {
           "id": "SLACK_BOT_TOKEN",
-          "label": "Slack Bot Token",
-          "description": "Bot OAuth token (xoxb-...) from your Slack app.",
+          "label": "Bot Token",
+          "description": "Starts with xoxb-",
           "kind": "api_key"
         },
         {
           "id": "SLACK_TEAM_ID",
-          "label": "Slack Team ID",
-          "description": "Your Slack workspace ID (e.g. T012AB3CD).",
+          "label": "Team ID",
+          "description": "e.g. T012AB3CD — found in your workspace URL",
           "kind": "text_field"
         }
       ],
-      "setup_steps": [
-        {
-          "id": "intro",
-          "type": "info",
-          "title": "Connect Slack",
-          "body": "You'll need to create a Slack app in your workspace and install it to get a Bot Token. Tokens are stored securely in your OS keychain."
-        },
-        {
-          "id": "bot_token",
-          "type": "api_key",
-          "title": "Bot Token",
-          "body": "Create a Slack app at api.slack.com/apps and copy the Bot User OAuth Token.",
-          "credential_id": "SLACK_BOT_TOKEN"
-        },
-        {
-          "id": "team_id",
-          "type": "text_field",
-          "title": "Team ID",
-          "body": "Your workspace ID, found in your Slack workspace URL (e.g. T012AB3CD).",
-          "credential_id": "SLACK_TEAM_ID"
-        },
-        {
-          "id": "verify",
-          "type": "test_connection",
-          "title": "Verifying connection..."
-        }
-      ]
+      "has_test": true,
+      "tags": ["slack", "messaging", "team"]
     },
     {
       "id": "notion",
@@ -203,243 +117,42 @@
       "description": "Read and edit Notion pages, databases, and blocks.",
       "install_method": "npm",
       "command_template": "npx -y @modelcontextprotocol/server-notion",
-      "tags": ["notion", "docs", "database"],
+      "instructions": "Create an internal integration at notion.so/my-integrations.\n\n1. Go to notion.so/my-integrations → New integration\n2. Copy the Internal Integration Token\n3. Share the Notion pages or databases you want the agent to access with that integration (Share → Invite → your integration name)\n\nThe token is stored securely in your OS keychain.",
       "credentials_schema": [
         {
           "id": "NOTION_API_TOKEN",
-          "label": "Notion Integration Token",
-          "description": "Internal integration token from notion.so/my-integrations.",
+          "label": "Integration Token",
+          "description": "Internal integration token from notion.so/my-integrations",
           "kind": "api_key"
         }
       ],
-      "setup_steps": [
-        {
-          "id": "intro",
-          "type": "info",
-          "title": "Connect Notion",
-          "body": "Create an internal integration at notion.so/my-integrations, then share the pages you want the AI to access with that integration."
-        },
-        {
-          "id": "token",
-          "type": "api_key",
-          "title": "Integration Token",
-          "body": "Copy the Internal Integration Token from notion.so/my-integrations.",
-          "credential_id": "NOTION_API_TOKEN"
-        },
-        {
-          "id": "verify",
-          "type": "test_connection",
-          "title": "Verifying connection..."
-        }
-      ]
-    },
-    {
-      "id": "google-drive",
-      "name": "Google Drive",
-      "version": "1.0.0",
-      "description": "List, read, create, and edit files in Google Drive.",
-      "install_method": "npm",
-      "command_template": "npx -y @modelcontextprotocol/server-gdrive",
-      "tags": ["google", "drive", "files", "oauth"],
-      "credentials_schema": [
-        {
-          "id": "GOOGLE_CLIENT_ID",
-          "label": "Google OAuth Client ID",
-          "description": "From a Google Cloud project with Drive API enabled. See console.cloud.google.com.",
-          "kind": "text_field"
-        },
-        {
-          "id": "GOOGLE_CLIENT_SECRET",
-          "label": "Google OAuth Client Secret",
-          "description": "From the same Google Cloud OAuth application.",
-          "kind": "api_key"
-        },
-        {
-          "id": "google_oauth_token",
-          "label": "Google Account",
-          "description": "Sign in with Google to grant Drive access.",
-          "kind": "oauth"
-        }
-      ],
-      "setup_steps": [
-        {
-          "id": "intro",
-          "type": "info",
-          "title": "Connect Google Drive",
-          "body": "Trayline connects to Google Drive via your own Google Cloud OAuth application. This gives you full control over permissions.\n\n1. Go to console.cloud.google.com\n2. Create a project, enable the Drive API\n3. Create OAuth 2.0 credentials (type: Desktop app)\n4. Copy the Client ID and Client Secret below"
-        },
-        {
-          "id": "client_id",
-          "type": "text_field",
-          "title": "OAuth Client ID",
-          "body": "Paste the Client ID from your Google Cloud OAuth credentials.",
-          "credential_id": "GOOGLE_CLIENT_ID"
-        },
-        {
-          "id": "client_secret",
-          "type": "api_key",
-          "title": "OAuth Client Secret",
-          "body": "Paste the Client Secret from your Google Cloud OAuth credentials.",
-          "credential_id": "GOOGLE_CLIENT_SECRET"
-        },
-        {
-          "id": "oauth",
-          "type": "oauth",
-          "title": "Sign in with Google",
-          "body": "Click the button below to open Google's authorization page in your browser.",
-          "provider": "google",
-          "scopes": [
-            "https://www.googleapis.com/auth/drive"
-          ],
-          "credential_id": "google_oauth_token",
-          "client_id_key": "GOOGLE_CLIENT_ID",
-          "client_secret_key": "GOOGLE_CLIENT_SECRET"
-        },
-        {
-          "id": "verify",
-          "type": "test_connection",
-          "title": "Verifying connection..."
-        }
-      ]
+      "has_test": true,
+      "tags": ["notion", "docs", "database"]
     },
     {
       "id": "gmail",
       "name": "Gmail",
       "version": "1.0.0",
-      "description": "Read, search, and send Gmail messages.",
+      "description": "Send and read Gmail messages using an App Password — no Google Cloud project needed.",
       "install_method": "npm",
-      "command_template": "npx -y @modelcontextprotocol/server-gmail",
-      "tags": ["google", "email", "gmail", "oauth"],
+      "command_template": "npx -y mcp-gmail",
+      "instructions": "Gmail supports App Passwords as a simple alternative to OAuth. No Google Cloud project is required.\n\n1. Make sure 2-Step Verification is enabled on your Google account\n2. Go to myaccount.google.com → Security → App passwords\n3. Create a new app password (name it 'Trayline')\n4. Copy the 16-character password shown\n\nYour email address and app password are stored securely in your OS keychain.",
       "credentials_schema": [
         {
-          "id": "GOOGLE_CLIENT_ID",
-          "label": "Google OAuth Client ID",
-          "description": "From a Google Cloud project with Gmail API enabled.",
+          "id": "GMAIL_EMAIL",
+          "label": "Gmail Address",
+          "description": "Your full Gmail address (e.g. you@gmail.com)",
           "kind": "text_field"
         },
         {
-          "id": "GOOGLE_CLIENT_SECRET",
-          "label": "Google OAuth Client Secret",
-          "description": "From the same Google Cloud OAuth application.",
+          "id": "GMAIL_APP_PASSWORD",
+          "label": "App Password",
+          "description": "16-character app password from myaccount.google.com/apppasswords",
           "kind": "api_key"
-        },
-        {
-          "id": "google_oauth_token",
-          "label": "Google Account",
-          "description": "Sign in with Google to grant Gmail access.",
-          "kind": "oauth"
         }
       ],
-      "setup_steps": [
-        {
-          "id": "intro",
-          "type": "info",
-          "title": "Connect Gmail",
-          "body": "Trayline connects to Gmail via your own Google Cloud OAuth application.\n\n1. Go to console.cloud.google.com\n2. Create a project, enable the Gmail API\n3. Create OAuth 2.0 credentials (type: Desktop app)\n4. Copy the Client ID and Client Secret below"
-        },
-        {
-          "id": "client_id",
-          "type": "text_field",
-          "title": "OAuth Client ID",
-          "body": "Paste the Client ID from your Google Cloud OAuth credentials.",
-          "credential_id": "GOOGLE_CLIENT_ID"
-        },
-        {
-          "id": "client_secret",
-          "type": "api_key",
-          "title": "OAuth Client Secret",
-          "body": "Paste the Client Secret from your Google Cloud OAuth credentials.",
-          "credential_id": "GOOGLE_CLIENT_SECRET"
-        },
-        {
-          "id": "oauth",
-          "type": "oauth",
-          "title": "Sign in with Google",
-          "body": "Click the button below to open Google's authorization page in your browser.",
-          "provider": "google",
-          "scopes": [
-            "https://www.googleapis.com/auth/gmail.readonly",
-            "https://www.googleapis.com/auth/gmail.send"
-          ],
-          "credential_id": "google_oauth_token",
-          "client_id_key": "GOOGLE_CLIENT_ID",
-          "client_secret_key": "GOOGLE_CLIENT_SECRET"
-        },
-        {
-          "id": "verify",
-          "type": "test_connection",
-          "title": "Verifying connection..."
-        }
-      ]
-    },
-    {
-      "id": "google-calendar",
-      "name": "Google Calendar",
-      "version": "1.0.0",
-      "description": "Read events, create events, and manage Google Calendar.",
-      "install_method": "npm",
-      "command_template": "npx -y @modelcontextprotocol/server-gcal",
-      "tags": ["google", "calendar", "scheduling", "oauth"],
-      "credentials_schema": [
-        {
-          "id": "GOOGLE_CLIENT_ID",
-          "label": "Google OAuth Client ID",
-          "description": "From a Google Cloud project with Calendar API enabled.",
-          "kind": "text_field"
-        },
-        {
-          "id": "GOOGLE_CLIENT_SECRET",
-          "label": "Google OAuth Client Secret",
-          "description": "From the same Google Cloud OAuth application.",
-          "kind": "api_key"
-        },
-        {
-          "id": "google_oauth_token",
-          "label": "Google Account",
-          "description": "Sign in with Google to grant Calendar access.",
-          "kind": "oauth"
-        }
-      ],
-      "setup_steps": [
-        {
-          "id": "intro",
-          "type": "info",
-          "title": "Connect Google Calendar",
-          "body": "Trayline connects to Google Calendar via your own Google Cloud OAuth application.\n\n1. Go to console.cloud.google.com\n2. Create a project, enable the Calendar API\n3. Create OAuth 2.0 credentials (type: Desktop app)\n4. Copy the Client ID and Client Secret below"
-        },
-        {
-          "id": "client_id",
-          "type": "text_field",
-          "title": "OAuth Client ID",
-          "body": "Paste the Client ID from your Google Cloud OAuth credentials.",
-          "credential_id": "GOOGLE_CLIENT_ID"
-        },
-        {
-          "id": "client_secret",
-          "type": "api_key",
-          "title": "OAuth Client Secret",
-          "body": "Paste the Client Secret from your Google Cloud OAuth credentials.",
-          "credential_id": "GOOGLE_CLIENT_SECRET"
-        },
-        {
-          "id": "oauth",
-          "type": "oauth",
-          "title": "Sign in with Google",
-          "body": "Click the button below to open Google's authorization page in your browser.",
-          "provider": "google",
-          "scopes": [
-            "https://www.googleapis.com/auth/calendar"
-          ],
-          "credential_id": "google_oauth_token",
-          "client_id_key": "GOOGLE_CLIENT_ID",
-          "client_secret_key": "GOOGLE_CLIENT_SECRET"
-        },
-        {
-          "id": "verify",
-          "type": "test_connection",
-          "title": "Verifying connection..."
-        }
-      ]
+      "has_test": true,
+      "tags": ["email", "gmail", "google"]
     },
     {
       "id": "instagram",
@@ -448,49 +161,24 @@
       "description": "Read comments and mentions, reply to comments, and send DMs on Instagram Business or Creator accounts.",
       "install_method": "npm",
       "command_template": "npx -y mcp-instagram",
-      "tags": ["instagram", "social", "comments", "messaging"],
-      "homepage": "https://developers.facebook.com/docs/instagram-api",
+      "instructions": "Requires an Instagram Business or Creator account linked to a Facebook Page.\n\n1. Go to developers.facebook.com and create an app with Instagram Graph API access\n2. Generate a long-lived User Access Token with these permissions:\n   • instagram_basic\n   • instagram_manage_comments\n   • instagram_manage_messages\n3. Find your Business Account ID in Meta Business Suite → Account Settings, or via the Graph API Explorer\n\nBoth values are stored securely in your OS keychain.",
       "credentials_schema": [
         {
           "id": "INSTAGRAM_ACCESS_TOKEN",
-          "label": "Instagram Access Token",
-          "description": "Long-lived User Access Token with instagram_basic, instagram_manage_comments, and instagram_manage_messages permissions.",
+          "label": "Access Token",
+          "description": "Long-lived User Access Token from the Meta Developer portal",
           "kind": "api_key"
         },
         {
           "id": "INSTAGRAM_BUSINESS_ACCOUNT_ID",
-          "label": "Instagram Business Account ID",
-          "description": "The numeric ID of your Instagram Business or Creator account.",
+          "label": "Business Account ID",
+          "description": "Numeric ID of your Instagram Business or Creator account",
           "kind": "text_field"
         }
       ],
-      "setup_steps": [
-        {
-          "id": "intro",
-          "type": "info",
-          "title": "Connect Instagram",
-          "body": "This MCP connects to the Instagram Graph API. You need an Instagram Business or Creator account linked to a Facebook Page.\n\nYou'll need:\n• A Meta Developer app with Instagram Graph API access\n• A long-lived User Access Token\n• Your Instagram Business Account ID\n\nTokens are stored securely in your OS keychain — never in any file."
-        },
-        {
-          "id": "token",
-          "type": "api_key",
-          "title": "Access Token",
-          "body": "Generate a long-lived User Access Token in the Meta Developer portal (developers.facebook.com). The token needs these permissions: instagram_basic, instagram_manage_comments, instagram_manage_messages.",
-          "credential_id": "INSTAGRAM_ACCESS_TOKEN"
-        },
-        {
-          "id": "account_id",
-          "type": "text_field",
-          "title": "Business Account ID",
-          "body": "Enter your Instagram Business Account ID. Find it in the Meta Business Suite under Account Settings, or via the Graph API Explorer.",
-          "credential_id": "INSTAGRAM_BUSINESS_ACCOUNT_ID"
-        },
-        {
-          "id": "verify",
-          "type": "test_connection",
-          "title": "Verifying connection..."
-        }
-      ]
+      "has_test": true,
+      "tags": ["instagram", "social", "comments", "messaging"],
+      "homepage": "https://developers.facebook.com/docs/instagram-api"
     }
   ]
 }
