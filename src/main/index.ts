@@ -5,6 +5,7 @@ import { settingsStore } from './services/settings-store'
 import { fsService, Paths } from './services/fs-service'
 import { auditDb } from './services/audit-db'
 import { systemSkillsService } from './services/system-skills-service'
+import { mcpRegistry } from './services/mcp-registry'
 import { skillService } from './services/skill-service'
 import { workerRunner, setRunEventBroadcast } from './services/worker-runner'
 import { sourceRunner, setSourceEventBroadcast } from './services/source-runner'
@@ -155,6 +156,9 @@ app.whenReady().then(async () => {
 
     const { restored } = await systemSkillsService.ensureInstalled()
     stage(`systemSkillsService.ensureInstalled done (restored=${restored.join(',') || 'none'})`)
+
+    await mcpRegistry.seedCatalog()
+    stage('mcpRegistry.seedCatalog done')
 
     // Background quarantine check — non-blocking; failures are swallowed so a
     // corrupt skill can't prevent the app from opening.
