@@ -24,7 +24,7 @@ function makePlan(overrides: Partial<WorkflowPlan> = {}): WorkflowPlan {
         },
         {
           kind: 'worker', id: '02-classify', name: 'Classify',
-          skills: ['some-skill'], mcps: ['gmail'], context_packs: [],
+          skills: ['some-skill'], mcps: ['github'], context_packs: [],
           process_md: '# Custom Process\n',
         },
         {
@@ -55,7 +55,7 @@ describe('scaffoldService', () => {
     expect(res.project.name).toBe('demo')
     expect(res.project.status).toBe('active')
     expect(res.project.updated_at).toBe(res.project.created_at)
-    expect(res.unconfiguredMcps).toEqual(['gmail'])
+    expect(res.unconfiguredMcps).toEqual(['github'])
     expect(res.projectPath).toBe(join(Paths.projects, 'demo'))
 
     // Project files
@@ -80,7 +80,7 @@ describe('scaffoldService', () => {
     expect(await fs.readFile(join(worker, 'process.md'), 'utf-8')).toBe('# Custom Process\n')
     const workerJson = JSON.parse(await fs.readFile(join(worker, 'step.json'), 'utf-8'))
     expect(workerJson.skills).toEqual(['some-skill'])
-    expect(workerJson.mcps).toEqual(['gmail'])
+    expect(workerJson.mcps).toEqual(['github'])
 
     // 99-errors is always appended at the end
     const errStep = join(res.projectPath, 'workflows', 'main', 'steps', '99-errors')
