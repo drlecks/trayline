@@ -73,7 +73,7 @@ Each task corresponds to a phase file in this folder. Check off tasks as they ar
 
 ## N6 Phases (Mainstream Adoption)
 
-- [ ] [Phase N6.1 — Adapter Readiness Protocol](./phase-n6-1-adapter-readiness.md)
+- [x] [Phase N6.1 — Adapter Readiness Protocol](./phase-n6-1-adapter-readiness.md)
 - [ ] [Phase N6.2 — AI Setup Wizard](./phase-n6-2-ai-setup-wizard.md)
 - [ ] [Phase N6.3 — Workflow Template Library](./phase-n6-3-template-library.md)
 - [ ] [Phase N6.4 — OS Notifications & System Tray Badge](./phase-n6-4-os-notifications.md)
