@@ -116,6 +116,35 @@ The card viewer's history timeline is colour-coded by tone: red for `run_failed`
 
 ---
 
+## 7.7a Notifications & Badge (N6.3)
+
+### OS push notifications
+
+When a card lands in a manual-approval tray while the app is not focused:
+- An OS notification fires with the tray name as title and the card's title/subject/name (from `data`) as body (falls back to "A card needs your review")
+- Clicking the notification restores the app window and navigates directly to the card in the appropriate tray panel
+- Notifications are deduplicated per session: the same `cardId` will not trigger a second notification until `clearNotified` is called (which happens when the card is approved or discarded)
+- If the app window is currently focused, notifications are suppressed (the in-app badge and queue bell are sufficient)
+- Requires `Notification.isSupported()` to be true; silently no-ops on platforms without notification support
+
+### Badge / taskbar overlay
+
+Shows the total number of cards waiting for review:
+- **macOS** — red dot with number on the dock icon (`app.setBadgeCount`)
+- **Windows** — red circle with count drawn as SVG via `BrowserWindow.setOverlayIcon`; cleared when count is 0
+- **Linux** — `app.setBadgeCount` (visible on Unity/GNOME; no-op on other desktops)
+- Count is refreshed after every card-state change (add/remove in pending dirs) and once at app startup
+
+### Settings → Notifications
+
+| Control | Behaviour |
+|---|---|
+| Global toggle "Notify when cards need review" | Turns all OS notifications on/off; badge is unaffected |
+| Per-project toggles (shown when global is on) | Suppress notifications from a specific project without affecting others |
+| "Clear notification history" button | Empties the in-session dedup set so the same cards can re-notify (useful after a session break) |
+
+---
+
 ## 7.8 Context Packs
 
 - `context/` folder in the project root holds markdown files

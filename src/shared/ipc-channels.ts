@@ -129,4 +129,13 @@ export const IPC = {
     deleteCredentials: 'mcp:delete-credentials',
     testConnection: 'mcp:test-connection',
   },
+  notifications: {
+    getSettings: 'notifications:get-settings',
+    updateSettings: 'notifications:update-settings',
+    clearAllNotified: 'notifications:clear-all-notified',
+    getBadgeCount: 'notifications:get-badge-count',
+  },
+  notification: {
+    navigate: 'notification:navigate',
+  },
 } as const

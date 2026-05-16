@@ -18,10 +18,11 @@ import { exportService } from '../services/export-service'
 import { orchestrator } from '../services/orchestrator'
 import { adapterReadinessService } from '../services/adapter-readiness-service'
 import { queueService } from '../services/queue-service'
+import { notificationService } from '../services/notification-service'
 import { join } from 'path'
 import fs from 'fs/promises'
 import { fsService } from '../services/fs-service'
-import type { BootstrapInfo, ProviderInstallSuggestion, ProviderReadyResult, ExportOptions, ImportSuccess, SourceStepConfig, McpStatus } from '../../shared/types'
+import type { BootstrapInfo, NotificationSettings, ProviderInstallSuggestion, ProviderReadyResult, ExportOptions, ImportSuccess, SourceStepConfig, McpStatus } from '../../shared/types'
 import type { CardStatus } from '../../shared/card'
 
 export type { BootstrapInfo }
@@ -508,4 +509,27 @@ export function registerIpcHandlers(
 
   // ── Queue (My Queue) ──────────────────────────────────────────────────────
   ipcMain.handle('queue:getPending', () => queueService.getPending())
+
+  // ── Notifications ─────────────────────────────────────────────────────────
+  ipcMain.handle('notifications:get-settings', () =>
+    settingsStore.get('notificationSettings'),
+  )
+
+  ipcMain.handle('notifications:update-settings', (_: unknown, partial: Partial<NotificationSettings>) => {
+    const current = settingsStore.get('notificationSettings')
+    const next: NotificationSettings = {
+      enabled: partial.enabled ?? current.enabled,
+      disabledProjects: partial.disabledProjects ?? current.disabledProjects,
+    }
+    settingsStore.set('notificationSettings', next)
+    return next
+  })
+
+  ipcMain.handle('notifications:clear-all-notified', () => {
+    notificationService.clearAllNotified()
+  })
+
+  ipcMain.handle('notifications:get-badge-count', () =>
+    notificationService.getCurrentBadgeCount(),
+  )
 }
