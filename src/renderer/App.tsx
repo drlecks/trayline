@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useThemeStore } from './stores/theme-store'
 import { useProjectStore } from './stores/project-store'
+import { useAdapterStore } from './stores/adapter-store'
 import TopBar from './components/layout/TopBar'
 import Footer from './components/layout/Footer'
 import WelcomeSplash from './components/splash/WelcomeSplash'
@@ -11,6 +12,7 @@ import SettingsScreen from './components/settings/SettingsScreen'
 import SkillsScreen from './components/skills/SkillsScreen'
 import McpsScreen from './components/mcps/McpsScreen'
 import ProviderNotInstalledModal from './components/layout/ProviderNotInstalledModal'
+import AdapterSetupScreen from './components/adapter/AdapterSetupScreen'
 import OnboardingTour from './components/onboarding/OnboardingTour'
 import ShortcutsDialog from './components/shortcuts/ShortcutsDialog'
 import CommandPalette from './components/shortcuts/CommandPalette'
@@ -32,9 +34,13 @@ function applyThemeClass(theme: 'light' | 'dark' | 'system') {
 export default function App() {
   const { theme, setTheme } = useThemeStore()
   const screen = useProjectStore((s) => s.screen)
-  const setActive = useProjectStore((s) => s.setActive)
   const setScreen = useProjectStore((s) => s.setScreen)
   const refreshProjects = useProjectStore((s) => s.refreshProjects)
+  const updateFromCheckAll = useAdapterStore((s) => s.updateFromCheckAll)
+  const setReadiness = useAdapterStore((s) => s.setReadiness)
+
+  // null = still checking; true = at least one installed; false = none installed
+  const [adapterGateResolved, setAdapterGateResolved] = useState<boolean | null>(null)
 
   const [tourOpen, setTourOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
@@ -63,31 +69,63 @@ export default function App() {
     return () => mq.removeEventListener('change', handler)
   }, [theme])
 
+  // Subscribe to adapter readiness changes broadcast from main.
+  useEffect(() => {
+    return window.trayline.adapter.onReadinessChanged((r) => {
+      setReadiness(r.adapterId, r)
+      if (r.installed && adapterGateResolved === false) {
+        setAdapterGateResolved(true)
+      }
+    })
+  }, [setReadiness, adapterGateResolved])
+
   // First-mount bootstrap. Routing rules:
-  //   - No projects on disk → straight into the Workflow Author (clean state).
-  //   - Otherwise → Project List screen, where the user picks one to open.
-  // The previous behaviour of auto-resuming the last-opened project was removed
-  // intentionally so the user always sees the list (and project status) first.
+  //   1. Check adapter readiness. If no production adapter is installed → show
+  //      AdapterSetupScreen gate before anything else.
+  //   2. No projects on disk → straight into the Workflow Author (clean state).
+  //   3. Otherwise → Project List screen.
   useEffect(() => {
     let cancelled = false
     ;(async () => {
-      const settings = await window.trayline.settings.get()
+      const [settings, readinessMap] = await Promise.all([
+        window.trayline.settings.get(),
+        window.trayline.adapter.checkReadiness(),
+      ])
       if (cancelled) return
-      setTheme(settings.theme)
 
-      await refreshProjects()
+      setTheme(settings.theme)
+      updateFromCheckAll(readinessMap)
+
+      const installed = Object.values(readinessMap).some((r) => r.installed)
+      setAdapterGateResolved(installed)
+      if (!installed) return  // AdapterSetupScreen takes over; onReady() will resume bootstrap
+
+      await bootstrapRouting()
       if (cancelled) return
-      const projects = useProjectStore.getState().all
-      if (projects.length === 0) {
-        setScreen('author')
-        void window.trayline.settings.set('lastOpenedProject', null)
-      } else {
-        setScreen('projectList')
-      }
       if (!settings.onboardingComplete) setTourOpen(true)
     })()
     return () => { cancelled = true }
-  }, [setTheme, setActive, setScreen, refreshProjects])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  async function bootstrapRouting() {
+    await refreshProjects()
+    const projects = useProjectStore.getState().all
+    if (projects.length === 0) {
+      setScreen('author')
+      void window.trayline.settings.set('lastOpenedProject', null)
+    } else {
+      setScreen('projectList')
+    }
+  }
+
+  async function handleAdapterReady() {
+    setAdapterGateResolved(true)
+    const settings = await window.trayline.settings.get()
+    setTheme(settings.theme)
+    await bootstrapRouting()
+    if (!settings.onboardingComplete) setTourOpen(true)
+  }
 
   // Allow other screens to re-trigger the tour (Help link in Settings).
   useEffect(() => {
@@ -99,6 +137,14 @@ export default function App() {
   async function closeTour() {
     setTourOpen(false)
     await window.trayline.settings.set('onboardingComplete', true)
+  }
+
+  // While checking — render nothing (avoids a flash of the wrong screen).
+  if (adapterGateResolved === null) return null
+
+  // No adapter installed — show the full-window setup gate.
+  if (adapterGateResolved === false) {
+    return <AdapterSetupScreen onReady={() => void handleAdapterReady()} />
   }
 
   return (

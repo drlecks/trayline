@@ -11,6 +11,7 @@ import type {
   SkillManifest,
   UsageSnapshot,
   AdapterUsageSnapshot,
+  AdapterReadiness,
   ProjectCreateOutcome,
   ProviderReadyResult,
   SkillCatalogFetchResult,
@@ -121,6 +122,19 @@ const api = {
       const listener = () => handler()
       ipcRenderer.on(IPC.adapters.onUsageUpdate, listener)
       return () => ipcRenderer.off(IPC.adapters.onUsageUpdate, listener)
+    },
+  },
+  adapter: {
+    checkReadiness: (): Promise<Record<string, AdapterReadiness>> =>
+      ipcRenderer.invoke(IPC.adapter.checkReadiness),
+    recheck: (adapterId: string): Promise<AdapterReadiness> =>
+      ipcRenderer.invoke(IPC.adapter.recheck, adapterId),
+    getCached: (adapterId: string): Promise<AdapterReadiness | null> =>
+      ipcRenderer.invoke(IPC.adapter.getCached, adapterId),
+    onReadinessChanged: (handler: (r: AdapterReadiness) => void): (() => void) => {
+      const listener = (_e: unknown, r: AdapterReadiness) => handler(r)
+      ipcRenderer.on(IPC.adapter.onReadinessChanged, listener)
+      return () => ipcRenderer.off(IPC.adapter.onReadinessChanged, listener)
     },
   },
   step: {

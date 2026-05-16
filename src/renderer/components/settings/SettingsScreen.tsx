@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Check, ExternalLink, Github, RefreshCw, X } from 'lucide-react'
+import { ArrowLeft, Check, ExternalLink, Github, RefreshCw, Wrench, X } from 'lucide-react'
 import { useThemeStore } from '@/stores/theme-store'
 import { useProjectStore } from '@/stores/project-store'
-import type { AdapterUsageSnapshot, Settings } from '../../../shared/types'
+import AdapterSetupWizard from '@/components/adapter/AdapterSetupWizard'
+import type { AdapterReadiness, AdapterUsageSnapshot, Settings } from '../../../shared/types'
 
 interface AdapterEntry {
   id: string
@@ -10,6 +11,7 @@ interface AdapterEntry {
   installed: boolean
   version: string | null
   installUrl: string | null
+  readiness: AdapterReadiness | null
 }
 
 interface ModelEntry { id: string; label: string; description?: string }
@@ -26,20 +28,44 @@ export default function SettingsScreen() {
   const [efforts, setEfforts] = useState<EffortEntry[]>([])
   const [usage, setUsage] = useState<AdapterUsageSnapshot | null>(null)
   const [usageLoading, setUsageLoading] = useState(false)
+  const [wizardAdapter, setWizardAdapter] = useState<AdapterEntry | null>(null)
+  const [wizardOpen, setWizardOpen] = useState(false)
 
   useEffect(() => {
     void window.trayline.settings.get().then(setSettings)
     ;(async () => {
-      const list = await window.trayline.adapters.list()
-      const detailed: AdapterEntry[] = await Promise.all(
-        list.map(async (a) => {
-          const det = await window.trayline.adapters.detect(a.id)
-          return { id: a.id, displayName: a.displayName, installUrl: a.installUrl ?? null, installed: det.installed, version: det.version }
-        }),
-      )
+      const [list, readinessMap] = await Promise.all([
+        window.trayline.adapters.list(),
+        window.trayline.adapter.checkReadiness(),
+      ])
+      const detailed: AdapterEntry[] = list.map((a) => {
+        const r = readinessMap[a.id] ?? null
+        return {
+          id: a.id,
+          displayName: a.displayName,
+          installUrl: a.installUrl ?? null,
+          installed: r?.installed ?? false,
+          version: r?.version ?? null,
+          readiness: r,
+        }
+      })
       setAdapters(detailed)
     })()
   }, [])
+
+  function openSetupWizard(adapter: AdapterEntry) {
+    setWizardAdapter(adapter)
+    setWizardOpen(true)
+  }
+
+  async function handleWizardComplete() {
+    // Refresh adapter readiness after wizard completes
+    const readinessMap = await window.trayline.adapter.checkReadiness()
+    setAdapters((prev) => prev.map((a) => {
+      const r = readinessMap[a.id] ?? null
+      return r ? { ...a, installed: r.installed, version: r.version, readiness: r } : a
+    }))
+  }
 
   // Refresh model list whenever the active adapter changes.
   useEffect(() => {
@@ -229,6 +255,14 @@ export default function SettingsScreen() {
                       Install instructions <ExternalLink size={10} strokeWidth={2} />
                     </a>
                   )}
+                  {!a.installed && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); openSetupWizard(a) }}
+                      className="inline-flex items-center gap-1 text-[11px] text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200 mt-0.5"
+                    >
+                      <Wrench size={10} strokeWidth={2} /> Re-run setup
+                    </button>
+                  )}
                 </div>
                 {selected && (
                   <Check size={14} strokeWidth={2} className="text-neutral-900 dark:text-neutral-100" />
@@ -354,6 +388,23 @@ export default function SettingsScreen() {
           </a>
         </div>
       </Section>
+
+      {wizardAdapter && (
+        <AdapterSetupWizard
+          adapterId={wizardAdapter.id}
+          displayName={wizardAdapter.displayName}
+          readiness={wizardAdapter.readiness ?? {
+            adapterId: wizardAdapter.id,
+            installed: false,
+            version: null,
+            blockers: [{ kind: 'not_installed', message: 'Not installed', fixUrl: wizardAdapter.installUrl ?? undefined }],
+            checkedAt: Date.now(),
+          }}
+          open={wizardOpen}
+          onOpenChange={setWizardOpen}
+          onComplete={() => void handleWizardComplete()}
+        />
+      )}
     </div>
   )
 }
