@@ -79,6 +79,12 @@ Each task corresponds to a phase file in this folder. Check off tasks as they ar
 
 ---
 
+## N7 Phases (Local LLM)
+
+- [ ] [Phase N7 — Local LLM Adapter](./phase-n7-local-llm.md)
+
+---
+
 ## Estimates
 
 | Block | Estimate |
