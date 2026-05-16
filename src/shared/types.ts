@@ -200,6 +200,34 @@ export interface UsageSnapshot {
 
 // ── AI provider readiness ─────────────────────────────────────────────────────
 
+export type AdapterBlockerKind =
+  | 'not_installed'
+  // Future adapters may extend this union with cheaply-detectable conditions
+  // (e.g. 'server_unreachable' for a local server, 'version_too_old').
+  // Conditions that require running inference to detect are intentionally
+  // excluded — those surface as worker-run terminal errors instead.
+
+export interface AdapterBlocker {
+  kind: AdapterBlockerKind
+  /** User-facing explanation in plain English. */
+  message: string
+  /** Link to install docs. */
+  fixUrl?: string
+  /** Shell command the user can run to fix this (e.g. an install command). */
+  fixCommand?: string
+}
+
+export interface AdapterReadiness {
+  adapterId: string
+  /** CLI binary (or local server) is present and reachable. */
+  installed: boolean
+  /** CLI version string if installed, null otherwise. */
+  version: string | null
+  /** All current blockers. Empty array means ready to run. */
+  blockers: AdapterBlocker[]
+  checkedAt: number
+}
+
 export interface ProviderInstallSuggestion {
   id: string
   displayName: string

@@ -16,6 +16,7 @@ import { mcpCredentials } from '../services/mcp-credentials'
 import { testConnection } from '../services/mcp-connection-test'
 import { exportService } from '../services/export-service'
 import { orchestrator } from '../services/orchestrator'
+import { adapterReadinessService } from '../services/adapter-readiness-service'
 import { queueService } from '../services/queue-service'
 import { join } from 'path'
 import fs from 'fs/promises'
@@ -309,6 +310,20 @@ export function registerIpcHandlers(
       suggestions: PROVIDER_SUGGESTIONS,
     }
   })
+
+  // ── Adapter readiness ─────────────────────────────────────────────────────
+  ipcMain.handle('adapter:check-readiness', async () => {
+    const map = await adapterReadinessService.checkAll()
+    return Object.fromEntries(map)
+  })
+
+  ipcMain.handle('adapter:recheck', async (_: unknown, adapterId: string) =>
+    adapterReadinessService.recheck(adapterId),
+  )
+
+  ipcMain.handle('adapter:get-cached', (_: unknown, adapterId: string) =>
+    adapterReadinessService.getCached(adapterId),
+  )
 
   // ── Steps (trays/workers/sources) ────────────────────────────────────────
   // Wrap mutating handlers so the workflow's watchers are re-mounted after

@@ -6,6 +6,7 @@ import type {
   ModelInfo,
   EffortInfo,
   AdapterUsageSnapshot,
+  AdapterReadiness,
   MCPDefinition,
 } from './adapter'
 
@@ -19,10 +20,19 @@ let scriptedOutput: object | string = { summary: 'mock-result', fields: {} }
 let scriptedExitCode = 0
 let clearContextCalls = 0
 let lastSpawnedMcps: MCPDefinition[] = []
+let readinessOverride: Partial<AdapterReadiness> | null = null
 
 export function setMockScript(opts: { output?: object | string; exitCode?: number }) {
   if (opts.output !== undefined) scriptedOutput = opts.output
   if (opts.exitCode !== undefined) scriptedExitCode = opts.exitCode
+}
+
+export function setReadinessOverride(partial: Partial<AdapterReadiness> | null) {
+  readinessOverride = partial
+}
+
+export function resetReadinessOverride() {
+  readinessOverride = null
 }
 
 export function getMockClearContextCalls(): number { return clearContextCalls }
@@ -85,6 +95,16 @@ export const mockAdapter: AITerminalAdapter = {
   id: 'mock',
   displayName: 'Mock (test)',
   kind: 'mock',
+  async checkReadiness(): Promise<AdapterReadiness> {
+    const base: AdapterReadiness = {
+      adapterId: 'mock',
+      installed: true,
+      version: '0.0.0-mock',
+      blockers: [],
+      checkedAt: Date.now(),
+    }
+    return readinessOverride ? { ...base, ...readinessOverride } : base
+  },
   async detectInstalled() { return true },
   async getVersion() { return '0.0.0-mock' },
   async listModels() { return MOCK_MODELS },
