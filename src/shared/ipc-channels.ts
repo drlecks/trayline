@@ -55,6 +55,12 @@ export const IPC = {
     onUsageUpdate: 'adapters:onUsageUpdate',
     checkProviderReady: 'adapters:checkProviderReady',
   },
+  adapter: {
+    checkReadiness: 'adapter:check-readiness',
+    recheck: 'adapter:recheck',
+    getCached: 'adapter:get-cached',
+    onReadinessChanged: 'adapter:readiness-changed',
+  },
   step: {
     addTray: 'step:addTray',
     addWorker: 'step:addWorker',

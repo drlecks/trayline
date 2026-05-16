@@ -61,40 +61,38 @@ Steps are driven by the adapter's current `AdapterReadiness.blockers`:
 
 ## Tasks
 
-- [ ] **`AdapterSetupScreen.tsx`** — full-window blocking screen rendered when no adapter is installed:
-  - Calls `adapter:check-readiness` on mount
-  - One card per registered production adapter (sourced from `adapter:list` IPC)
-  - "Open install guide" button opens `installUrl` in the OS browser
-  - "Check again" button calls `adapter:recheck` for that adapter and updates the card inline
-  - When any adapter reports `installed: true`, dismisses the screen and continues to normal routing
-  - No left rail, no project switcher — this is a pre-app gate
+- [x] **`AdapterSetupScreen.tsx`** — full-window blocking screen rendered when no adapter is installed:
+  - Calls `adapter:check-readiness` on mount (via App.tsx bootstrap)
+  - One card per registered production adapter (sourced from `adapters:list` IPC)
+  - "Open install guide" link opens `installUrl` in the OS browser
+  - "Check again" button calls `adapter:recheck` for that adapter and updates inline
+  - "Setup guide" button opens `AdapterSetupWizard` modal
+  - When any adapter reports `installed: true`, calls `onReady()` to dismiss and resume routing
+  - No left rail, no header — this is a pre-app gate
 
-- [ ] **`AdapterSetupWizard.tsx`** — modal wizard (reuse `McpSetupWizard` layout):
-  - Accepts `adapterId` prop
-  - Derives `InternalStep[]` from `AdapterReadiness.blockers` on mount; re-derives after each recheck
-  - On `installed: true` after recheck: broadcasts `adapter:readiness-changed` IPC event, closes wizard, parent dismisses gate
-  - Cancellable at any step — does not reset state
+- [x] **`AdapterSetupWizard.tsx`** — modal wizard (`src/renderer/components/adapter/`):
+  - Accepts `adapterId`, `displayName`, `readiness`, `open`, `onOpenChange`, `onComplete`
+  - Derives `InternalStep[]` from `AdapterReadiness.blockers`
+  - On `installed: true` after recheck: advances to Done step, `onComplete` fires
+  - Cancellable at any step
+  - Progress dots match McpSetupWizard visual pattern
 
-- [ ] **First-run routing in `App.tsx`**:
-  - After app ready: call `adapter:check-readiness`
-  - If no adapter has `installed: true` → render `AdapterSetupScreen` (replaces all routes)
-  - If any adapter has `installed: true` → render normal routes
+- [x] **First-run routing in `App.tsx`**:
+  - Calls `adapter:check-readiness` at startup alongside settings fetch (parallel)
+  - `adapterGateResolved: null` → renders nothing (avoids flash)
+  - `adapterGateResolved: false` → renders `AdapterSetupScreen`
+  - `adapterGateResolved: true` → normal routing (project list / author)
 
-- [ ] **`adapter:list` IPC handler** — returns `Array<{ id, displayName, installUrl, kind }>` from the registry
+- [x] **`adapter:readiness-changed` IPC event** — broadcast from main `adapter:recheck` handler; renderer updates `adapterStore` and lifts gate if now installed
 
-- [ ] **`adapter:readiness-changed` IPC event** — broadcast from main whenever `recheck` changes a result; renderer updates its store
+- [x] **Store: `adapter-store.ts`** — Zustand slice with `readiness`, `setReadiness`, `updateFromCheckAll`, `anyInstalled`
 
-- [ ] **Store: `adapterStore.ts`** — lightweight Zustand slice:
-  - `readiness: Record<string, AdapterReadiness>`
-  - `setReadiness(id, r)`, `updateFromCheckAll(map)`
-  - Listens to `adapter:readiness-changed` from main
+- [x] **Settings panel — "AI Terminal" section updated**:
+  - Now uses `adapter:check-readiness` instead of `adapters:detect` for richer readiness data
+  - "Re-run setup" link on not-installed adapters opens `AdapterSetupWizard`
+  - Wizard completion refreshes adapter entries inline
 
-- [ ] **Settings panel — "AI Agent" section**:
-  - Shows installed adapter(s): name, version, install status dot
-  - "Re-run setup" button opens `AdapterSetupWizard` for the selected adapter
-  - Provider list sourced from `adapter:list` filtered to production adapters
-
-- [ ] **Worker-run pre-flight message update** — when `isReadyToRun` returns false, the run-aborted event includes the adapter's `blockers[0].message` and `blockers[0].fixUrl`; the renderer's worker detail panel shows this message with an "Install Claude Code" link
+- [x] **IPC channels + preload**: `adapter.checkReadiness`, `adapter.recheck`, `adapter.getCached`, `adapter.onReadinessChanged` added to `ipc-channels.ts` and `preload/index.ts`
 
 ---
 
