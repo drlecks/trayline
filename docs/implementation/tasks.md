@@ -69,6 +69,17 @@ Each task corresponds to a phase file in this folder. Check off tasks as they ar
 
 ---
 
+---
+
+## N6 Phases (Mainstream Adoption)
+
+- [ ] [Phase N6.1 — Adapter Readiness Protocol](./phase-n6-1-adapter-readiness.md)
+- [ ] [Phase N6.2 — AI Setup Wizard](./phase-n6-2-ai-setup-wizard.md)
+- [ ] [Phase N6.3 — Workflow Template Library](./phase-n6-3-template-library.md)
+- [ ] [Phase N6.4 — OS Notifications & System Tray Badge](./phase-n6-4-os-notifications.md)
+
+---
+
 ## Estimates
 
 | Block | Estimate |
@@ -77,6 +88,7 @@ Each task corresponds to a phase file in this folder. Check off tasks as they ar
 | N2 (Phases N2.1–N2.8) | ~6–7 weeks (1 developer) |
 | N3 (Phases N3.1–N3.4) | ~3–4 weeks (1 developer) |
 | N5 (Phases N5.1–N5.3) | ~1 week (1 developer) |
-| **Total** | **~21–25 weeks** |
+| N6 (Phases N6.1–N6.4) | ~2 weeks (1 developer) |
+| **Total** | **~23–27 weeks** |
 
 Highest-risk areas: Phase N2.4 (OAuth in Electron has OS-specific quirks), Phase N2.5 (clean MCP integration into the adapter layer), Phase N3.1 (atomic dedup index under crash conditions).

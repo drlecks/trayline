@@ -80,10 +80,10 @@ export interface EffortInfo {
   label: string
 }
 
-// AdapterUsageSnapshot lives in src/shared/types so the renderer can import it
-// without dragging main-process modules into its TS program.
-export type { AdapterUsageSnapshot } from '../../shared/types'
-import type { AdapterUsageSnapshot } from '../../shared/types'
+// These types live in src/shared/types so the renderer can import them without
+// dragging main-process modules into its TS program.
+export type { AdapterUsageSnapshot, AdapterReadiness, AdapterBlocker, AdapterBlockerKind } from '../../shared/types'
+import type { AdapterUsageSnapshot, AdapterReadiness } from '../../shared/types'
 
 export interface AITerminalAdapter {
   /** Stable identifier used by worker config (`adapter: "claude-code"`). */
@@ -99,9 +99,16 @@ export interface AITerminalAdapter {
   kind: 'production' | 'mock'
   /** Optional URL with install instructions, surfaced when `detectInstalled()` is false. */
   installUrl?: string
-  /** Returns true if the underlying CLI is available on the host system. */
+  /**
+   * Returns structured readiness without running any inference.
+   * Checks only what is cheaply detectable: binary presence, version, and any
+   * adapter-specific structural preconditions (e.g. local server reachable).
+   * Safe to call at startup; never consumes API tokens.
+   */
+  checkReadiness(): Promise<AdapterReadiness>
+  /** @deprecated Use checkReadiness() instead. */
   detectInstalled(): Promise<boolean>
-  /** Returns the CLI version string, or null if not installed. */
+  /** @deprecated Use checkReadiness() instead. */
   getVersion(): Promise<string | null>
   /** Models the user can pick for this provider. Empty array if not applicable. */
   listModels(): Promise<ModelInfo[]>

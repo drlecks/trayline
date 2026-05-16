@@ -74,8 +74,18 @@ The adapter interface:
 interface AITerminalAdapter {
   id: string;
   displayName: string;
+  kind: 'production' | 'mock';
   installUrl?: string;
+  /**
+   * Returns structured readiness without running any inference.
+   * Checks only what is cheaply detectable: binary presence, version, and any
+   * adapter-specific structural preconditions (e.g. local server reachable).
+   * Never consumes API tokens.
+   */
+  checkReadiness(): Promise<AdapterReadiness>;
+  /** @deprecated Use checkReadiness() instead. */
   detectInstalled(): Promise<boolean>;
+  /** @deprecated Use checkReadiness() instead. */
   getVersion(): Promise<string | null>;
   /** Models the user can pick for this provider. */
   listModels(): Promise<ModelInfo[]>;
@@ -94,6 +104,21 @@ interface AITerminalAdapter {
     workingDir: string;
     timeout: number;
   }): Promise<AISession>;
+}
+
+interface AdapterReadiness {
+  adapterId: string;
+  installed: boolean;
+  version: string | null;
+  blockers: AdapterBlocker[];  // empty = ready to run
+  checkedAt: number;
+}
+
+interface AdapterBlocker {
+  kind: AdapterBlockerKind;  // 'not_installed' | (extensible)
+  message: string;
+  fixUrl?: string;
+  fixCommand?: string;
 }
 
 interface AISession {

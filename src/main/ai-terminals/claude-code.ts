@@ -10,6 +10,7 @@ import type {
   ModelInfo,
   EffortInfo,
   AdapterUsageSnapshot,
+  AdapterReadiness,
   MCPDefinition,
 } from './adapter'
 
@@ -307,6 +308,31 @@ export const claudeCodeAdapter: AITerminalAdapter = {
   displayName: 'Claude Code',
   kind: 'production',
   installUrl: 'https://docs.claude.com/en/docs/claude-code/quickstart',
+
+  async checkReadiness(): Promise<AdapterReadiness> {
+    const version = await detectInstalled()
+    if (version === null) {
+      return {
+        adapterId: 'claude-code',
+        installed: false,
+        version: null,
+        blockers: [{
+          kind: 'not_installed',
+          message: 'Claude Code CLI is not installed on this machine.',
+          fixUrl: 'https://docs.claude.com/en/docs/claude-code/quickstart',
+          fixCommand: 'npm install -g @anthropic-ai/claude-code',
+        }],
+        checkedAt: Date.now(),
+      }
+    }
+    return {
+      adapterId: 'claude-code',
+      installed: true,
+      version,
+      blockers: [],
+      checkedAt: Date.now(),
+    }
+  },
 
   async detectInstalled() {
     return (await detectInstalled()) !== null
