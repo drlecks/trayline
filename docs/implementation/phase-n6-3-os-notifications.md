@@ -1,4 +1,4 @@
-# Phase N6.4 — OS Notifications & System Tray Badge
+# Phase N6.3 — OS Notifications & System Tray Badge
 
 **Estimate:** 2–3 days
 
@@ -22,7 +22,7 @@ No new npm dependencies — `Electron.Notification`, `app.setBadgeCount`, and ta
 
 ### Service
 
-- [ ] **`notification-service.ts`** (`src/main/services/notification-service.ts`):
+- [x] **`notification-service.ts`** (`src/main/services/notification-service.ts`):
 
   - `notifyCardNeedsReview(opts: { projectName, workflowName, trayName, cardId, cardTitle })`:
     - Check `notificationSettings.enabled` (global) and `notificationSettings.disabledProjects` (per-project) — skip if muted
@@ -41,7 +41,7 @@ No new npm dependencies — `Electron.Notification`, `app.setBadgeCount`, and ta
 
   - `refreshBadgeCount()` — queries `queueService.getTotalPendingCount()` (already exists) and calls `updateBadgeCount`; called after any card-state change event
 
-- [ ] **Notification settings** (`src/shared/types.ts`):
+- [x] **Notification settings** (`src/shared/types.ts`):
   ```typescript
   interface NotificationSettings {
     enabled: boolean              // global on/off; default true
@@ -50,29 +50,27 @@ No new npm dependencies — `Electron.Notification`, `app.setBadgeCount`, and ta
   ```
   Persisted in the global `Settings` object (`src/main/services/settings-store.ts`).
 
-- [ ] **IPC handlers**:
+- [x] **IPC handlers**:
   - `notifications:get-settings` → returns `NotificationSettings`
   - `notifications:update-settings` with `Partial<NotificationSettings>` → merges and persists
   - `notification:navigate` (main → renderer) — renderer navigates to the card identified by the payload
 
 ### Integration
 
-- [ ] **`watcher-service.ts`** — after a card lands in a tray with `approval_mode: 'manual'`, call `notificationService.notifyCardNeedsReview(...)`. This is already the place where card arrival events are emitted to the renderer.
+- [x] **`queue-service.ts`** — replaced basic `Electron.Notification` call with `notificationService.notifyCardNeedsReview(...)` and calls `refreshBadgeCount()` on card add/remove.
 
-- [ ] **`queue-service.ts`** — after any card state change that affects the pending count, call `notificationService.refreshBadgeCount()`.
+- [x] **`card-service.ts`** (or wherever card approval/discard is handled) — call `notificationService.clearNotified(cardId)` when a card is moved out of pending-review.
 
-- [ ] **`card-service.ts`** (or wherever card approval/discard is handled) — call `notificationService.clearNotified(cardId)` when a card is moved out of pending-review.
-
-- [ ] **App startup** (`src/main/index.ts`) — call `notificationService.refreshBadgeCount()` on `app.whenReady()` to set the correct badge from persisted queue state.
+- [x] **App startup** (`src/main/index.ts`) — call `notificationService.refreshBadgeCount()` on `app.whenReady()` to set the correct badge from persisted queue state.
 
 ### Renderer
 
-- [ ] **Settings panel — "Notifications" section**:
+- [x] **Settings panel — "Notifications" section**:
   - Global toggle: "Notify me when cards need review"
   - Per-project toggles: list of all projects with individual on/off switches (hidden if global toggle is off)
-  - "Clear all notifications" button (calls `notificationService.clearAllNotified()`)
+  - "Clear notification history" button (calls `notificationService.clearAllNotified()`)
 
-- [ ] **`notification:navigate` handler in `App.tsx`** — listens for the IPC event, navigates the router to the card's tray panel, and scrolls to the card
+- [x] **`notification:navigate` handler in `App.tsx`** — listens for the IPC event, navigates the router to the card's tray panel, and scrolls to the card
 
 ---
 
