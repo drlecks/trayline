@@ -179,6 +179,42 @@ Clicking an example fills the textbox so the user can edit before submitting.
 
 ---
 
+## 6.14 AI Setup — First Launch
+
+Trayline checks adapter readiness at startup before any other routing:
+
+### No adapter installed
+
+```
+App opens → adapter:check-readiness
+  └── no production adapter has installed: true
+        └── AdapterSetupScreen (full window, no rail or header)
+              ├── One card per registered production adapter
+              │     • install command in a copyable code block
+              │     • "Open install guide" link
+              │     • [Check again] → calls adapter:recheck inline
+              │     • [Setup guide] → opens AdapterSetupWizard modal
+              └── When any adapter becomes installed → onReady() → normal routing
+```
+
+### Adapter installed
+
+App routes normally (project list or workflow author). No banner, no gate.
+
+### AdapterSetupWizard (modal)
+
+Available from `AdapterSetupScreen` and from Settings → AI Terminal → "Re-run setup".
+Steps are derived from `AdapterReadiness.blockers`:
+
+| State | Steps |
+|---|---|
+| `not_installed` | Install instructions → Check again → Done |
+| installed | Done |
+
+The wizard never runs inference. All steps are informational or trigger a `checkReadiness()` re-check.
+
+---
+
 ## 6.13 A Source Step Runs
 
 Triggered automatically by the cron scheduler, or manually via **Run now**:
