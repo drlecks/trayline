@@ -8,6 +8,7 @@ import fs from 'fs/promises'
 import { fsService } from './fs-service'
 import { auditDb } from './audit-db'
 import { projectService } from './project-service'
+import { notificationService } from './notification-service'
 import type { Card, CardCounts, CardStatus, TrayCounters, CardHistoryEntry } from '../../shared/card'
 
 function stepPath(project: string, workflow: string, stepId: string): string {
@@ -228,6 +229,7 @@ async function markReady(
   stepId: string,
   cardId: string,
 ): Promise<Card> {
+  notificationService.clearNotified(cardId)
   return moveCard(project, workflow, stepId, cardId, 'pending', 'ready', {
     at: new Date().toISOString(),
     step: stepId,
@@ -243,6 +245,7 @@ async function archiveCard(
   cardId: string,
   fromStatus: CardStatus,
 ): Promise<Card> {
+  notificationService.clearNotified(cardId)
   return moveCard(project, workflow, stepId, cardId, fromStatus, 'archived', {
     at: new Date().toISOString(),
     step: stepId,

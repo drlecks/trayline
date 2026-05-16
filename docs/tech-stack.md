@@ -32,6 +32,8 @@
 - **node-cron** — scheduler for workers that poll on an interval
 - **fast-glob** — folder scanning
 - **keytar** — OS keychain access for MCP credentials (Keychain on macOS, Credential Manager on Windows, libsecret on Linux)
+- **Electron.Notification** (built-in) — OS push notifications when cards need review; guarded by `Notification.isSupported()`
+- **app.setBadgeCount / BrowserWindow.setOverlayIcon** (built-in) — dock/taskbar badge showing pending-review count; SVG-drawn overlay on Windows, native badge count on macOS and Linux
 
 ---
 

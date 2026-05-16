@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import { IPC } from '../shared/ipc-channels'
 import type {
   Settings,
+  NotificationSettings,
   AuditRow,
   BootstrapInfo,
   ProjectMeta,
@@ -305,6 +306,21 @@ const api = {
       ipcRenderer.invoke(IPC.mcp.deleteCredentials, mcpId),
     testConnection: (mcpId: string): Promise<{ ok: boolean; error?: string }> =>
       ipcRenderer.invoke(IPC.mcp.testConnection, mcpId),
+  },
+  notifications: {
+    getSettings: (): Promise<NotificationSettings> =>
+      ipcRenderer.invoke(IPC.notifications.getSettings),
+    updateSettings: (partial: Partial<NotificationSettings>): Promise<NotificationSettings> =>
+      ipcRenderer.invoke(IPC.notifications.updateSettings, partial),
+    clearAllNotified: (): Promise<void> =>
+      ipcRenderer.invoke(IPC.notifications.clearAllNotified),
+    getBadgeCount: (): Promise<number> =>
+      ipcRenderer.invoke(IPC.notifications.getBadgeCount),
+    onNavigate: (handler: (payload: { projectName: string; workflowName: string; cardId: string }) => void): (() => void) => {
+      const listener = (_e: unknown, payload: { projectName: string; workflowName: string; cardId: string }) => handler(payload)
+      ipcRenderer.on(IPC.notification.navigate, listener)
+      return () => ipcRenderer.off(IPC.notification.navigate, listener)
+    },
   },
   platform: process.platform as NodeJS.Platform,
 }
