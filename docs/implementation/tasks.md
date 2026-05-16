@@ -75,7 +75,7 @@ Each task corresponds to a phase file in this folder. Check off tasks as they ar
 
 - [x] [Phase N6.1 — Adapter Readiness Protocol](./phase-n6-1-adapter-readiness.md)
 - [x] [Phase N6.2 — AI Setup Wizard](./phase-n6-2-ai-setup-wizard.md)
-- [ ] [Phase N6.3 — OS Notifications & System Tray Badge](./phase-n6-3-os-notifications.md)
+- [x] [Phase N6.3 — OS Notifications & System Tray Badge](./phase-n6-3-os-notifications.md)
 
 ---
 
