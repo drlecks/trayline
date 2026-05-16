@@ -317,9 +317,13 @@ export function registerIpcHandlers(
     return Object.fromEntries(map)
   })
 
-  ipcMain.handle('adapter:recheck', async (_: unknown, adapterId: string) =>
-    adapterReadinessService.recheck(adapterId),
-  )
+  ipcMain.handle('adapter:recheck', async (_: unknown, adapterId: string) => {
+    const readiness = await adapterReadinessService.recheck(adapterId)
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) win.webContents.send('adapter:readiness-changed', readiness)
+    }
+    return readiness
+  })
 
   ipcMain.handle('adapter:get-cached', (_: unknown, adapterId: string) =>
     adapterReadinessService.getCached(adapterId),
