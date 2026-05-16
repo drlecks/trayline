@@ -12,6 +12,7 @@ import { sourceRunner, setSourceEventBroadcast } from './services/source-runner'
 import { orchestrator } from './services/orchestrator'
 import { setupAutoUpdater } from './services/auto-update-service'
 import { registerIpcHandlers } from './ipc/handlers'
+import { notificationService } from './services/notification-service'
 import { dirnameFromMeta } from './util/paths'
 
 const __dirname = dirnameFromMeta(import.meta.url)
@@ -183,11 +184,15 @@ app.whenReady().then(async () => {
     registerIpcHandlers(ipcMain, () => bootstrapInfo)
     stage('registerIpcHandlers done')
 
-    createWindow()
+    const win = createWindow()
+    notificationService.setMainWindow(win)
     stage('createWindow returned')
 
     await orchestrator.mountAll()
     stage('orchestrator.mountAll done')
+
+    void notificationService.refreshBadgeCount()
+    stage('notificationService.refreshBadgeCount called')
 
     setupAutoUpdater(stage)
 

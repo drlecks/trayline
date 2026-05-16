@@ -4,6 +4,13 @@
 
 // ── Settings ──────────────────────────────────────────────────────────────────
 
+export interface NotificationSettings {
+  /** Global on/off switch — when false, no OS notifications are fired. Default: true. */
+  enabled: boolean
+  /** Project names (folder ids) for which notifications are suppressed. */
+  disabledProjects: string[]
+}
+
 export interface Settings {
   theme: 'light' | 'dark' | 'system'
   defaultCliCommand: string
@@ -12,7 +19,9 @@ export interface Settings {
   defaultModelByAdapter: Record<string, string | null>
   /** Per-adapter chosen effort id. Keyed by adapter id; null when not set or N/A. */
   defaultEffortByAdapter: Record<string, string | null>
+  /** @deprecated Use notificationSettings.enabled instead. */
   notificationsEnabled: boolean
+  notificationSettings: NotificationSettings
   /**
    * Name (folder id) of the last project the user had open. Restored on next
    * launch so the app comes back to where the user left it. null when the

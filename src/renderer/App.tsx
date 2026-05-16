@@ -134,6 +134,33 @@ export default function App() {
     return () => window.removeEventListener('trayline:open-tour', open)
   }, [])
 
+  // Navigate to a specific card when a notification is clicked.
+  useEffect(() => {
+    return window.trayline.notifications.onNavigate(async ({ projectName, cardId }) => {
+      const project = await window.trayline.project.get(projectName)
+      if (!project) return
+      const { setActive, setSelectedStepId, setJumpTarget } = useProjectStore.getState()
+
+      // Find which tray step has this card in pending
+      const workflows = await window.trayline.project.listWorkflows(projectName)
+      for (const wf of workflows) {
+        const steps = await window.trayline.project.listSteps(projectName, wf.name)
+        for (const step of steps) {
+          if (step.kind !== 'tray') continue
+          const result = await window.trayline.card.get(projectName, wf.name, step.id, cardId)
+          if (result) {
+            setActive(project)
+            setSelectedStepId(step.id)
+            setJumpTarget({ stepId: step.id, cardId })
+            return
+          }
+        }
+      }
+      // Fallback: just open the project
+      setActive(project)
+    })
+  }, [])
+
   async function closeTour() {
     setTourOpen(false)
     await window.trayline.settings.set('onboardingComplete', true)

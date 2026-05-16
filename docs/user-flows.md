@@ -215,6 +215,34 @@ The wizard never runs inference. All steps are informational or trigger a `check
 
 ---
 
+## 6.15 Notification Click → Jump to Card
+
+When a card lands in a manual-approval tray while the app is in the background:
+
+1. `queue-service` chokidar watcher fires on the new file in `pending/`
+2. `notification-service.notifyCardNeedsReview()` is called with project, workflow, tray name, card id, and optional card title extracted from `data.title / data.name / data.subject`
+3. Settings are checked: if `notificationSettings.enabled` is false, or the project is in `disabledProjects`, skip
+4. Dedup check: if `cardId` is already in the in-session `notified` Set, skip (prevents double-notification if the watcher fires twice)
+5. Window focus check: if any BrowserWindow reports `isFocused()`, add to dedup set but do **not** show a notification (the in-app badge is sufficient)
+6. `new Notification({ title: trayName, body: cardTitle || 'A card needs your review' }).show()`
+7. User clicks the notification:
+   - The Electron window is restored (`win.restore()`) and focused
+   - Main sends `notification:navigate { projectName, workflowName, cardId }` to the renderer
+   - Renderer's `App.tsx` handler fetches the project and scans workflows/steps to find which tray holds the card
+   - `setActive(project)` + `setSelectedStepId(stepId)` + `setJumpTarget({ stepId, cardId })` are called in sequence
+   - The `CardsTab` component reads `jumpTarget` on mount and scrolls to the card
+
+### Badge / overlay count
+
+- After every `add`/`unlink` event in `queue-service`, `notificationService.refreshBadgeCount()` is called
+- `refreshBadgeCount` queries `queueService.getPending()` and passes the count to `updateBadgeCount`
+- macOS: `app.setBadgeCount(n)` — red dot with number on the dock icon
+- Windows: `BrowserWindow.setOverlayIcon` with an SVG-drawn red circle (cleared when count is 0)
+- Linux: `app.setBadgeCount(n)` (Unity/GNOME badge; no-op on other desktops)
+- On app startup (`orchestrator.mountAll` done), `refreshBadgeCount()` is called once to restore the badge from any pre-existing pending cards
+
+---
+
 ## 6.13 A Source Step Runs
 
 Triggered automatically by the cron scheduler, or manually via **Run now**:
