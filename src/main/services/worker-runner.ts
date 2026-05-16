@@ -19,6 +19,7 @@ import { projectService } from './project-service'
 import { auditDb } from './audit-db'
 import { settingsStore } from './settings-store'
 import { adapterRegistry } from '../ai-terminals/registry'
+import { adapterReadinessService } from './adapter-readiness-service'
 import { mcpRegistry } from './mcp-registry'
 import { mcpCredentials } from './mcp-credentials'
 import { IPC } from '../../shared/ipc-channels'
@@ -429,11 +430,10 @@ async function runInner(input: TriggerRunInput): Promise<TriggerRunResult> {
   // machine. The renderer pops a modal for user-triggered runs, but watchers
   // and the scheduler call straight through — without this check they'd race
   // through to a confusing "claude: command not found" PTY failure.
-  if (adapter.kind === 'production' && !(await adapter.detectInstalled())) {
-    throw new Error(
-      `AI provider "${adapter.displayName}" is not installed on this machine. ` +
-      `Open Settings → AI Terminal and install a provider before running workers.`,
-    )
+  if (adapter.kind === 'production' && !(await adapterReadinessService.isReadyToRun(adapterId))) {
+    const readiness = adapterReadinessService.getCached(adapterId)
+    const detail = readiness?.blockers[0]?.message ?? `${adapter.displayName} is not installed on this machine.`
+    throw new Error(detail)
   }
 
   const timeoutMs = (worker.execution?.timeout_seconds ?? 180) * 1000
@@ -741,8 +741,10 @@ async function runBatchInner(input: TriggerBatchRunInput): Promise<TriggerRunRes
   const adapterId = worker.execution?.adapter ?? 'claude-code'
   const adapter = adapterRegistry.get(adapterId)
   if (!adapter) throw new Error(`Adapter not found: ${adapterId}`)
-  if (adapter.kind === 'production' && !(await adapter.detectInstalled())) {
-    throw new Error(`AI provider "${adapter.displayName}" is not installed on this machine.`)
+  if (adapter.kind === 'production' && !(await adapterReadinessService.isReadyToRun(adapterId))) {
+    const readiness = adapterReadinessService.getCached(adapterId)
+    const detail = readiness?.blockers[0]?.message ?? `${adapter.displayName} is not installed on this machine.`
+    throw new Error(detail)
   }
 
   const timeoutMs = (worker.execution?.timeout_seconds ?? 180) * 1000
