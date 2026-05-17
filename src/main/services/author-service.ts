@@ -30,13 +30,11 @@ export interface AuthorError {
 export type AuthorOutcome = AuthorResult | AuthorError
 
 function getAuthorPromptPath(): string {
-  // In production the resource is in the asar-unpacked resources folder.
-  // In dev/test it sits next to the project root resources/ directory.
-  try {
-    return join(app.getAppPath(), '..', 'resources', 'author-prompt.md')
-  } catch {
-    return join(__dirname, '..', '..', '..', 'resources', 'author-prompt.md')
-  }
+  // Packaged: app.getAppPath() is the asar root → ../resources is the electron resources dir.
+  // Dev/Test: app.getAppPath() is the project root → resources/ is directly inside.
+  return app.isPackaged
+    ? join(app.getAppPath(), '..', 'resources', 'author-prompt.md')
+    : join(app.getAppPath(), 'resources', 'author-prompt.md')
 }
 
 async function loadAuthorPrompt(): Promise<string | null> {
