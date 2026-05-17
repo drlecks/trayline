@@ -1,7 +1,6 @@
-// Schema of the workflow plan JSON produced by the `trayline-author` system
-// skill and consumed by the scaffold service. Lives in shared/ so both the
-// renderer (for previews) and the main process (for scaffolding) can validate
-// against the same shape.
+// Schema of the workflow plan JSON produced by the author service and consumed
+// by the scaffold service. Lives in shared/ so both the renderer (for previews)
+// and the main process (for scaffolding) can validate against the same shape.
 
 export type StepKind = 'tray' | 'worker' | 'source'
 
