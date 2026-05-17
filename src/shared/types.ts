@@ -211,10 +211,7 @@ export interface UsageSnapshot {
 
 export type AdapterBlockerKind =
   | 'not_installed'
-  // Future adapters may extend this union with cheaply-detectable conditions
-  // (e.g. 'server_unreachable' for a local server, 'version_too_old').
-  // Conditions that require running inference to detect are intentionally
-  // excluded — those surface as worker-run terminal errors instead.
+  | 'model_not_downloaded'  // local-llm: runtime present but no GGUF model file on disk
 
 export interface AdapterBlocker {
   kind: AdapterBlockerKind
@@ -235,6 +232,29 @@ export interface AdapterReadiness {
   /** All current blockers. Empty array means ready to run. */
   blockers: AdapterBlocker[]
   checkedAt: number
+}
+
+export interface LocalModelEntry {
+  id: string
+  label: string
+  description: string
+  filename: string
+  sizeMb: number
+  sizeBytes: number
+  recommended: boolean
+  minRamMb: number
+  /** True when the GGUF file is present in userData/trayline-models/. */
+  downloaded: boolean
+  /** ms timestamp of when the file was last modified (proxy for download time). */
+  downloadedAt?: number
+}
+
+export interface ModelDownloadProgress {
+  modelId: string
+  downloadedBytes: number
+  totalBytes: number
+  /** 0–100 */
+  percent: number
 }
 
 export interface ProviderInstallSuggestion {

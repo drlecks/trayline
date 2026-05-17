@@ -1,14 +1,17 @@
 import { useState } from 'react'
-import { ExternalLink, RefreshCw, Zap } from 'lucide-react'
+import { Download, ExternalLink, RefreshCw, Zap } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAdapterStore } from '@/stores/adapter-store'
 import AdapterSetupWizard from './AdapterSetupWizard'
+import ModelDownloadModal from './ModelDownloadModal'
 import type { AdapterReadiness } from '../../../shared/types'
 
 interface AdapterCard {
   id: string
   displayName: string
+  description: string | null
   installUrl: string | null
+  requiresExternalInstall: boolean
   kind: 'production' | 'mock'
 }
 
@@ -24,12 +27,20 @@ export default function AdapterSetupScreen({ onReady }: { onReady: () => void })
   const [wizardAdapter, setWizardAdapter] = useState<AdapterCard | null>(null)
   const [wizardOpen, setWizardOpen] = useState(false)
   const [recheckingId, setRecheckingId] = useState<string | null>(null)
+  const [downloadModalOpen, setDownloadModalOpen] = useState(false)
 
   // Load adapter list once on mount
   useState(() => {
     void (async () => {
       const list = await window.trayline.adapters.list()
-      setAdapters(list.filter((a) => a.kind === 'production'))
+      setAdapters(list.filter((a) => a.kind === 'production').map((a) => ({
+        id: a.id,
+        displayName: a.displayName,
+        description: a.description,
+        installUrl: a.installUrl,
+        requiresExternalInstall: a.requiresExternalInstall,
+        kind: a.kind,
+      })))
     })()
   })
 
@@ -66,8 +77,8 @@ export default function AdapterSetupScreen({ onReady }: { onReady: () => void })
           <div>
             <h1 className="text-lg font-semibold tracking-tight">Connect your AI</h1>
             <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-1 leading-snug">
-              Trayline needs an AI agent to run your workflows.
-              Install one of the providers below, then click <strong>Check again</strong>.
+              Trayline needs an AI to run your workflows.
+              Choose an option below to get started.
             </p>
           </div>
         </div>
@@ -77,6 +88,7 @@ export default function AdapterSetupScreen({ onReady }: { onReady: () => void })
           {adapters.map((adapter) => {
             const r = getReadiness(adapter.id)
             const checking = recheckingId === adapter.id
+            const isLocalLlm = adapter.id === 'local-llm'
 
             return (
               <div
@@ -86,11 +98,14 @@ export default function AdapterSetupScreen({ onReady }: { onReady: () => void })
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-sm font-medium">{adapter.displayName}</p>
+                    {adapter.description && (
+                      <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5">{adapter.description}</p>
+                    )}
                     {r?.version && (
                       <p className="text-[11px] font-mono text-neutral-500 dark:text-neutral-400 mt-0.5">{r.version}</p>
                     )}
                   </div>
-                  {adapter.installUrl && (
+                  {!isLocalLlm && adapter.installUrl && (
                     <a
                       href={adapter.installUrl}
                       target="_blank"
@@ -102,33 +117,63 @@ export default function AdapterSetupScreen({ onReady }: { onReady: () => void })
                   )}
                 </div>
 
-                {r?.blockers[0]?.fixCommand && (
+                {!isLocalLlm && r?.blockers[0]?.fixCommand && (
                   <code className="text-[11px] font-mono bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded px-2.5 py-1.5 text-neutral-600 dark:text-neutral-400">
                     {r.blockers[0].fixCommand}
                   </code>
                 )}
 
                 <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => void recheck(adapter)}
-                    disabled={checking}
-                    className="flex-1"
-                  >
-                    {checking
-                      ? <><RefreshCw size={12} strokeWidth={2} className="animate-spin mr-1.5" /> Checking…</>
-                      : <><RefreshCw size={12} strokeWidth={2} className="mr-1.5" /> Check again</>
-                    }
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => openWizard(adapter)}
-                    className="text-xs"
-                  >
-                    Setup guide
-                  </Button>
+                  {isLocalLlm ? (
+                    r?.installed ? (
+                      // Model already downloaded — just offer recheck
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void recheck(adapter)}
+                        disabled={checking}
+                        className="flex-1"
+                      >
+                        {checking
+                          ? <><RefreshCw size={12} strokeWidth={2} className="animate-spin mr-1.5" /> Checking…</>
+                          : <><RefreshCw size={12} strokeWidth={2} className="mr-1.5" /> Check again</>
+                        }
+                      </Button>
+                    ) : (
+                      // No model downloaded — show download button
+                      <Button
+                        size="sm"
+                        onClick={() => setDownloadModalOpen(true)}
+                        className="flex-1"
+                      >
+                        <Download size={12} strokeWidth={2} className="mr-1.5" />
+                        Download local model
+                      </Button>
+                    )
+                  ) : (
+                    <>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void recheck(adapter)}
+                        disabled={checking}
+                        className="flex-1"
+                      >
+                        {checking
+                          ? <><RefreshCw size={12} strokeWidth={2} className="animate-spin mr-1.5" /> Checking…</>
+                          : <><RefreshCw size={12} strokeWidth={2} className="mr-1.5" /> Check again</>
+                        }
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => openWizard(adapter)}
+                        className="text-xs"
+                      >
+                        Setup guide
+                      </Button>
+                    </>
+                  )}
                 </div>
               </div>
             )
@@ -140,7 +185,7 @@ export default function AdapterSetupScreen({ onReady }: { onReady: () => void })
         </div>
       </div>
 
-      {/* Setup wizard modal */}
+      {/* Setup wizard modal (non-local adapters only) */}
       {wizardAdapter && (
         <AdapterSetupWizard
           adapterId={wizardAdapter.id}
@@ -157,6 +202,13 @@ export default function AdapterSetupScreen({ onReady }: { onReady: () => void })
           onComplete={onReady}
         />
       )}
+
+      {/* Model download modal (local-llm only) */}
+      <ModelDownloadModal
+        open={downloadModalOpen}
+        onOpenChange={setDownloadModalOpen}
+        onReady={onReady}
+      />
     </div>
   )
 }

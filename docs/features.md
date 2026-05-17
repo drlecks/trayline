@@ -393,6 +393,51 @@ The `process.md` instructs the AI how to synthesise the array into one output.
 
 ---
 
+## 7.18 Local AI Model — Download & Management
+
+When the **local-llm** adapter is registered, several UI surfaces expose model management.
+
+### AdapterSetupScreen — local-llm card
+
+The `AdapterSetupScreen` (shown when no adapter is ready at startup) renders one card per registered production adapter. The local-llm card diverges from the standard card in three ways:
+
+1. **No "Install guide" link** — there is no external install; the model is downloaded inside the app.
+2. **"Download local model" button** — opens the `ModelDownloadModal`. Only shown when no model has been downloaded yet.
+3. **"Check again" button** — shown instead when a model is already downloaded. Triggers `adapter.recheck()` to update readiness without re-downloading.
+
+### ModelDownloadModal
+
+A four-state dialog reachable from `AdapterSetupScreen` and from Settings → Local AI model.
+
+| State | UI |
+|---|---|
+| `idle` | Radio list of available models (from `local-models.json` catalog). Each row shows label, description, file size in MB, and "Recommended" / "Downloaded" badges. |
+| `downloading` | Progress bar (downloaded / total bytes and %). Cancel link. Dialog cannot be dismissed while downloading. |
+| `complete` | Green check, "Model ready" heading, "Start using Trayline" button — calls `localModel.recheckAdapter()` then `onReady()`. |
+| `error` | Error description, "Try again" button returns to idle. |
+
+The `onOpenChange` prop is blocked during `downloading` state (both outside-click and Escape key) to prevent partial downloads from being abandoned silently.
+
+### Settings → Local AI model
+
+A dedicated section in Settings (visible only when local-llm is in the adapter registry) shows:
+
+- List of already-downloaded models with their label and a **Delete** button per model.
+- A "Download another model" link (when at least one is downloaded) or a "Download a model now" link (when none are).
+- Both links open `ModelDownloadModal`.
+
+### Workflow Author warning
+
+When the active adapter is `local-llm`, a soft amber note appears below the textarea in the Workflow Author screen:
+
+> **Using local AI model.** Workflow generation works best with Claude Code — local models may produce simpler or incomplete plans. You can edit the result after creation.
+
+### MCPs screen badge
+
+Each installed MCP in the MCPs screen shows a "Not available with local AI model" badge when the active adapter has `supportsMcps: false`. The badge is informational — it does not block installation or configuration.
+
+---
+
 ## 7.18 Onboarding Tour
 
 A one-time guided tour that runs the first time the user launches the app. Implemented as an overlay with a dimmed backdrop and a highlight ring around the currently-described region.

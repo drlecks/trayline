@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from 'react'
-import { Rss, Play, Pause, RotateCcw, AlertTriangle, Trash2 } from 'lucide-react'
+import { Rss, Play, Pause, RotateCcw, AlertTriangle, Trash2, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -17,9 +17,32 @@ interface SourceDetailPanelProps {
 export default function SourceDetailPanel({ step }: SourceDetailPanelProps) {
   const active = useProjectStore((s) => s.active)
   const workflow = useProjectStore((s) => s.workflow)
+  const setScreen = useProjectStore((s) => s.setScreen)
   const [tab, setTab] = useState<Tab>('source')
   const [sourceState, setSourceState] = useState<SourceState | null>(null)
   const [runNowBusy, setRunNowBusy] = useState(false)
+  const [runTriggerError, setRunTriggerError] = useState<string | null>(null)
+
+  // Track whether the effective adapter supports MCPs.
+  const [adapterSupportsMcps, setAdapterSupportsMcps] = useState(true)
+  useEffect(() => {
+    let cancelled = false
+    async function check() {
+      const raw = step.raw as { mcps?: string[]; execution?: { adapter?: string } }
+      if (!raw.mcps?.length) { setAdapterSupportsMcps(true); return }
+      const [adapters, settings] = await Promise.all([
+        window.trayline!.adapters.list(),
+        window.trayline!.settings.get(),
+      ])
+      if (cancelled) return
+      const effectiveId = raw.execution?.adapter ?? settings.defaultAdapterId
+      const adapter = adapters.find((a) => a.id === effectiveId)
+      setAdapterSupportsMcps(adapter?.supportsMcps ?? true)
+    }
+    void check()
+    const off = window.trayline!.settings.onChange(() => { void check() })
+    return () => { cancelled = true; off() }
+  }, [step.id])
 
   const loadState = useCallback(async () => {
     if (!active || !workflow) return
@@ -57,10 +80,13 @@ export default function SourceDetailPanel({ step }: SourceDetailPanelProps) {
   async function handleRunNow() {
     if (!active || !workflow) return
     setRunNowBusy(true)
+    setRunTriggerError(null)
     try {
       const ok = await useProviderGuard.getState().ensureReady()
       if (!ok) return
       await window.trayline.source.runNow(active.name, workflow.name, step.id)
+    } catch (err) {
+      setRunTriggerError(err instanceof Error ? err.message : String(err))
     } finally {
       setRunNowBusy(false)
     }
@@ -125,6 +151,24 @@ export default function SourceDetailPanel({ step }: SourceDetailPanelProps) {
           </div>
         )}
 
+        {runTriggerError && (
+          <div className="
+            flex items-start gap-2 mt-3 px-3 py-2.5 rounded-md
+            border border-red-200 dark:border-red-800/60
+            bg-red-50 dark:bg-red-950/30
+            text-xs text-red-800 dark:text-red-300
+          ">
+            <XCircle size={13} strokeWidth={1.75} className="mt-0.5 shrink-0 text-red-500" />
+            <span className="flex-1">{runTriggerError}</span>
+            <button
+              className="shrink-0 text-red-600 dark:text-red-400 hover:underline font-medium"
+              onClick={() => setScreen('settings')}
+            >
+              Go to Settings
+            </button>
+          </div>
+        )}
+
         <div className="flex gap-1 mt-4 -mb-5">
           {(['source', 'config', 'runs'] as Tab[]).map((t) => (
             <button
@@ -142,6 +186,21 @@ export default function SourceDetailPanel({ step }: SourceDetailPanelProps) {
           ))}
         </div>
       </div>
+
+      {!adapterSupportsMcps && (
+        <div className="
+          flex items-start gap-2 px-6 py-2.5 shrink-0
+          bg-amber-50 dark:bg-amber-950/30
+          border-b border-amber-200/60 dark:border-amber-900/40
+          text-xs text-amber-900 dark:text-amber-300
+        ">
+          <AlertTriangle size={13} strokeWidth={1.75} className="mt-0.5 shrink-0" />
+          <span>
+            The active AI provider does not support MCP tools — this source step will fail when MCPs are enabled.{' '}
+            Switch to <strong>Claude Code</strong> in Settings, or remove all MCPs from this source.
+          </span>
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto">
         {tab === 'source' && active && workflow && (

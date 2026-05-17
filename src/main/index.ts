@@ -13,6 +13,7 @@ import { orchestrator } from './services/orchestrator'
 import { setupAutoUpdater } from './services/auto-update-service'
 import { registerIpcHandlers } from './ipc/handlers'
 import { notificationService } from './services/notification-service'
+import { localModelService } from './services/local-model-service'
 import { dirnameFromMeta } from './util/paths'
 
 const __dirname = dirnameFromMeta(import.meta.url)
@@ -149,6 +150,9 @@ app.whenReady().then(async () => {
 
     await fsService.bootstrap()
     stage('fsService.bootstrap done')
+
+    await localModelService.cleanupStaleParts()
+    stage('localModelService.cleanupStaleParts done')
 
     auditDb.init()
     stage('auditDb.init done')

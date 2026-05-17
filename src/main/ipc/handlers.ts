@@ -19,6 +19,7 @@ import { orchestrator } from '../services/orchestrator'
 import { adapterReadinessService } from '../services/adapter-readiness-service'
 import { queueService } from '../services/queue-service'
 import { notificationService } from '../services/notification-service'
+import { localModelService } from '../services/local-model-service'
 import { join } from 'path'
 import fs from 'fs/promises'
 import { fsService } from '../services/fs-service'
@@ -246,6 +247,9 @@ export function registerIpcHandlers(
       displayName: a.displayName,
       kind: a.kind,
       installUrl: a.installUrl ?? null,
+      description: a.description ?? null,
+      supportsMcps: a.supportsMcps ?? true,
+      requiresExternalInstall: a.installUrl != null,
     })),
   )
   ipcMain.handle('adapters:detect', async (_: unknown, id: string) => {
@@ -375,6 +379,19 @@ export function registerIpcHandlers(
   ipcMain.handle('source:run-now', async (_: unknown, project: string, workflow: string, stepId: string) => {
     const stepDir = projectService.paths.stepDir(project, workflow, stepId)
     const cfg = await fsService.readJson<SourceStepConfig>(join(stepDir, 'step.json'))
+
+    // Pre-flight: surface adapter incompatibility before allocating any run.
+    // source:run-now is fire-and-forget so errors inside runSource are swallowed;
+    // check here so the IPC call can reject cleanly.
+    const adapterId = cfg.execution?.adapter ?? settingsStore.get('defaultAdapterId') ?? 'claude-code'
+    const srcAdapter = adapterRegistry.get(adapterId)
+    if (srcAdapter && srcAdapter.supportsMcps === false) {
+      throw new Error(
+        `${srcAdapter.displayName} does not support source steps. ` +
+        `Source steps require an external AI agent to fetch data. Switch to Claude Code in Settings → AI Terminal.`,
+      )
+    }
+
     void sourceRunner.runSource({ project, workflow, stepId, stepConfig: cfg }).catch((e) => {
       // eslint-disable-next-line no-console
       console.error('[source:run-now] failed:', e)
@@ -531,5 +548,38 @@ export function registerIpcHandlers(
 
   ipcMain.handle('notifications:get-badge-count', () =>
     notificationService.getCurrentBadgeCount(),
+  )
+
+  // ── Local model management ────────────────────────────────────────────────
+  ipcMain.handle('local-model:list', () => localModelService.listWithStatus())
+
+  ipcMain.handle('local-model:download', async (_: unknown, modelId: string) => {
+    const broadcast = (channel: string, payload: unknown) => {
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) win.webContents.send(channel, payload)
+      }
+    }
+    try {
+      await localModelService.downloadModel(modelId, (progress) => {
+        broadcast('local-model:progress', { ...progress, modelId })
+      })
+      broadcast('local-model:download-complete', { modelId })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      broadcast('local-model:download-error', { modelId, error: message })
+      throw err
+    }
+  })
+
+  ipcMain.handle('local-model:cancel', (_: unknown, modelId: string) => {
+    localModelService.cancelDownload(modelId)
+  })
+
+  ipcMain.handle('local-model:delete', (_: unknown, modelId: string) =>
+    localModelService.deleteModel(modelId),
+  )
+
+  ipcMain.handle('local-model:recheck-adapter', () =>
+    adapterReadinessService.recheck('local-llm'),
   )
 }

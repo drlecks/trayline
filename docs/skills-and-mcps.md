@@ -143,6 +143,15 @@ A linear next/back/cancel modal. Steps are derived dynamically from three fields
 
 All credential values are held in memory during the wizard and committed to the OS keychain only immediately before the test step (or on Finish if there is no test). Aborting the wizard at any step calls `delete-credentials` to clean up any partial keychain state — the MCP returns to *Setup needed*.
 
+### Adapter Compatibility (`supportsMcps`)
+
+Not all AI adapters support MCP tools. Each adapter declares this via an optional `supportsMcps` field on the `AITerminalAdapter` interface:
+
+- **`supportsMcps: false`** — the adapter cannot connect to MCP processes. Any worker or source step that has MCPs assigned will be blocked from running. The worker's **Run now** button surfaces an inline error and a link to Settings.
+- **`supportsMcps: true` or omitted** — MCPs are supported (the default assumption).
+
+Currently, `local-llm` sets `supportsMcps: false`. Claude Code sets it to `true`. The MCPs screen shows a "Not available with local AI model" badge next to each installed MCP when the active adapter doesn't support them.
+
 ### MCP Execution Flow
 
 In `spawn()`, the engine:

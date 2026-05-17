@@ -26,6 +26,7 @@
 ## Backend / System (Main Process)
 
 - **node-pty** — real PTY for spawning `claude` and other CLI agents
+- **node-llama-cpp** (~3.18.1) — in-process GGUF model inference for the local-llm adapter; runs entirely offline after the model is downloaded. Requires `@electron/rebuild` as a dev dependency to compile native bindings against the app's Electron version.
 - **chokidar** — file system watcher (detects new cards in trays)
 - **better-sqlite3** — local indexed cache for run history and audit log
 - **archiver / adm-zip** — zip-based project import/export (write / read)
@@ -53,6 +54,7 @@
 - No accounts
 - No telemetry
 - **One outbound call:** the Skill Finder fetches a public skill index (a single JSON file from a known GitHub repo) when the user opens it
+- **Optional one-time download:** the local-llm adapter downloads a GGUF model file (~3–8 GB) from a known URL on first use; all inference after that is fully offline
 - MCP credentials live in the OS keychain — never in plain files
 
 ---
@@ -65,10 +67,13 @@ Workers don't know they're talking to Claude Code specifically. They talk to an 
 src/main/ai-terminals/
 ├── adapter.ts          # The interface every adapter implements
 ├── claude-code.ts      # Claude Code adapter (default)
+├── local-llm.ts        # Local GGUF model adapter (node-llama-cpp; no MCP support)
 ├── open-code.ts        # Open Code adapter (future)
 ├── mock.ts             # Test fake — returns scripted responses
 └── registry.ts         # Lookup by name from worker config
 ```
+
+The `local-llm` adapter uses `node-llama-cpp` for in-process inference. It streams token output, enforces JSON-only output via grammar constraints, and sets `supportsMcps: false` — workers and sources that have MCPs assigned will be blocked from running with this adapter. The model catalog is defined in `app-data/local-models.json` (bundled with the app); downloaded GGUF files live in `~/Documents/Trayline/local-models/`.
 
 The adapter interface:
 
@@ -78,6 +83,12 @@ interface AITerminalAdapter {
   displayName: string;
   kind: 'production' | 'mock';
   installUrl?: string;
+  /**
+   * When false, the adapter cannot use MCP tools. Any worker or source step
+   * with MCPs assigned will be blocked from running and shown an inline error.
+   * Omitting the field (or setting it to true) means MCPs are supported.
+   */
+  supportsMcps?: boolean;
   /**
    * Returns structured readiness without running any inference.
    * Checks only what is cheaply detectable: binary presence, version, and any
@@ -144,4 +155,4 @@ The Settings screen surfaces a Provider list (sourced from `adapterRegistry.list
 
 The footer shows the active selection as `Provider · Model · Effort · 5h: used/limit · Weekly: used/limit`. Adapters that don't expose `getUsage()` drop the usage segments instead of rendering placeholders. Footer values refresh whenever a worker run completes (the main process broadcasts `adapters:onUsageUpdate`) and via a manual refresh in Settings.
 
-The Claude Code adapter is the only one shipping in MVP, but the architecture supports any CLI agent from day one. Adding a new adapter is a single file plus a registry entry — no engine changes.
+Two production adapters ship with Trayline: **Claude Code** (the default, requires the CLI installed) and **local-llm** (runs a downloaded GGUF model entirely offline via `node-llama-cpp`). The architecture supports any CLI agent from day one — adding a new adapter is a single file plus a registry entry, no engine changes.

@@ -368,6 +368,19 @@ async function runInner(input: TriggerRunInput): Promise<TriggerRunResult> {
 
   const mcpIds = worker.mcps ?? []
 
+  // Pre-flight: reject before allocating the run if the adapter cannot use MCPs.
+  // This surfaces a clean error to the renderer rather than a confusing spawn failure.
+  if (mcpIds.length > 0) {
+    const earlyAdapterId = worker.execution?.adapter ?? settingsStore.get('defaultAdapterId') ?? 'claude-code'
+    const earlyAdapter = adapterRegistry.get(earlyAdapterId)
+    if (earlyAdapter && earlyAdapter.supportsMcps === false) {
+      throw new Error(
+        `${earlyAdapter.displayName} does not support MCP tools. ` +
+        `Remove the MCPs from this worker, or switch to Claude Code in Settings.`,
+      )
+    }
+  }
+
   // 1. Allocate run + write input.json, meta.json (status=running)
   const workerDir = projectService.paths.stepDir(project, workflow, stepId)
   const runId = await nextRunId(workerDir)
@@ -696,6 +709,18 @@ async function runBatchInner(input: TriggerBatchRunInput): Promise<TriggerRunRes
   }
   if (sourceCards.length === 0) return { runId: 'noop' }
 
+  const batchMcpPreflightIds = worker.mcps ?? []
+  if (batchMcpPreflightIds.length > 0) {
+    const earlyAdapterId = worker.execution?.adapter ?? settingsStore.get('defaultAdapterId') ?? 'claude-code'
+    const earlyAdapter = adapterRegistry.get(earlyAdapterId)
+    if (earlyAdapter && earlyAdapter.supportsMcps === false) {
+      throw new Error(
+        `${earlyAdapter.displayName} does not support MCP tools. ` +
+        `Remove the MCPs from this worker, or switch to Claude Code in Settings.`,
+      )
+    }
+  }
+
   const batchData = { cards: sourceCards.map(({ id, card }) => ({ id, data: card.data })), count: sourceCards.length }
 
   // 1. Allocate run + write input.json, meta.json
@@ -877,6 +902,22 @@ async function runBatchInner(input: TriggerBatchRunInput): Promise<TriggerRunRes
 async function runNow(project: string, workflow: string, stepId: string): Promise<{ triggered: number }> {
   const wf = await readWorkflow(project, workflow)
   const worker = await readStepJson<WorkerStepJson>(project, workflow, stepId)
+
+  // Pre-flight: surface adapter incompatibility before any run is spawned.
+  // triggerRun/triggerBatchRun do the same check, but they swallow the error
+  // via .catch so the IPC caller never sees it. Check once here and reject.
+  const mcpIds = worker.mcps ?? []
+  if (mcpIds.length > 0) {
+    const adapterId = worker.execution?.adapter ?? settingsStore.get('defaultAdapterId') ?? 'claude-code'
+    const adapter = adapterRegistry.get(adapterId)
+    if (adapter && adapter.supportsMcps === false) {
+      throw new Error(
+        `${adapter.displayName} does not support MCP tools. ` +
+        `Remove the MCPs from this worker, or switch to Claude Code in Settings.`,
+      )
+    }
+  }
+
   const prevStepId = findPrevStep(wf, stepId)
   if (!prevStepId) return { triggered: 0 }
 
