@@ -307,6 +307,8 @@ export const claudeCodeAdapter: AITerminalAdapter = {
   id: 'claude-code',
   displayName: 'Claude Code',
   kind: 'production',
+  description: 'Cloud-powered — most capable. Requires external installation.',
+  supportsMcps: true,
   installUrl: 'https://docs.claude.com/en/docs/claude-code/quickstart',
 
   async checkReadiness(): Promise<AdapterReadiness> {
