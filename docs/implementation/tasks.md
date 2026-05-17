@@ -93,7 +93,7 @@ Each task corresponds to a phase file in this folder. Check off tasks as they ar
 
 ## N9 Phases (Connectors)
 
-- [ ] [Phase N9 — Connectors (HTTP, IMAP, SMTP)](./phase-n9-connectors.md)
+- [ ] [Phase N9 — Credentials & Connectors (Source channels, Outlet step)](./phase-n9-connectors.md)
 
 ---
 

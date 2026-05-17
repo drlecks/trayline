@@ -1,4 +1,4 @@
-# Phase N9 — Connectors (HTTP, IMAP, SMTP)
+# Phase N9 — Credentials & Connectors (Source channels, Outlet step)
 
 **Estimate:** 4–6 days
 
@@ -8,129 +8,186 @@
 
 ## Goals
 
-Replace the MCP/skill I/O model with **Connectors** — typed, credential-backed config blocks that handle deterministic I/O so the AI only does what it is genuinely good at: reasoning on text.
+Complete the I/O model that makes Trayline self-sufficient with a local AI:
 
-Three connector types ship in this phase:
+1. **Global Credentials store** — named, typed auth configs stored securely (passwords in keytar, everything else in JSON). Reusable across any workflow.
+2. **Source step channels** — Source steps can now choose between HTTP GET or IMAP fetch as their data source, using a stored credential. No more requirement for the AI to "go to the web".
+3. **Outlet step** (new step type) — the symmetric opposite of a Source. Sits at the end of a workflow, picks up cards from the tray above it, and dispatches them to the outside world via HTTP POST or SMTP email using a stored credential. No AI involved — pure deterministic I/O.
+4. **Workers stay pure** — workers do AI text transformation only. No connectors, no output actions in workers.
 
-| Type | Direction | Use |
-|---|---|---|
-| `http` | In + Out | Source: fetch data from any REST API or web URL. Worker action: POST/PUT result to an external API. |
-| `imap` | In | Source: read email from an inbox — one card per message. |
-| `smtp` | Out | Worker action: send an email after the AI run completes. |
+**The resulting workflow shape:**
+```
+[Source] → Tray → [Worker] → Tray → [Worker] → Tray → [Outlet]
+   ↑                  ↑                  ↑                  ↑
+fetches data     transforms          transforms        sends result
+via credential   with AI             with AI           via credential
+```
 
-**Architecture rule:** Connectors handle I/O. The AI handles reasoning. These two concerns never mix — the connector fetches raw data, hands it to the AI as plain text, and the AI's text output is handed back to the connector to act on.
+---
+
+## Vocabulary additions
+
+| Term | Meaning |
+|---|---|
+| **Credential** | A named, globally-stored auth config for one protocol (HTTP, IMAP, or SMTP). Passwords stored in the OS keychain. |
+| **Outlet** | A step type that dispatches cards to an external destination (email or HTTP POST). No AI — pure send. Symmetric opposite of Source. |
+| **Channel** | The protocol + credential assignment configured on a Source or Outlet step. |
 
 ---
 
 ## Data model
 
-### Connector file
+### Global credentials folder
 
 ```
-~/Documents/Trayline/connectors/
+~/Documents/Trayline/credentials/
   <id>/
-    connector.json
+    credential.json     ← type + non-secret config fields
 ```
 
-`connector.json` schema (discriminated union on `type`):
+Passwords and API keys are stored in keytar:
+`service = 'trayline-credential-<id>'`, `account = '<field-name>'`
+They are never written to `credential.json`.
 
-```typescript
-// HTTP connector — inbound fetch or outbound POST/PUT
-interface HttpConnector {
-  id: string
-  type: 'http'
-  name: string
-  base_url: string            // e.g. "https://api.github.com"
-  default_method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
-  headers: Array<{
-    name: string
-    value: string             // plain value, OR "{{secret:key_name}}" to reference keytar
-  }>
-  timeout_ms: number          // default 15000
+**HTTP credential:**
+```json
+{
+  "id": "github-api",
+  "type": "http",
+  "name": "GitHub API",
+  "base_url": "https://api.github.com",
+  "headers": [
+    { "name": "Accept", "value": "application/vnd.github.v3+json" },
+    { "name": "Authorization", "value": "{{secret:token}}" }
+  ],
+  "timeout_ms": 15000
 }
-
-// IMAP connector — read email inbox
-interface ImapConnector {
-  id: string
-  type: 'imap'
-  name: string
-  host: string                // e.g. "imap.gmail.com"
-  port: number                // e.g. 993
-  secure: boolean             // true = TLS, false = STARTTLS
-  username: string
-  // password stored in keytar: service='trayline-connector-<id>' account='password'
-}
-
-// SMTP connector — send email
-interface SmtpConnector {
-  id: string
-  type: 'smtp'
-  name: string
-  host: string                // e.g. "smtp.gmail.com"
-  port: number                // e.g. 587
-  secure: boolean             // false = STARTTLS (587), true = TLS (465)
-  username: string
-  from_name: string
-  from_address: string
-  // password stored in keytar: service='trayline-connector-<id>' account='password'
-}
-
-type Connector = HttpConnector | ImapConnector | SmtpConnector
 ```
 
-Secret references in HTTP headers use the pattern `{{secret:my_key}}`. The connector service replaces these at execution time by reading from keytar (`service='trayline-connector-<id>'`, `account='my_key'`) before making the request — the raw `{{secret:...}}` string never leaves the main process.
+Header values of the form `{{secret:key_name}}` are resolved from keytar at execution time and never travel to the renderer.
 
-### Source step additions (`step.json`)
+**IMAP credential:**
+```json
+{
+  "id": "gmail-inbox",
+  "type": "imap",
+  "name": "Gmail Inbox",
+  "host": "imap.gmail.com",
+  "port": 993,
+  "secure": true,
+  "username": "user@gmail.com"
+}
+```
+Password stored in keytar as `account='password'`.
 
-```typescript
-interface SourceStepConfig {
-  // ... existing fields ...
-  connector_id?: string        // which connector fetches the raw data
-  connector_request?: {
-    url_path?: string          // appended to base_url, supports {{variable}} tokens
-    method?: 'GET' | 'POST'   // overrides connector default
-    body?: string              // JSON body template for POST, supports {{variable}} tokens
+**SMTP credential:**
+```json
+{
+  "id": "gmail-smtp",
+  "type": "smtp",
+  "name": "Gmail SMTP",
+  "host": "smtp.gmail.com",
+  "port": 587,
+  "secure": false,
+  "username": "user@gmail.com",
+  "from_name": "Alex",
+  "from_address": "user@gmail.com"
+}
+```
+Password stored in keytar as `account='password'`.
+
+### Updated Source `step.json`
+
+Add a `channel` block; remove the obsolete `mcps` field:
+
+```json
+{
+  "id": "00-source",
+  "kind": "source",
+  "name": "GitHub Issues",
+  "channel": {
+    "type": "http_get",
+    "credential_id": "github-api",
+    "url_path": "/repos/owner/repo/issues?state=open&since={{last_run_at}}",
+    "response_path": ""
+  },
+  "schedule_cron": "0 * * * *",
+  "dedup": { "key": "id", "max_memory": 10000, "first_run": "skip_existing" },
+  "execution": { "timeout_seconds": 60, "adapter": "claude-code" },
+  "paused": false
+}
+```
+
+Or with an IMAP channel:
+
+```json
+{
+  "channel": {
+    "type": "imap",
+    "credential_id": "gmail-inbox",
+    "folder": "INBOX",
+    "unseen_only": true,
+    "max_messages": 50,
+    "subject_contains": "",
+    "from_contains": ""
   }
-  // IMAP-specific filter (ignored for HTTP connectors)
-  imap_filter?: {
-    folder?: string            // default "INBOX"
-    unseen_only?: boolean      // default true
-    max_messages?: number      // default 50
-    subject_contains?: string
-    from_contains?: string
+}
+```
+
+When `channel` is absent the source runner falls back to the existing behaviour (AI fetches data itself — requires Claude Code).
+
+`{{last_run_at}}` is a built-in template token resolved by the source runner to the ISO timestamp of the last successful run (from `state/counters.json`), or empty string on first run.
+
+### New Outlet `step.json`
+
+```json
+{
+  "id": "05-send-report",
+  "kind": "outlet",
+  "name": "Send Report Email",
+  "description": "Emails the processed report to the client",
+  "icon": "send",
+  "color": "#8B5CF6",
+  "channel": {
+    "type": "smtp",
+    "credential_id": "gmail-smtp",
+    "to": "{{card.data.client_email}}",
+    "subject": "{{card.data.subject}}",
+    "body": "{{card.data.content}}"
+  },
+  "on_failure": "send_to_errors"
+}
+```
+
+Or HTTP POST:
+
+```json
+{
+  "channel": {
+    "type": "http_post",
+    "credential_id": "freshdesk-api",
+    "url_path": "/tickets/{{card.data.ticket_id}}",
+    "body": "{ \"status\": 2, \"reply\": {{card.data.reply | json}} }"
   }
 }
 ```
 
-When `connector_id` is set, the source runner fetches raw data via the connector and passes it to the AI. When absent, the AI fetches data itself (existing Claude Code behaviour — still supported).
+Template tokens: `{{card.data.*}}` resolves against the card that triggered the outlet. `{{card.data | json}}` serialises the entire card data object as a JSON string.
 
-### Worker step additions (`step.json`)
-
-```typescript
-interface WorkerStepConfig {
-  // ... existing fields ...
-  output_action?: OutputAction
-}
-
-type OutputAction =
-  | { connector_id: string; type: 'smtp'; smtp: SmtpActionConfig }
-  | { connector_id: string; type: 'http'; http: HttpActionConfig }
-
-interface SmtpActionConfig {
-  to: string                   // supports {{card.data.*}} and {{worker.output.*}} tokens
-  subject: string
-  body: string                 // plain text or HTML; supports template tokens
-  reply_to?: string
-}
-
-interface HttpActionConfig {
-  url_path?: string            // appended to connector base_url; supports tokens
-  method?: 'POST' | 'PUT' | 'PATCH'
-  body: string                 // JSON template; supports tokens
-}
+**Outlet step folder structure:**
+```
+05-send-report/
+├── step.json
+└── runs/
+    └── run_YYYY-MM-DD_NNN/
+        └── meta.json   # { run_id, status, started_at, ended_at, card_id, channel_type, error? }
 ```
 
-Template token resolution: `{{card.data.foo}}` resolves against the input card's data. `{{worker.output.bar}}` resolves against the parsed AI output JSON. Both follow the same dotted-path rules as `renderProcessTemplate` in `prompt-utils.ts`.
+An Outlet has no `cards/` subfolder — it consumes cards from the tray above it and archives them after dispatch. On failure the card moves to `99-errors/` exactly like a failed worker.
+
+### Updated ExportManifest
+
+Remove `skills` and `mcps` fields (done in N8). No new fields needed — credentials are global and are never bundled in exports (same security model as old MCP credentials).
 
 ---
 
@@ -138,262 +195,295 @@ Template token resolution: `{{card.data.foo}}` resolves against the input card's
 
 ### 1. Dependencies
 
-- [ ] Add `imapflow` to `dependencies` in `package.json` — modern IMAP client, promise-based
-- [ ] Add `nodemailer` to `dependencies` — SMTP sending
-- [ ] Add `@types/nodemailer` to `devDependencies`
-- [ ] Verify `node-fetch` is not needed — Node 20+ ships native `fetch`; use it directly
+- [ ] Add `imapflow` to `dependencies` — modern IMAP client, promise-based
+- [ ] Add `nodemailer` + `@types/nodemailer` to `dependencies` / `devDependencies`
+- [ ] Confirm `fetch` is available natively (Node 20+ — no `node-fetch` needed)
 
 ### 2. Shared types
 
-- [ ] Add `Connector`, `HttpConnector`, `ImapConnector`, `SmtpConnector` types to `src/shared/types.ts`
-- [ ] Add `ConnectorSummary` (the IPC-safe list entry: `id`, `type`, `name`) to `src/shared/types.ts`
-- [ ] Add `OutputAction`, `SmtpActionConfig`, `HttpActionConfig` to `src/shared/types.ts`
-- [ ] Add `ImapFilter` to `src/shared/types.ts`
-- [ ] Extend `SourceStepConfig` with `connector_id?`, `connector_request?`, `imap_filter?`
-- [ ] Extend `WorkerStepConfig` with `output_action?`
+- [ ] Add `HttpCredential`, `ImapCredential`, `SmtpCredential`, `Credential` (discriminated union) to `src/shared/types.ts`
+- [ ] Add `CredentialSummary` (`{ id, type, name }`) — the safe IPC-list type (no secret values)
+- [ ] Add `SourceChannel` (`HttpGetChannel | ImapChannel`), extend `SourceStepConfig` with `channel?: SourceChannel`
+- [ ] Add `OutletChannel` (`SmtpChannel | HttpPostChannel`), add `OutletStepConfig` with `id`, `kind: 'outlet'`, `name`, `description?`, `color?`, `icon?`, `channel: OutletChannel`, `on_failure`
+- [ ] Add `OutletRunMeta` (`run_id`, `status`, `started_at`, `ended_at`, `card_id`, `channel_type`, `error?`)
+- [ ] Update `StepConfig` union type to include `OutletStepConfig`
 
-### 3. `fs-service.ts` — add connector path
+### 3. `fs-service.ts`
 
-- [ ] Add `Paths.connectors` → `path.join(Paths.base, 'connectors')`
-- [ ] `fsService.bootstrap()` already creates all `Paths.*` directories — add connectors to the list
+- [ ] Add `Paths.credentials` → `path.join(Paths.base, 'credentials')`
+- [ ] `fsService.bootstrap()` creates the directory on launch
 
-### 4. `connector-service.ts` — CRUD
+### 4. `credential-service.ts`
 
-Create `src/main/services/connector-service.ts`:
+Create `src/main/services/credential-service.ts`:
 
-- [ ] `list(): Promise<Connector[]>` — reads all `connectors/<id>/connector.json` files; skips malformed entries with a console.warn
-- [ ] `get(id: string): Promise<Connector | null>`
-- [ ] `save(connector: Connector): Promise<void>` — writes `connectors/<id>/connector.json`; creates the folder if absent
-- [ ] `delete(id: string): Promise<void>` — removes the folder and all keytar credentials for that connector (iterate over known secret account names per connector type)
-- [ ] `resolveSecrets(connector: HttpConnector): Promise<HttpConnector>` — returns a copy of the connector with all `{{secret:key}}` header values replaced by their keytar values; throws a descriptive error if a referenced secret is missing
-- [ ] `saveSecret(connectorId: string, account: string, value: string): Promise<void>` — writes to keytar
-- [ ] `deleteSecrets(connectorId: string): Promise<void>` — deletes all known accounts for the connector from keytar
-- [ ] `testConnection(connectorId: string): Promise<{ ok: boolean; error?: string }>` — see task 8
+- [ ] `list(): Promise<Credential[]>` — reads all `credentials/<id>/credential.json`; skips malformed entries with a warning
+- [ ] `get(id: string): Promise<Credential | null>`
+- [ ] `save(credential: Credential): Promise<void>` — writes JSON; creates folder if absent
+- [ ] `delete(id: string): Promise<void>` — removes folder, deletes all keytar entries for that credential
+- [ ] `saveSecret(credentialId: string, account: string, value: string): Promise<void>` — keytar write
+- [ ] `resolveSecrets(credential: HttpCredential): Promise<HttpCredential>` — replaces `{{secret:key}}` header values with keytar values; throws with a clear message on missing secret
+- [ ] `getPassword(credentialId: string): Promise<string>` — reads `account='password'` from keytar for IMAP/SMTP; throws if not set
+- [ ] `testConnection(credentialId: string): Promise<{ ok: boolean; error?: string }>` — dispatches to the appropriate test function below
 
-### 5. `http-connector.ts` — execute HTTP requests
+### 5. `http-channel.ts`
 
-Create `src/main/services/http-connector.ts`:
+Create `src/main/services/http-channel.ts`:
 
-- [ ] `fetchHttp(connector: HttpConnector, request: ConnectorRequest): Promise<string>` — performs the request using native `fetch`; returns the raw response body as a string (JSON or text); throws on non-2xx status with the status code and response body in the message
-- [ ] Resolves `url_path` tokens against the request context before appending to `base_url`
-- [ ] Sets all resolved headers on the request
-- [ ] Respects `connector.timeout_ms` via `AbortSignal.timeout()`
-- [ ] Handles `request.method` override over `connector.default_method`
-- [ ] Sets `Content-Type: application/json` automatically when a `body` is present and no Content-Type header is configured
+- [ ] `fetchHttp(credential: HttpCredential, channel: HttpGetChannel, tokens: Record<string, string>): Promise<string>` — performs a GET; returns raw response body (JSON or text string); throws on non-2xx with status + body in message
+- [ ] `postHttp(credential: HttpCredential, channel: HttpPostChannel, tokens: Record<string, string>): Promise<void>` — performs a POST/PUT; throws on non-2xx
+- [ ] Both functions: resolve `{{...}}` tokens in `url_path` and `body` before making the request; apply resolved headers; respect `timeout_ms` via `AbortSignal.timeout()`
+- [ ] `testHttpCredential(credential: HttpCredential): Promise<{ ok: boolean; error?: string }>` — HEAD request to `base_url`; 2xx or 3xx = OK
 
-### 6. `imap-connector.ts` — fetch emails
+### 6. `imap-channel.ts`
 
-Create `src/main/services/imap-connector.ts`:
+Create `src/main/services/imap-channel.ts`:
 
-- [ ] `fetchEmails(connector: ImapConnector, filter: ImapFilter): Promise<EmailItem[]>` using `imapflow`
-- [ ] `EmailItem` shape: `{ uid: string; messageId: string; subject: string; from: string; date: string; body_text: string; body_html?: string }`
-- [ ] Retrieves the `password` secret from keytar before connecting
-- [ ] Opens the configured folder (default `INBOX`), applies `unseen_only`, `subject_contains`, `from_contains` filters
-- [ ] Fetches up to `max_messages` most recent matching messages (newest first)
-- [ ] Extracts plain-text body preferentially; falls back to stripping HTML tags if only HTML is available
-- [ ] Marks fetched messages as seen only when `unseen_only: true` (so re-runs don't re-process)
+- [ ] `fetchEmails(credential: ImapCredential, channel: ImapChannel): Promise<EmailItem[]>` using `imapflow`
+- [ ] `EmailItem`: `{ uid: string; messageId: string; subject: string; from: string; date: string; body_text: string }`
+- [ ] Gets password via `credentialService.getPassword(credential.id)`
+- [ ] Opens the configured `folder` (default `INBOX`), applies `unseen_only`, `subject_contains`, `from_contains` filters, fetches up to `max_messages` most recent matching messages
+- [ ] Extracts plain-text body preferentially; strips HTML tags as fallback
+- [ ] Marks messages as seen only when `unseen_only: true`
 - [ ] Disconnects cleanly after fetch
+- [ ] `testImapCredential(credential: ImapCredential): Promise<{ ok: boolean; error?: string }>` — connects, runs `LIST "" ""`, disconnects
 
-### 7. `smtp-connector.ts` — send email
+### 7. `smtp-channel.ts`
 
-Create `src/main/services/smtp-connector.ts`:
+Create `src/main/services/smtp-channel.ts`:
 
-- [ ] `sendEmail(connector: SmtpConnector, opts: ResolvedSmtpAction): Promise<void>` using `nodemailer`
-- [ ] `ResolvedSmtpAction`: `{ to: string; subject: string; body: string; reply_to?: string }`
-- [ ] Retrieves `password` from keytar before creating the transport
-- [ ] Creates a new nodemailer transport per call (no pooling in V1)
-- [ ] Sends as plain text if body contains no HTML tags; otherwise sends as HTML with a text fallback (strip tags)
-- [ ] Throws with a descriptive message on SMTP auth failure or connection error
+- [ ] `sendEmail(credential: SmtpCredential, opts: ResolvedSmtpOpts): Promise<void>` using `nodemailer`
+- [ ] `ResolvedSmtpOpts`: `{ to: string; subject: string; body: string }`
+- [ ] Gets password via `credentialService.getPassword(credential.id)`
+- [ ] Sends as plain text when body has no HTML tags; otherwise sends as HTML with auto-generated text fallback
+- [ ] Throws with a descriptive message on auth failure or connection error
+- [ ] `testSmtpCredential(credential: SmtpCredential): Promise<{ ok: boolean; error?: string }>` — calls `transport.verify()`
 
-### 8. Connection test helpers
+### 8. Token template helper
 
-- [ ] HTTP: `testHttpConnector(connector: HttpConnector): Promise<{ ok: boolean; error?: string }>` — makes a HEAD or GET request to `base_url`; any 2xx or 3xx response is considered OK
-- [ ] IMAP: `testImapConnector(connector: ImapConnector): Promise<{ ok: boolean; error?: string }>` — opens a connection, runs `LIST "" ""`, disconnects; success = no throw
-- [ ] SMTP: `testSmtpConnector(connector: SmtpConnector): Promise<{ ok: boolean; error?: string }>` — calls `transport.verify()`
-- [ ] Wire into `connector-service.testConnection()` by dispatching on `connector.type`
+- [ ] Add `resolveTokens(template: string, data: Record<string, unknown>): string` to `prompt-utils.ts` (or a new `template-utils.ts`)
+- [ ] Supports `{{card.data.foo}}`, `{{card.data.foo | json}}` (serialises as JSON string), `{{card.data}}` (full object as JSON)
+- [ ] Used by both the Outlet runner and the HTTP channel for URL/body templates
 
-### 9. `connector-service.test.ts`
-
-- [ ] Test `list()`: returns connectors from disk; skips malformed entries
-- [ ] Test `save()` + `get()`: round-trip a connector object
-- [ ] Test `delete()`: folder removed, keytar secrets deleted
-- [ ] Test `resolveSecrets()`: replaces `{{secret:token}}` with keytar value; throws on missing secret
-- [ ] Mock keytar and the filesystem; do not hit real IMAP/SMTP/HTTP in unit tests
-
-### 10. Source runner — connector integration
+### 9. Source runner — channel integration
 
 In `src/main/services/source-runner.ts`:
 
-- [ ] If `step.connector_id` is set:
-  - Load the connector via `connectorService.get(id)`. If not found, abort with `source_run_failed` ("Connector not configured").
-  - **HTTP connector**: call `fetchHttp(connector, step.connector_request ?? {})` — pass the raw response string as the "pre-fetched data" to the AI
-  - **IMAP connector**: call `fetchEmails(connector, step.imap_filter ?? {})` — serialize the `EmailItem[]` as a JSON string; pass as pre-fetched data
-  - Pass the pre-fetched data to the adapter via a new `prefetchedData?: string` field in `SpawnOptions` (or embed it in the rendered prompt — see below)
-- [ ] When `prefetchedData` is present, render it into the prompt before the `source.md` instructions:
+- [ ] If `step.channel` is set:
+  - Load credential via `credentialService.get(channel.credential_id)`. If not found → abort `source_run_failed` ("Credential not found")
+  - **`http_get`**: call `fetchHttp(credential, channel, { last_run_at: counters.last_run_at ?? '' })` — store raw response string
+  - **`imap`**: call `fetchEmails(credential, channel)` — serialise `EmailItem[]` as a JSON string
+  - Prepend fetched data to the AI prompt as a `## Fetched data` section before the `source.md` content
+  - On fetch error → abort `source_run_failed` with the error message; do not spawn the AI
+- [ ] When `step.channel` is absent → existing behaviour (AI fetches itself; Claude Code only)
 
-  ```
-  ## Fetched data
-  
-  <raw response or email JSON>
-  
-  ---
-  
-  ## Your task
-  
-  <source.md content>
-  ```
+### 10. Outlet runner
 
-- [ ] When `connector_id` is absent, existing behaviour is unchanged (AI fetches data itself via Claude Code)
-- [ ] On connector fetch error (network failure, auth failure), abort the source run with `source_run_failed` and log the connector error — do not spawn the AI
+Create `src/main/services/outlet-runner.ts`:
 
-### 11. Worker runner — output action integration
+- [ ] `runOutlet(stepPath: string, stepConfig: OutletStepConfig, card: CardData): Promise<void>`
+- [ ] Resolve all `{{card.data.*}}` tokens in the channel config (to, subject, body / url_path, body)
+- [ ] Dispatch:
+  - `type: 'smtp'` → load `SmtpCredential`, call `sendEmail(credential, resolvedOpts)`
+  - `type: 'http_post'` → load `HttpCredential`, call `postHttp(credential, resolvedChannel, tokens)`
+- [ ] On success: write `meta.json` with `status: 'completed'`, move card to `archived/`
+- [ ] On failure: write `meta.json` with `status: 'failed'` + `error` message, emit `outlet_run_failed` audit event, move card to `99-errors/` (same protocol as worker failure)
+- [ ] Emit IPC events: `outlet:run-started`, `outlet:run-completed`, `outlet:run-failed`
 
-In `src/main/services/worker-runner.ts`:
+### 11. `outlet-runner.test.ts`
 
-- [ ] After a successful `runInner()` call (when `result.exitCode === 0`), check if the worker step has `output_action` configured
-- [ ] If yes, call `executeOutputAction(action, cardData, result.output)`:
-  - Resolve all template tokens in the action config: `{{card.data.*}}` from `cardData`, `{{worker.output.*}}` from `result.output` (parsed JSON)
-  - **SMTP action**: load `SmtpConnector`, call `sendEmail(connector, resolvedAction)`
-  - **HTTP action**: load `HttpConnector`, call `fetchHttp(connector, resolvedAction)` (fire-and-forget for simple webhooks; log response)
-- [ ] If the output action fails (SMTP error, HTTP error): log `worker_output_action_failed` audit event with the error; **do not fail the worker run** — the card still advances. The action failure is visible in the run detail.
-- [ ] Add `output_action_error?: string` to the run result meta so the UI can surface it
+- [ ] Test: SMTP outlet resolves tokens from card data and calls `sendEmail` with correct args
+- [ ] Test: HTTP POST outlet resolves URL path + body tokens, calls `postHttp`
+- [ ] Test: credential not found → `outlet_run_failed`, card to errors, no send attempt
+- [ ] Test: send failure → `outlet_run_failed`, card to errors
+- [ ] Test: success → card archived, `outlet:run-completed` event emitted
+- [ ] All tests mock `sendEmail`, `postHttp`, and the credential service — no real network calls
 
-### 12. Adapter interface — add `prefetchedData`
+### 12. Orchestrator / watcher integration
 
-- [ ] Add optional `prefetchedData?: string` to `SpawnOptions` in `adapter.ts`
-- [ ] In `claude-code.ts` `spawn()`: when `prefetchedData` is set, prepend it to the rendered prompt (same format as source runner task 10 above)
-- [ ] In `local-llm.ts` `buildFullPrompt()`: when `prefetchedData` is set, include it as a `## Fetched data` section before the process file content
+- [ ] In `src/main/services/orchestrator.ts` (or watcher-service): register a file watcher for Outlet steps on the previous tray's `cards/ready/` — same mechanism as workers
+- [ ] When a new card file appears, call `runOutlet(stepPath, config, card)`
+- [ ] Outlet steps do not have a `trigger.mode` — they always fire on ready (no scheduled/manual mode needed in V1)
 
-### 13. IPC channels
+### 13. Scaffold service — Outlet support
 
-- [ ] Add `connector` block to `src/shared/ipc-channels.ts`:
+- [ ] Add `outlet.step.json` template to `resources/templates/`
+- [ ] `scaffoldStep()` handles `kind: 'outlet'` — creates the folder with `step.json` and `runs/` subdirectory (no `cards/` or `process.md`)
+
+### 14. IPC channels
+
+- [ ] Add `credential` block to `src/shared/ipc-channels.ts`:
   ```typescript
-  connector: {
-    list:           'connector:list',
-    get:            'connector:get',
-    save:           'connector:save',
-    delete:         'connector:delete',
-    saveSecret:     'connector:save-secret',
-    testConnection: 'connector:test-connection',
+  credential: {
+    list:           'credential:list',
+    get:            'credential:get',
+    save:           'credential:save',
+    delete:         'credential:delete',
+    saveSecret:     'credential:save-secret',
+    testConnection: 'credential:test-connection',
+  }
+  ```
+- [ ] Add `outlet` block:
+  ```typescript
+  outlet: {
+    runNow:      'outlet:run-now',
+    onStarted:   'outlet:run-started',
+    onCompleted: 'outlet:run-completed',
+    onFailed:    'outlet:run-failed',
   }
   ```
 
-### 14. IPC handlers
+### 15. IPC handlers
 
 In `src/main/ipc/handlers.ts`:
 
-- [ ] `connector:list` → `connectorService.list()` (returns `ConnectorSummary[]` — no secrets)
-- [ ] `connector:get` → `connectorService.get(id)` (returns `Connector` — no secret values substituted)
-- [ ] `connector:save` → `connectorService.save(connector)`
-- [ ] `connector:save-secret` → `connectorService.saveSecret(connectorId, account, value)` — secrets never travel back to the renderer, only written
-- [ ] `connector:delete` → `connectorService.delete(id)`
-- [ ] `connector:test-connection` → `connectorService.testConnection(id)` → returns `{ ok, error? }`
+- [ ] `credential:list` → `credentialService.list()` — returns `CredentialSummary[]` (no secrets, no header values)
+- [ ] `credential:get` → `credentialService.get(id)` — returns `Credential` (no resolved secrets; `{{secret:key}}` placeholders intact)
+- [ ] `credential:save` → `credentialService.save(credential)`
+- [ ] `credential:save-secret` → `credentialService.saveSecret(credentialId, account, value)` — write-only, no read-back
+- [ ] `credential:delete` → `credentialService.delete(id)`
+- [ ] `credential:test-connection` → `credentialService.testConnection(id)` → `{ ok, error? }`
+- [ ] `outlet:run-now` → `outletRunner.runOutlet(...)` (manual trigger for testing)
 
-### 15. Preload bridge
+### 16. Preload bridge
 
-In `src/preload/index.ts`:
+- [ ] Add `credential` and `outlet` namespaces to `TraylineAPI` in `src/preload/index.ts`
+- [ ] `credential.list()`, `credential.get(id)`, `credential.save(c)`, `credential.saveSecret(id, account, value)`, `credential.delete(id)`, `credential.testConnection(id)`
+- [ ] `outlet.runNow(projectName, stepId)`
+- [ ] `outlet.onStarted(cb)`, `outlet.onCompleted(cb)`, `outlet.onFailed(cb)` — event subscriptions returning unsubscribe functions
 
-- [ ] Add `connector` namespace to `TraylineAPI`:
-  ```typescript
-  connector: {
-    list: (): Promise<ConnectorSummary[]>
-    get: (id: string): Promise<Connector | null>
-    save: (connector: Connector): Promise<void>
-    saveSecret: (connectorId: string, account: string, value: string): Promise<void>
-    delete: (id: string): Promise<void>
-    testConnection: (id: string): Promise<{ ok: boolean; error?: string }>
-  }
-  ```
+### 17. Credentials screen — `CredentialsScreen.tsx`
 
-### 16. Connectors screen — `ConnectorsScreen.tsx`
+New screen replacing the deleted MCPs screen:
 
-Replace the deleted `McpsScreen.tsx` with `src/renderer/components/connectors/ConnectorsScreen.tsx`:
+- [ ] Header: "Credentials" title + **+ Add** button (opens type picker: HTTP / IMAP / SMTP)
+- [ ] List of saved credentials: one card per credential showing type badge (colour-coded), name, and **Test** + **⋯** (Edit / Delete) controls
+- [ ] **Test** → calls `credential.testConnection(id)` → inline ✓ or ✗ with error detail
+- [ ] **Edit** → opens the form pre-populated
+- [ ] **Delete** → confirmation: "This will also delete stored passwords."
+- [ ] Empty state: "No credentials yet. Add one to connect your workflows to external services."
 
-- [ ] Header: "Connectors" title + **+ Add connector** button (opens type picker: HTTP / IMAP / SMTP)
-- [ ] Installed connectors list: one card per connector showing: type badge (colour-coded), name, and a **Test** button + **⋯** menu (Edit, Delete)
-- [ ] **Test** → calls `connector.testConnection(id)` → inline green ✓ or red ✗ with error tooltip
-- [ ] **Edit** → opens the setup form pre-populated (same component as add, but in edit mode)
-- [ ] **Delete** → confirmation dialog ("Delete will also remove stored credentials.")
-- [ ] Empty state: "No connectors yet. Add one to fetch data or send email from your workflows."
+### 18. Credential setup forms
 
-### 17. Connector setup forms
+Three forms, each in a `Dialog`:
 
-Three forms, each rendered inside a `Dialog`:
+**`HttpCredentialForm.tsx`:**
+- [ ] Fields: Name, Base URL, Timeout (ms, default 15000), Default method (GET/POST)
+- [ ] Headers table: name + value rows, Add/Remove. When value matches `{{secret:...}}` pattern or user clicks "Mark as secret", the value field switches to a masked password input and is saved via `credential.saveSecret()` after the main save
+- [ ] Test button → `credential.testConnection(id)`
+- [ ] Save
 
-**`HttpConnectorForm.tsx`:**
-- [ ] Fields: Name, Base URL, Default method (select: GET/POST), Timeout (ms)
-- [ ] Headers table: Add/remove rows of `{ name, value }`. When `value` starts with `{{secret:`, treat as a secret field — mask with a password input and save via `connector.saveSecret()` separately after the connector JSON is saved
-- [ ] Test button (before saving)
-- [ ] Save button
-
-**`ImapConnectorForm.tsx`:**
-- [ ] Fields: Name, Host, Port (default 993), Secure toggle (default on), Username, Password (masked — saved to keytar on submit)
+**`ImapCredentialForm.tsx`:**
+- [ ] Fields: Name, Host, Port (default 993), Secure toggle (on by default), Username, Password (always masked — saved to keytar on submit, never shown again)
 - [ ] Test button
-- [ ] Save button
+- [ ] Save
 
-**`SmtpConnectorForm.tsx`:**
-- [ ] Fields: Name, Host, Port (default 587), Secure toggle (default off), Username, Password (masked — saved to keytar on submit), From name, From address
+**`SmtpCredentialForm.tsx`:**
+- [ ] Fields: Name, Host, Port (default 587), Secure toggle (off by default), Username, Password (masked), From name, From address
 - [ ] Test button
-- [ ] Save button
+- [ ] Save
 
-All three forms validate required fields before enabling Save. Show inline error on test failure.
+### 19. TopBar navigation
 
-### 18. TopBar navigation
+- [ ] Add a **Credentials** nav entry in `TopBar.tsx` (lucide `KeyRound` icon) in the slot where MCPs used to be
 
-- [ ] Add a **Connectors** nav entry in `TopBar.tsx` (use lucide `Plug` icon or `Network`)
-- [ ] Route to `ConnectorsScreen`
+### 20. Source detail panel — channel config
 
-### 19. Worker detail panel — Context + Output action
+In `SourceDetailPanel.tsx`, Config tab, add a **"Data source"** section:
 
-In `WorkerDetailPanel.tsx`, in the **"Context"** tab (renamed in N8):
+- [ ] Channel type selector: "AI fetches data (default)" / "HTTP GET" / "IMAP inbox"
+- [ ] **HTTP GET selected**: credential selector (lists HTTP credentials) + URL path field with hint text "appended to the credential's base URL; use {{last_run_at}} for incremental fetches"
+- [ ] **IMAP selected**: credential selector (lists IMAP credentials) + folder field (default INBOX) + unseen only toggle + max messages + optional subject/from filters
+- [ ] **AI fetches data**: no additional fields (existing behaviour)
+- [ ] Save writes the `channel` field to `step.json`
 
-- [ ] Add an **"Output action"** section below context packs:
-  - Connector selector dropdown (lists connectors of type `smtp` or `http` only)
-  - When SMTP selected: show `to`, `subject`, `body` template inputs
-  - When HTTP selected: show `url_path`, `method`, `body` template inputs
-  - Template hint below each field: "Use {{card.data.fieldName}} or {{worker.output.fieldName}}"
-  - Clear button to remove the output action
+### 21. Outlet step — left rail card
 
-### 20. Source detail panel — Connector assignment
+- [ ] Icon: lucide `Send` (or `ArrowUpRight`)
+- [ ] Color: purple (`#8B5CF6` default)
+- [ ] Status states on the left rail card:
 
-In `SourceDetailPanel.tsx`, in the **Config** tab:
+  | State | Display |
+  |---|---|
+  | Idle | Outlet name + channel type badge |
+  | Running | `⟶ Sending…` animated |
+  | Done | `✓ Sent N min ago` — green, fades after 30s |
+  | Failed | `⚠ Failed` — red triangle |
 
-- [ ] Add a **"Data source"** section:
-  - Connector selector dropdown (lists connectors of type `http` or `imap` only)
-  - When HTTP selected: show `url_path` input (with base URL hint), method override select, body input
-  - When IMAP selected: show `folder` (default INBOX), `unseen_only` toggle, `max_messages` input, optional `subject_contains` and `from_contains` filters
-  - "No connector — AI fetches data" option (default, existing behaviour)
-- [ ] Save config on blur / explicit Save button
+### 22. Outlet detail panel — `OutletDetailPanel.tsx`
 
-### 21. Workflow author — update output
+Right-side panel when the Outlet step is selected:
 
-The `trayline-author` prompt currently generates step JSON with `skills` and `mcps` arrays. After N8 removes those fields, update `resources/author-prompt.md` to:
+- [ ] Two tabs: **Config** and **Runs**
+- [ ] **Config tab:**
+  - Channel type selector (SMTP / HTTP POST)
+  - Credential selector (filters by type)
+  - **SMTP fields**: To, Subject, Body — all support template tokens; show token hint below each field
+  - **HTTP POST fields**: URL path, Method selector, Body template
+  - Token reference sidebar or collapsible hint: "Available tokens: {{card.data.field_name}}, {{card.data | json}}"
+  - Save button
+- [ ] **Runs tab:** table of past outlet runs — time, card, channel type, status (✓ / ✗), error preview on hover
 
-- [ ] Never emit `skills` or `mcps` in step JSON
-- [ ] Optionally emit `context_packs: []` if the worker needs reference docs
+### 23. Workflow author — update
 
-### 22. Documentation
+- [ ] Update `resources/author-prompt.md` to never emit `skills` or `mcps` in step JSON (done in N8 task 2)
+- [ ] Extend the author prompt to understand `kind: "outlet"` — when the user's description ends with "send email" or "post to webhook", the generated plan should include an Outlet step as the last step
 
-- [ ] `docs/tech-stack.md` — add `imapflow`, `nodemailer` to backend section; describe connector architecture
-- [ ] `docs/features.md` — add section 7.19 Connectors (screen, forms, types); update 7.3 Worker detail (output action) and 7.16 Source detail (data source)
-- [ ] `docs/user-flows.md` — add flows: "Add HTTP connector", "Add IMAP connector", "Add SMTP connector", "Source step with connector", "Worker with SMTP output action"
-- [ ] `docs/data-model.md` — add `connectors/<id>/connector.json` schema; update `SourceStepConfig` and `WorkerStepConfig` schemas
-- [ ] `docs/app-description.md` — add Connector to vocabulary table
-- [ ] `docs/implementation/tasks.md` — check off N9 on completion
+### 24. Documentation — full review and update
+
+After all implementation tasks are done, update every relevant doc to reflect the new model:
+
+- [ ] **`docs/app-description.md`**
+  - Add `Outlet` and `Credential` to the vocabulary table
+  - Update workflow shape description to include Outlet as a valid final step
+  - Update "Why This Will Work" to mention deterministic I/O via credentials
+
+- [ ] **`docs/data-model.md`**
+  - Add `credentials/` to the Global Folder Structure diagram
+  - Add `Credential credential.json` schema section (HTTP, IMAP, SMTP variants)
+  - Add `Outlet step.json` schema section with full field table
+  - Update `Source step.json` to add the `channel` field and remove `mcps`
+  - Update Worker `step.json` — confirm no connector fields (clean)
+  - Add Outlet folder structure diagram
+
+- [ ] **`docs/features.md`**
+  - Add section 7.19: Credentials screen (list, test, add, edit, delete; three form types)
+  - Add section 7.20: Outlet step (left rail card states, detail panel tabs, template tokens)
+  - Update section 7.16 Source step — add "Data source" config block to the Config tab mockup
+  - Update section 7.3 Worker Detail View — remove all MCP/skill content; show clean Context-only tab
+
+- [ ] **`docs/user-flows.md`**
+  - Add flow: "Add a credential" (HTTP / IMAP / SMTP — test → save)
+  - Add flow: "Add a Source with HTTP GET channel" — config → test run → cards created
+  - Add flow: "Add a Source with IMAP channel" — config → test → cards from inbox
+  - Add flow: "Add an Outlet step" — type → credential → template → save
+  - Add flow: "An Outlet runs" — card arrives in tray → Outlet fires → dispatched → card archived
+
+- [ ] **`docs/tech-stack.md`**
+  - Add `imapflow` and `nodemailer` to the backend section
+  - Add a "Credentials & Channel I/O" subsection describing the credential store and the three channel service files
+
+- [ ] **`docs/design-principles.md`**
+  - Add Outlet to the left rail step card visual variants
+  - Add the `#8B5CF6` purple as the Outlet step accent color
+
+- [ ] **`docs/implementation/tasks.md`** — check off N9 on completion
 
 ---
 
 ## Acceptance criteria
 
 - `npm run typecheck` passes; `npm test` passes
-- A new HTTP connector can be created, saved, and tested from the Connectors screen
-- A new IMAP connector can be created with a password; the password is stored in keytar and never appears in `connector.json`
-- A new SMTP connector can be created; test sends a verification connection
-- A source step with an HTTP connector assigned fetches a real URL on "Run now" and passes the response to the AI; cards are created from the AI's output
-- A source step with an IMAP connector fetches messages from the configured inbox; one card is created per new message
-- A worker with an SMTP output action sends an email after the AI run, using template tokens from card data and worker output; the email arrives at the configured address
-- A worker with an HTTP output action POSTs the worker's JSON output to the configured URL
-- Output action failure (bad credentials, network error) does not fail the worker run; the error appears in the run detail
-- Removing a connector also removes its keytar credentials
-- A source step without a connector behaves identically to before this phase (Claude Code fetches data itself)
-- The Connectors nav entry appears in the top bar where MCPs used to be
+- A new HTTP credential can be created with an API key stored in keytar; test connection succeeds
+- A new IMAP credential can be created; test opens inbox connection successfully
+- A new SMTP credential can be created; test verifies the transport
+- A source step with HTTP GET channel assigned fetches a real URL on "Run now" and creates cards from the AI's parsed output
+- A source step with IMAP channel fetches inbox messages and creates one card per new message
+- An Outlet step with SMTP channel sends an email to the configured address when a card arrives; the email body contains the resolved template tokens from card data
+- An Outlet step with HTTP POST channel posts the card data to the configured URL; `{{card.data | json}}` is correctly serialised
+- Outlet failure (bad credentials, network error) moves the card to 99-errors; the run meta records the error; no retry loop
+- Deleting a credential removes its keytar password; any Source or Outlet referencing it shows an error on next run
+- A source step with no channel set behaves identically to pre-N9 (Claude Code fetches data itself)
+- The workflow author produces plans that include an Outlet step when the description mentions email sending or webhook posting
+- Credentials screen is accessible from the top bar; the MCPs screen is gone
+- No doc outside `docs/implementation/` contains stale references to skills or MCPs
