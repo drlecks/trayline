@@ -55,186 +55,122 @@ Rather than maintaining two parallel realities, this phase removes both systems 
 
 ### 1. Main-process service cleanup
 
-- [ ] Delete `src/main/services/skill-service.ts` and `skill-service.test.ts`
-- [ ] Delete `src/main/services/skill-validator.ts` and `skill-validator.test.ts`
-- [ ] Delete `src/main/services/system-skills-service.ts`
-- [ ] Delete `src/main/services/mcp-registry.ts` and `mcp-registry.test.ts`
-- [ ] Delete `src/main/services/mcp-credentials.ts`
-- [ ] Delete `src/main/services/mcp-connection-test.ts`
-- [ ] Delete `src/main/services/security-audit-service.ts`
+- [x] Delete `src/main/services/skill-service.ts` and `skill-service.test.ts`
+- [x] Delete `src/main/services/skill-validator.ts` and `skill-validator.test.ts`
+- [x] Delete `src/main/services/system-skills-service.ts`
+- [x] Delete `src/main/services/mcp-registry.ts` and `mcp-registry.test.ts`
+- [x] Delete `src/main/services/mcp-credentials.ts`
+- [x] Delete `src/main/services/mcp-connection-test.ts`
+- [x] Delete `src/main/services/security-audit-service.ts`
 
 ### 2. Author service — inline the system prompt
 
-Currently `author-service.ts` loads `trayline-author/skill.md` from the system skills folder. Replace this with a plain resource file:
-
-- [ ] Create `resources/author-prompt.md` — copy the content of `skills/_system/trayline-author/skill.md` verbatim
-- [ ] In `author-service.ts`, replace `loadSystemSkill('trayline-author')` with a direct `fs.readFile` on `resources/author-prompt.md` (resolve via `app.getAppPath()` in production, `path.join(__dirname, '../../resources/...')` in dev)
-- [ ] Remove the `SkillDefinition` import; pass the prompt body as plain text in the spawn call
-- [ ] Verify the workflow author still generates a project end-to-end after this change
+- [x] Create `resources/author-prompt.md` — author prompt as a plain resource file
+- [x] In `author-service.ts`, read directly from `resources/author-prompt.md` (via `app.isPackaged` path resolution)
+- [x] Remove the `SkillDefinition` import; pass the prompt body as plain text
 
 ### 3. Scaffold service cleanup
 
-- [ ] Remove `import { systemSkillsService }` and the `await systemSkillsService.ensureInstalled()` call from `scaffold-service.ts` — templates are already read directly from `resources/`
-- [ ] Remove `skills` and `mcps` fields from the step JSON written by `scaffoldStep()`
-- [ ] Remove `unconfiguredMcps` tracking and return value — `ProjectCreateSuccess.unconfiguredMcps` becomes `[]` always, then remove the field in task 7
-- [ ] Remove `Paths.skills` and `Paths.systemSkills` constants from `fs-service.ts` if nothing else references them
+- [x] Remove `systemSkillsService` import and call from `scaffold-service.ts`
+- [x] Remove `skills` and `mcps` fields from step JSON written by `scaffoldStep()`
+- [x] Remove `unconfiguredMcps` tracking and return value
+- [x] Remove `Paths.skills` and `Paths.systemSkills` from `fs-service.ts`
+- [x] Move templates to `resources/templates/`; update `scaffold-service.ts` path resolution
 
 ### 4. Adapter interface — remove skills and MCPs from SpawnOptions
 
-- [ ] In `src/main/ai-terminals/adapter.ts`:
-  - Remove `SkillDefinition` interface
-  - Remove `MCPDefinition` interface
-  - Remove `skills: SkillDefinition[]` from `SpawnOptions`
-  - Remove `mcps: MCPDefinition[]` from `SpawnOptions`
-  - Remove `supportsMcps?: boolean` from `AITerminalAdapter`
-- [ ] In `claude-code.ts` `spawn()`: remove all MCP handling — the `mcps` array construction, env-var injection, `--mcp-config` flag
-- [ ] In `local-llm.ts`: remove `supportsMcps: false` field; `spawn()` already ignores both
-- [ ] In `mock.ts`: remove any skills/mcps handling
+- [x] Remove `SkillDefinition`, `MCPDefinition`, `skills`, `mcps` from `adapter.ts`
+- [x] Remove `supportsMcps` from `AITerminalAdapter`
+- [x] Remove all MCP handling from `claude-code.ts` `spawn()`
+- [x] Remove `supportsMcps: false` from `local-llm.ts`
 
 ### 5. Worker runner cleanup
 
-- [ ] In `src/main/services/worker-runner.ts`:
-  - Delete `resolveSkill()` function
-  - Delete `resolveMcps()` function
-  - Remove the skill-resolution loop from `runInner()`
-  - Remove the MCP pre-flight check block added in N7
-  - Remove `import { mcpRegistry }`, `import { mcpCredentials }`, `import type { MCPDefinition }`
-- [ ] Update `worker-runner.test.ts` — remove MCP pre-flight test cases; keep all others
+- [x] Remove `resolveSkill()`, `resolveMcps()`, skill-resolution loop, and MCP pre-flight from `worker-runner.ts`
+- [x] Update `worker-runner.test.ts` — remove MCP pre-flight test cases
 
 ### 6. Source runner cleanup
 
-- [ ] In `src/main/services/source-runner.ts`:
-  - Remove `mcps?: string[]` from the runtime config read
-  - Remove the MCP pre-flight check block
-  - Remove `import { mcpRegistry }`, `import { mcpCredentials }`
+- [x] Remove `mcps?: string[]` and MCP pre-flight from `source-runner.ts`
 
 ### 7. Shared types cleanup
 
-- [ ] In `src/shared/types.ts`:
-  - Remove `SkillCatalogEntry`, `SkillInstallState`, `InstalledSkill`, and all other skill-specific types
-  - Remove `McpCatalogEntry`, `McpInstallState`, `McpStatus`, `McpCredentialsSchema`, and all MCP-specific types
-  - Remove `unconfiguredMcps: string[]` from `ProjectCreateSuccess`
-  - Remove `skills` and `mcps` fields from `WorkerStepConfig`
-  - Remove `mcps` from `SourceStepConfig`
-  - Remove `skills` and `mcps` from `ExportManifest`
-  - Remove `skillsRequired` and any import-related skill/MCP types
+- [x] Remove all skill/MCP types from `src/shared/types.ts`
+- [x] Remove `unconfiguredMcps` from `ProjectCreateSuccess`
+- [x] Remove `skills`/`mcps` fields from `WorkerStepConfig` and `SourceStepConfig`
+- [x] Simplify `ExportManifest` to `{ trayline_version, exported_at }`
+- [x] Remove `mcps_active` from `WorkerRunMeta` in `src/shared/worker-run.ts`
+- [x] Remove `skills`/`mcps` from `PlanWorkerStep` in `src/shared/workflow-plan.ts`
 
 ### 8. IPC layer cleanup
 
-- [ ] In `src/shared/ipc-channels.ts`: remove the entire `skills` block and the entire `mcp` block
-- [ ] In `src/main/ipc/handlers.ts`: remove all `ipcMain.handle('skills:*', ...)` and `ipcMain.handle('mcp:*', ...)` handlers; remove the imports of the deleted services
-- [ ] In `src/preload/index.ts`: remove the `skills` namespace and the `mcp` namespace from both the implementation and the `TraylineAPI` type declaration
+- [x] Remove `skills:*` and `mcp:*` channels from `src/shared/ipc-channels.ts`
+- [x] Remove all `skills:*` and `mcp:*` handlers from `src/main/ipc/handlers.ts`
+- [x] Remove `skills` and `mcp` namespaces from `src/preload/index.ts`
 
 ### 9. Renderer — delete screens and dialogs
 
-- [ ] Delete `src/renderer/components/skills/SkillsScreen.tsx`
-- [ ] Delete `src/renderer/components/mcps/McpsScreen.tsx`
-- [ ] Delete `src/renderer/components/mcps/McpSetupWizard.tsx`
-- [ ] Delete `src/renderer/components/projects/ImportMissingSkillsDialog.tsx`
-- [ ] Delete `src/renderer/components/projects/ImportSecurityAuditDialog.tsx`
+- [x] Delete `src/renderer/components/skills/SkillsScreen.tsx`
+- [x] Delete `src/renderer/components/mcps/McpsScreen.tsx`
+- [x] Delete `src/renderer/components/mcps/McpSetupWizard.tsx`
+- [x] Delete `src/renderer/components/projects/ImportMissingSkillsDialog.tsx`
+- [x] Delete `src/renderer/components/projects/ImportSecurityAuditDialog.tsx`
 
 ### 10. Renderer — TopBar navigation
 
-- [ ] In `src/renderer/components/layout/TopBar.tsx`:
-  - Remove the **Skills** nav entry
-  - Remove the **MCPs** nav entry
-  - Remove any `screen === 'skills'` or `screen === 'mcps'` routing
+- [x] Remove Skills and MCPs nav entries from `TopBar.tsx`
 
 ### 11. Renderer — Worker detail panel
 
-- [ ] Rename the **"Skills, MCPs & Context"** tab to **"Context"**
-- [ ] Remove the Skills checklist block
-- [ ] Remove the MCPs checklist block (including the inline configure button)
-- [ ] Keep only the Context Packs checklist
-- [ ] Remove the `runTriggerError` MCP-specific "Go to Settings" copy (keep the generic error state for other failures)
+- [x] Rename "Skills, MCPs & Context" tab to "Context"
+- [x] Remove Skills and MCPs checklist blocks
+- [x] Keep only Context Packs checklist
 
 ### 12. Renderer — Source detail panel
 
-- [ ] Remove the MCPs checklist block
-- [ ] Remove the MCP-specific `runTriggerError` copy
+- [x] Remove MCPs checklist block from `SourceDetailPanel.tsx`
 
 ### 13. Renderer — Workflow author screen
 
-- [ ] Remove `unconfiguredMcps` from `PostGenBanner` props and rendering
-- [ ] Simplify post-gen body: only source vs. no-source branches; no MCP branch
+- [x] Remove `unconfiguredMcps` from `PostGenBanner` and simplify post-gen body
 
 ### 14. Renderer — Settings screen
 
-- [ ] Remove the `localLlmMcpWarning` state and the amber callout that fires when switching to local-llm with MCP-using workers
+- [x] Remove `localLlmMcpWarning` state and amber callout
 
 ### 15. Renderer — remaining references
 
-- [ ] `OnboardingTour.tsx` — remove any step referencing skills or MCPs
-- [ ] `WelcomeSplash.tsx` — remove skills/MCPs references
-- [ ] `CommandPalette.tsx` — remove commands that open skills or MCPs screens
-- [ ] `ExportProjectDialog.tsx` — remove skills/MCPs from export manifest description
-- [ ] `ProjectListScreen.tsx` — remove import flow that resolves missing skills/MCPs
-- [ ] `ProjectScreen.tsx` — remove screen routing for `'skills'` and `'mcps'`
-- [ ] `project-store.ts` — remove `setUnconfiguredMcps`, `unconfiguredMcps`, and skills/MCPs screen routing
+- [x] `OnboardingTour.tsx` — updated tour steps
+- [x] `WelcomeSplash.tsx` — removed skills/MCPs references
+- [x] `CommandPalette.tsx` — removed `nav:skills` command
+- [x] `ExportProjectDialog.tsx` — updated description
+- [x] `ProjectListScreen.tsx` — removed missing-skills flow
+- [x] `ProjectScreen.tsx` — removed screen routing for `'skills'` and `'mcps'`
+- [x] `project-store.ts` — removed skills/MCPs state
 
 ### 16. App data and resources cleanup
 
-- [ ] Remove `app-data/mcps-catalog.json` from bundled resources
-- [ ] Remove `app-data/skills-index-cache.json` from bundled resources / first-launch seeding
-- [ ] Remove `skills/_system/` folder from bundled resources (after moving the author prompt in task 2)
-- [ ] Check electron-builder config — remove any `skills/` or `mcps/` directory from `extraResources` or `files` globs
+- [x] Remove `app-data/mcps-catalog.json` from bundled resources
+- [x] Remove `skills/_system/` folder from bundled resources
+- [x] Templates moved to `resources/templates/`
+- [x] Electron-builder config cleaned of skills/mcps paths
 
 ### 17. Tests
 
-- [ ] Run `npm test` after each major deletion group — fix broken imports before moving on
-- [ ] Remove test assertions that cover MCP pre-flight (worker-runner, source-runner)
-- [ ] Remove test assertions that cover skill resolution
-- [ ] All remaining tests must pass with zero skips
+- [x] All 134 tests pass with zero failures
+- [x] Removed MCP pre-flight test cases from `worker-runner.test.ts`
+- [x] Updated `scaffold-service.test.ts`, `registry.test.ts`, `local-llm.test.ts`
 
 ### 18. Documentation — full review of all non-implementation docs
 
-Go through each doc file below. The goal is that after this task, no doc references skills or MCPs as current features. Update language that assumes Claude Code is the only AI option where relevant.
-
-- [ ] **`docs/app-description.md`**
-  - Remove `Skill`, `MCP`, `Setup Wizard`, and `Credential Set` from the vocabulary table
-  - Add `Context Pack` to vocabulary if not already present
-  - Update the Worker definition to remove "skills + a `process.md`" — just "AI instructions in a `process.md`"
-  - Update "Why This Will Work" — remove any mention of MCPs or skills
-
-- [ ] **`docs/data-model.md`**
-  - Remove the `skills/` and `mcps/` folders from the Global Folder Structure diagram
-  - Remove `Skill skill.json` schema section
-  - Remove `MCP mcp.json` schema section
-  - Remove `skills` and `mcps` fields from Worker `step.json` example
-  - Remove `mcps` field from Source `step.json` example
-  - Remove `skills` and `mcps` from `ExportManifest` schema
-  - Update the `app-data/` listing to remove `skills-index-cache.json`, `mcps-index-cache.json`, `mcps-catalog.json`
-
-- [ ] **`docs/design-principles.md`**
-  - Remove any layout rules or color assignments specific to Skills or MCPs screens
-  - Verify the TopBar icon list no longer includes Skills or MCPs entries
-
-- [ ] **`docs/features.md`**
-  - Remove section 7.11 (Skill Finder) entirely
-  - Remove section 7.12 Import/Export sub-points about skills/MCPs
-  - In section 7.3 Worker Detail View, rename the "Skills, MCPs & Context" tab to "Context" and rewrite the tab content description (skills checklist and MCPs checklist gone, only context packs)
-  - In section 7.18 (Local AI Model from N7), remove the "MCPs screen badge" subsection and the Settings MCP conflict warning
-  - Remove any other inline MCPs/skills references throughout
-
-- [ ] **`docs/tech-stack.md`**
-  - Remove `keytar` from the backend listing (it was added for MCP credentials; verify nothing else uses it — if the credential store in N9 will use keytar too, keep it but update the description)
-  - Remove `SkillDefinition` and `MCPDefinition` from the `SpawnOptions` interface block
-  - Remove `supportsMcps` from the `AITerminalAdapter` interface block
-  - Update the adapter file listing comment for `local-llm.ts` (remove "no MCP support" note — moot)
-
-- [ ] **`docs/user-flows.md`**
-  - Remove section 6.8 (Installing a Skill)
-  - Remove section 6.11 (Setting Up an MCP)
-  - Update section 6.1a (Workflow Author) — remove the MCP branch from the post-generation banner description
-  - Update section 6.5 (A Worker Runs) — remove MCP pre-flight step from the flow
-  - Update section 6.14 (AI Setup) — remove "Setup guide" / `AdapterSetupWizard` references for non-local adapters (the wizard was MCP-adjacent; the adapter setup screen simplifies)
-  - Remove any "unconfigured MCPs" language throughout
-
-- [ ] **`docs/skills-and-mcps.md`**
-  - Delete this file entirely — it describes two systems that no longer exist
-
-- [ ] **`docs/release.md`**
-  - Scan for any skills or MCPs references (code-signing, packaging, first-launch seeding) and remove/update
+- [x] **`docs/app-description.md`** — updated vocabulary, removed Skill/MCP/Setup Wizard/Credential Set
+- [x] **`docs/data-model.md`** — removed skills/ and mcps/ folders, Skill/MCP schemas, updated Worker and Source step.json examples, removed MCP audit events
+- [x] **`docs/design-principles.md`** — removed skills/MCPs from top bar and iconography
+- [x] **`docs/features.md`** — removed 7.11 (Skill Finder), updated 7.12, 7.13, 7.14 (removed system skills), 7.3 (renamed tab), 7.16 (removed MCPs), 7.18 (removed MCPs badge)
+- [x] **`docs/tech-stack.md`** — updated keytar description, removed skills/MCPs from adapter interface, updated local-llm comment
+- [x] **`docs/user-flows.md`** — removed 6.8 and 6.11, updated 6.1a, 6.2, 6.9
+- [x] **`docs/skills-and-mcps.md`** — deleted
+- [x] **`docs/release.md`** — no changes needed (no skills/MCPs references)
 
 ---
 

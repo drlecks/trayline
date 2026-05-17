@@ -1,4 +1,4 @@
-import { Moon, Sun, Monitor, Settings as SettingsIcon, Package, Plug } from 'lucide-react'
+import { Moon, Sun, Monitor, Settings as SettingsIcon } from 'lucide-react'
 import { useThemeStore } from '../../stores/theme-store'
 import { useProjectStore } from '../../stores/project-store'
 import { useActiveRunsStore } from '../../stores/active-runs-store'
@@ -82,30 +82,6 @@ export default function TopBar() {
             "
           >
             <Icon size={15} strokeWidth={1.75} />
-          </button>
-          <button
-            onClick={() => setScreen('mcps')}
-            title="MCPs"
-            className="
-              p-1.5 rounded-md
-              text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-100
-              hover:bg-black/[0.05] dark:hover:bg-white/[0.05]
-              transition-colors duration-150
-            "
-          >
-            <Plug size={15} strokeWidth={1.75} />
-          </button>
-          <button
-            onClick={() => setScreen('skills')}
-            title="Skills"
-            className="
-              p-1.5 rounded-md
-              text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-100
-              hover:bg-black/[0.05] dark:hover:bg-white/[0.05]
-              transition-colors duration-150
-            "
-          >
-            <Package size={15} strokeWidth={1.75} />
           </button>
           <button
             onClick={() => setScreen('settings')}

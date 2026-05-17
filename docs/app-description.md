@@ -24,19 +24,14 @@ Everything lives on disk as folders and JSON files. A whole project is a zip you
 | **Workflow** | A linear stack of steps (top to bottom) |
 | **Source** | A scheduled ingestion step that fetches data from the world via AI, deduplicates, and creates cards for new items only |
 | **Tray** | A holding place for cards; can be auto-approved or human-reviewed |
-| **Worker** | An AI step that processes cards using skills + a `process.md` |
+| **Worker** | An AI step that processes cards using AI instructions in a `process.md` |
 | **Batch Worker** | A worker with `batch_mode: true` that receives all ready cards as a JSON array and produces one consolidated output card |
 | **Card** | One item moving through the workflow (a request, an invoice, a ticket) |
-| **Skill** | A reusable capability that a worker uses (e.g. "read PDF", "send email"). Installed globally; assigned per-worker. |
-| **System Skill** | A skill that ships with the app and powers app-level operations (`trayline-author`, `trayline-scaffold`) |
-| **MCP** | Model Context Protocol server — a process that exposes tools and resources to an AI agent. Managed as installable, configurable dependencies. |
 | **Context Pack** | Markdown files with project knowledge injected into worker prompts |
 | **Run** | One execution of a worker on one card |
 | **Audit Log** | The append-only history of everything that happened |
 | **AI Terminal Adapter** | The interface that wraps an AI agent (Claude Code CLI, local GGUF model, Open Code, etc.) so workers don't depend on a specific tool |
 | **Workflow Author** | The "describe what you want" screen that generates a starting workflow |
-| **Credential Set** | The credentials (OAuth tokens, API keys, etc.) that an MCP needs to function. Stored in the OS keychain, never in plain JSON. |
-| **Setup Wizard** | The guided step-by-step flow that an MCP defines for configuration (e.g. open the browser for OAuth, paste an API key). |
 
 ---
 
@@ -66,7 +61,5 @@ Trayline is **not** for programmers. It is for people who manage real processes 
 - Branching / parallel flows (only linear)
 - Multi-user collaboration / sync
 - Cloud hosting
-- A built-in marketplace for skills (only the GitHub-fetched index)
 - Plugins or custom step types
 - Mobile / web version
-- Built-in MCP server hosting (skills can wrap MCP, but Trayline doesn't ship one)

@@ -5,8 +5,6 @@
   "description": "{{description}}",
   "color": "#F7A14F",
   "icon": "{{icon}}",
-  "skills": [],
-  "mcps": [],
   "context_packs": [],
   "execution": {
     "command": "claude",
