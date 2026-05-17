@@ -502,7 +502,7 @@ The audit flags that small local models may produce invalid or incomplete workfl
 - [x] **`docs/skills-and-mcps.md`** — add a note that MCPs are not available when using the local adapter; document the `supportsMcps` adapter flag
 - [x] **`docs/data-model.md`** — no changes needed (card model is unchanged); verify nothing implies Claude Code exclusively
 - [x] **`docs/design-principles.md`** — no changes expected; verify
-- [ ] **`docs/implementation/tasks.md`** — check off N7 on completion (done after merge to develop)
+- [x] **`docs/implementation/tasks.md`** — check off N7 on completion (done after merge to develop)
 - [x] Read through all docs listed above and flag any language that assumes Claude Code is the only AI option — update to say "AI adapter" or "Local AI / Claude Code" as appropriate
 
 ---
