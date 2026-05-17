@@ -85,6 +85,18 @@ Each task corresponds to a phase file in this folder. Check off tasks as they ar
 
 ---
 
+## N8 Phases (Simplification)
+
+- [ ] [Phase N8 — Remove Skills & MCPs](./phase-n8-remove-skills-mcps.md)
+
+---
+
+## N9 Phases (Connectors)
+
+- [ ] [Phase N9 — Connectors (HTTP, IMAP, SMTP)](./phase-n9-connectors.md)
+
+---
+
 ## Estimates
 
 | Block | Estimate |
