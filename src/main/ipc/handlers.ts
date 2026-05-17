@@ -246,6 +246,8 @@ export function registerIpcHandlers(
       displayName: a.displayName,
       kind: a.kind,
       installUrl: a.installUrl ?? null,
+      description: a.description ?? null,
+      supportsMcps: a.supportsMcps ?? true,
     })),
   )
   ipcMain.handle('adapters:detect', async (_: unknown, id: string) => {

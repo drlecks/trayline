@@ -240,11 +240,19 @@ async function runSourceInner({ project, workflow, stepId, stepConfig }: RunSour
 
   const timeoutMs = (stepConfig.execution.timeout_seconds ?? 60) * 1000
 
+  // Pre-flight: reject if the adapter cannot use MCPs and this source has MCPs configured.
+  const sourceMcpIds = stepConfig.mcps ?? []
+  if (adapter.supportsMcps === false && sourceMcpIds.length > 0) {
+    const err = `${adapter.displayName} does not support MCP tools. Remove the MCPs from this source step, or switch to Claude Code in Settings.`
+    await failRun({ project, workflow, stepId, runId, stateDir, runDir, startedAt, meta, error: err })
+    return
+  }
+
   let rawOutput = ''
   let runError: string | undefined
 
   try {
-    const mcpIds = stepConfig.mcps ?? []
+    const mcpIds = sourceMcpIds
     const mcpDefs = mcpIds.length > 0
       ? await resolveMcps(project, workflow, stepId, runId, mcpIds)
       : []
