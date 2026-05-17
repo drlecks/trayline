@@ -138,4 +138,14 @@ export const IPC = {
   notification: {
     navigate: 'notification:navigate',
   },
+  localModel: {
+    list: 'local-model:list',
+    download: 'local-model:download',
+    cancel: 'local-model:cancel',
+    delete: 'local-model:delete',
+    recheckAdapter: 'local-model:recheck-adapter',
+    onProgress: 'local-model:progress',
+    onDownloadComplete: 'local-model:download-complete',
+    onDownloadError: 'local-model:download-error',
+  },
 } as const
