@@ -10,10 +10,6 @@ import { cardService } from '../services/card-service'
 import { workerRunner } from '../services/worker-runner'
 import { sourceRunner } from '../services/source-runner'
 import { sourceScheduler } from '../services/source-scheduler'
-import { skillService } from '../services/skill-service'
-import { mcpRegistry } from '../services/mcp-registry'
-import { mcpCredentials } from '../services/mcp-credentials'
-import { testConnection } from '../services/mcp-connection-test'
 import { exportService } from '../services/export-service'
 import { orchestrator } from '../services/orchestrator'
 import { adapterReadinessService } from '../services/adapter-readiness-service'
@@ -23,7 +19,7 @@ import { localModelService } from '../services/local-model-service'
 import { join } from 'path'
 import fs from 'fs/promises'
 import { fsService } from '../services/fs-service'
-import type { BootstrapInfo, NotificationSettings, ProviderInstallSuggestion, ProviderReadyResult, ExportOptions, ImportSuccess, SourceStepConfig, McpStatus } from '../../shared/types'
+import type { BootstrapInfo, NotificationSettings, ProviderInstallSuggestion, ProviderReadyResult, ExportOptions, ImportSuccess, SourceStepConfig } from '../../shared/types'
 import type { CardStatus } from '../../shared/card'
 
 export type { BootstrapInfo }
@@ -80,10 +76,6 @@ export function registerIpcHandlers(
   )
   ipcMain.handle('project:listSteps', (_: unknown, project: string, workflow: string) =>
     projectService.listSteps(project, workflow),
-  )
-  ipcMain.handle('project:listSkills', () => projectService.listSkills())
-  ipcMain.handle('project:checkSkills', (_: unknown, project: string) =>
-    projectService.checkProjectSkills(project),
   )
   ipcMain.handle('project:listContextFiles', (_: unknown, project: string) =>
     projectService.listContextFiles(project),
@@ -168,24 +160,6 @@ export function registerIpcHandlers(
     }
     if (!adapterOk) blockers.push('No AI adapter installed')
 
-    const workflows = await projectService.listWorkflows(projectName).catch(() => [])
-    const checkedMcps = new Set<string>()
-    for (const wf of workflows) {
-      const steps = await projectService.listSteps(projectName, wf.name)
-      for (const step of steps) {
-        if (step.kind !== 'worker') continue
-        const mcpIds = (step.raw as { mcps?: string[] }).mcps ?? []
-        for (const mcpId of mcpIds) {
-          if (checkedMcps.has(mcpId)) continue
-          checkedMcps.add(mcpId)
-          const status = await mcpRegistry.readStatus(mcpId).catch(() => null)
-          if (!status?.configured) {
-            blockers.push(`MCP '${mcpId}' not configured`)
-          }
-        }
-      }
-    }
-
     return { ready: blockers.length === 0, blockers }
   })
 
@@ -248,7 +222,6 @@ export function registerIpcHandlers(
       kind: a.kind,
       installUrl: a.installUrl ?? null,
       description: a.description ?? null,
-      supportsMcps: a.supportsMcps ?? true,
       requiresExternalInstall: a.installUrl != null,
     })),
   )
@@ -380,18 +353,6 @@ export function registerIpcHandlers(
     const stepDir = projectService.paths.stepDir(project, workflow, stepId)
     const cfg = await fsService.readJson<SourceStepConfig>(join(stepDir, 'step.json'))
 
-    // Pre-flight: surface adapter incompatibility before allocating any run.
-    // source:run-now is fire-and-forget so errors inside runSource are swallowed;
-    // check here so the IPC call can reject cleanly.
-    const adapterId = cfg.execution?.adapter ?? settingsStore.get('defaultAdapterId') ?? 'claude-code'
-    const srcAdapter = adapterRegistry.get(adapterId)
-    if (srcAdapter && srcAdapter.supportsMcps === false) {
-      throw new Error(
-        `${srcAdapter.displayName} does not support source steps. ` +
-        `Source steps require an external AI agent to fetch data. Switch to Claude Code in Settings → AI Terminal.`,
-      )
-    }
-
     void sourceRunner.runSource({ project, workflow, stepId, stepConfig: cfg }).catch((e) => {
       // eslint-disable-next-line no-console
       console.error('[source:run-now] failed:', e)
@@ -447,53 +408,6 @@ export function registerIpcHandlers(
   ipcMain.handle('worker:openExternalTerminal', (_: unknown, project: string, workflow: string, stepId: string, runId: string) =>
     workerRunner.openExternalTerminal(project, workflow, stepId, runId),
   )
-
-  // ── Skills ────────────────────────────────────────────────────────────────
-  ipcMain.handle('skills:fetchCatalog', (_: unknown, opts?: { forceRefresh?: boolean }) =>
-    skillService.fetchCatalog(opts),
-  )
-  ipcMain.handle('skills:listInstalled', () => skillService.listInstalled())
-  ipcMain.handle('skills:install', (_: unknown, skillId: string) =>
-    skillService.installFromCatalog(skillId),
-  )
-  ipcMain.handle('skills:installFromUrl', (_: unknown, url: string) =>
-    skillService.installFromUrl(url),
-  )
-  ipcMain.handle('skills:validateFromUrl', (_: unknown, url: string) =>
-    skillService.validateFromUrl(url),
-  )
-  ipcMain.handle('skills:confirmInstall', (
-    _: unknown,
-    tempDir: string,
-    acceptedWarnings: string[],
-    sourceUrl: string,
-    source: 'url' | 'catalog',
-  ) => skillService.confirmInstall(tempDir, acceptedWarnings, sourceUrl, source))
-  ipcMain.handle('skills:cancelValidation', (_: unknown, tempDir: string) =>
-    skillService.cancelValidation(tempDir),
-  )
-  ipcMain.handle('skills:update', (_: unknown, skillId: string) => skillService.update(skillId))
-  ipcMain.handle('skills:uninstall', (_: unknown, skillId: string) =>
-    skillService.uninstall(skillId),
-  )
-  ipcMain.handle('skills:revalidateAll', () => skillService.revalidateAll())
-
-  // ── MCPs ──────────────────────────────────────────────────────────────────────
-  ipcMain.handle('mcp:list-installed', () => mcpRegistry.listInstalled())
-  ipcMain.handle('mcp:list-catalog', () => mcpRegistry.listCatalog())
-  ipcMain.handle('mcp:install', (_: unknown, mcpId: string) => mcpRegistry.install(mcpId))
-  ipcMain.handle('mcp:uninstall', (_: unknown, mcpId: string) => mcpRegistry.uninstall(mcpId))
-  ipcMain.handle('mcp:read-status', (_: unknown, mcpId: string) => mcpRegistry.readStatus(mcpId))
-  ipcMain.handle('mcp:write-status', (_: unknown, mcpId: string, partial: Partial<McpStatus>) =>
-    mcpRegistry.writeStatus(mcpId, partial),
-  )
-  ipcMain.handle('mcp:save-credential', async (_: unknown, mcpId: string, credId: string, value: string) => {
-    await mcpCredentials.storeCredential(mcpId, credId, value)
-  })
-  ipcMain.handle('mcp:delete-credentials', async (_: unknown, mcpId: string) => {
-    await mcpCredentials.deleteAllForMcp(mcpId)
-  })
-  ipcMain.handle('mcp:test-connection', (_: unknown, mcpId: string) => testConnection(mcpId))
 
   // ── Cards ─────────────────────────────────────────────────────────────────
   ipcMain.handle('card:list', (_: unknown, project: string, workflow: string, stepId: string, status: CardStatus) =>

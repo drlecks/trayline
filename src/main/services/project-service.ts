@@ -7,11 +7,9 @@ import type {
   WorkflowMeta,
   StepKind,
   StepMeta,
-  SkillManifest,
-  MissingSkillsEntry,
 } from '../../shared/types'
 
-export type { ProjectMeta, ProjectStatus, WorkflowMeta, StepKind, StepMeta, SkillManifest }
+export type { ProjectMeta, ProjectStatus, WorkflowMeta, StepKind, StepMeta }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -138,77 +136,6 @@ async function getStep(projectName: string, workflowName: string, stepId: string
   }
 }
 
-// ─── Skill discovery ──────────────────────────────────────────────────────────
-
-async function listSkills(): Promise<SkillManifest[]> {
-  if (!(await pathExists(Paths.skills))) return []
-  const out: SkillManifest[] = []
-
-  // User-installed skills only (top level of skills/, not _system/)
-  // System skills are auto-managed and never exposed to the worker skill picker.
-  const top = await fs.readdir(Paths.skills, { withFileTypes: true })
-  for (const e of top) {
-    if (!e.isDirectory()) continue
-    if (e.name === '_system') continue
-    const m = await readJsonSafe<SkillManifest>(join(Paths.skills, e.name, 'skill.json'))
-    if (m) out.push(m)
-  }
-
-  return out
-}
-
-/**
- * Check every worker in the project and return entries for any worker whose
- * required skills are not installed as user skills.
- * System skills (in Paths.systemSkills) are auto-restored on launch and never
- * appear in a worker's skills[] array, so we only check Paths.skills here.
- */
-async function checkProjectSkills(projectName: string): Promise<MissingSkillsEntry[]> {
-  const result: MissingSkillsEntry[] = []
-  const wfRoot = join(projectDir(projectName), 'workflows')
-  if (!(await pathExists(wfRoot))) return result
-
-  const wfs = await fs.readdir(wfRoot, { withFileTypes: true })
-  for (const wfEntry of wfs) {
-    if (!wfEntry.isDirectory()) continue
-    const stepsRoot = join(wfRoot, wfEntry.name, 'steps')
-    if (!(await pathExists(stepsRoot))) continue
-
-    const steps = await fs.readdir(stepsRoot, { withFileTypes: true })
-    for (const stepEntry of steps) {
-      if (!stepEntry.isDirectory()) continue
-      const raw = await readJsonSafe<{ kind?: string; skills?: string[] }>(
-        join(stepsRoot, stepEntry.name, 'step.json'),
-      )
-      if (!raw || raw.kind !== 'worker') continue
-
-      const missing: string[] = []
-      for (const skillId of raw.skills ?? []) {
-        if (!(await pathExists(join(Paths.skills, skillId, 'skill.json')))) {
-          missing.push(skillId)
-        }
-      }
-      if (missing.length > 0) {
-        result.push({ stepId: stepEntry.name, workflowId: wfEntry.name, missingSkillIds: missing })
-      }
-    }
-  }
-  return result
-}
-
-async function getSkill(skillId: string): Promise<SkillManifest | null> {
-  // Look in user skills first, then system
-  const candidates = [
-    join(Paths.skills, skillId, 'skill.json'),
-    join(Paths.systemSkills, skillId, 'skill.json'),
-  ]
-  for (const p of candidates) {
-    const m = await readJsonSafe<SkillManifest>(p)
-    if (m) return m
-  }
-  return null
-}
-
 // ─── Context pack operations ──────────────────────────────────────────────────
 
 async function listContextFiles(projectName: string): Promise<string[]> {
@@ -253,9 +180,6 @@ export const projectService = {
   getWorkflow,
   listSteps,
   getStep,
-  listSkills,
-  getSkill,
-  checkProjectSkills,
   listContextFiles,
   readContextFile,
   writeContextFile,

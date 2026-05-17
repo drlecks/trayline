@@ -42,20 +42,11 @@ async function makeStep(project: string, workflow: string, id: string, raw: Reco
 describe('projectService', () => {
   beforeAll(async () => {
     await fs.mkdir(Paths.projects, { recursive: true })
-    await fs.mkdir(Paths.skills, { recursive: true })
   })
 
   beforeEach(async () => {
-    // Each test gets a clean projects + user-skills slate.
     await fs.rm(Paths.projects, { recursive: true, force: true })
     await fs.mkdir(Paths.projects, { recursive: true })
-
-    if (await exists(Paths.skills)) {
-      for (const e of await fs.readdir(Paths.skills)) {
-        if (e === '_system') continue
-        await fs.rm(join(Paths.skills, e), { recursive: true, force: true })
-      }
-    }
   })
 
   it('listProjects returns [] when projects/ is empty', async () => {
@@ -138,17 +129,6 @@ describe('projectService', () => {
     expect(await projectService.getStep('p4', 'wf', 'missing')).toBeNull()
   })
 
-  it('listSkills returns user skills, skipping _system folder at this level', async () => {
-    await writeJson(join(Paths.skills, 'my-skill', 'skill.json'), {
-      id: 'my-skill', name: 'My', version: '1.0.0', description: 'd',
-    })
-    await fs.mkdir(join(Paths.skills, '_system'), { recursive: true })
-
-    const skills = await projectService.listSkills()
-    expect(skills.map((s) => s.id)).toContain('my-skill')
-    expect(skills.find((s) => s.id === '_system')).toBeUndefined()
-  })
-
   it('paths helpers build the expected layout', () => {
     const dir = projectService.paths.stepDir('p', 'w', '01-x')
     expect(dir.endsWith(join('p', 'workflows', 'w', 'steps', '01-x'))).toBe(true)
@@ -216,6 +196,3 @@ describe('projectService', () => {
   })
 })
 
-async function exists(p: string): Promise<boolean> {
-  try { await fs.access(p); return true } catch { return false }
-}

@@ -36,29 +36,19 @@ Tabs: **Cards** / **Config** / **Schema**
 
 ## 7.3 Worker Detail View (Right Panel)
 
-Tabs: **Config** / **Instructions** / **Runs** / **Skills, MCPs & Context**
+Tabs: **Config** / **Instructions** / **Runs** / **Context**
 
 - **Config**: name, description, command (default `claude`), timeout, trigger mode, schedule cron (if scheduled)
 - **Instructions**: full-screen markdown editor for `process.md` with side preview. Token estimate displayed. Variables like `{{card.data}}` and `{{context._brand-voice}}` autocomplete.
 - **Runs**: history table, click for detail
-- **Skills, MCPs & Context**: three blocks:
+- **Context**: context packs checklist:
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│  Skills                                                       │
-│  ☑ PDF Reader    ☑ CSV Parser    ☐ Email Sender              │
-│                                                              │
-│  MCPs                                                         │
-│  ☑ Gmail                              ✓ Ready                │
-│  ☑ Google Calendar           ⚠ Setup needed [Configure ›]    │
-│  ☐ Google Drive                                              │
-│                                                              │
 │  Context Packs                                                │
 │  ☑ company-info.md    ☐ _brand-voice.md (always included)    │
 └──────────────────────────────────────────────────────────────┘
 ```
-
-Each MCP shows its current status. If marked but in *Setup needed*, an inline button starts the wizard without leaving the worker screen.
 
 ---
 
@@ -148,7 +138,7 @@ Shows the total number of cards waiting for review:
 ## 7.8 Context Packs
 
 - `context/` folder in the project root holds markdown files
-- Workers list which context files to include in their **Skills, MCPs & Context** tab
+- Workers list which context files to include in their **Context** tab
 - At run time, included files are concatenated into the prompt under a `## Context` section
 - A simple file editor in the project sidebar lets the user create/edit context packs
 - Examples: company FAQ, brand voice guide, common product list, escalation rules
@@ -180,7 +170,7 @@ Cron shown as a friendly picker: "Every hour", "Every weekday at 9am", "Custom (
 
 **Layer 2 — Run summary card** (default right panel after a run)
 - ✓ or ✗ outcome with one-line reason
-- Card processed (link), skills used, MCPs active, duration, token count if available
+- Card processed (link), duration, token count if available
 - Rendered output preview
 - **Show terminal ↓** toggle
 
@@ -194,26 +184,10 @@ The user never has to open the terminal to use Trayline. But it's always one cli
 
 ---
 
-## 7.11 Skill Finder
-
-- Top bar → **Skills** (lucide `Package` icon) → opens the Skills screen
-- **Installed** section lists installed user skills (not `_system`) with **Update** / **Uninstall**
-  - **Uninstall** is disabled with a tooltip naming the workers when any worker still references the skill in its `step.json` → `skills: []`
-  - **Update** is shown for skills installed from the catalog or a URL
-- **+ Add skill** opens a modal with two tabs
-  - **Browse catalog** — fetches `https://raw.githubusercontent.com/trayline/trayline-skills/main/index.json`, falls back to the cached copy at `app-data/skills-index-cache.json` when offline. Search box filters across name, description, and tags
-  - **From URL** — pastes a base URL containing `skill.json` and `skill.md`; phase 8 only accepts those two files, full validation (executable rejection, multi-file skills) lands in N2.1
-- Catalog entry shape used by phase 8:
-  - `{ id, name, version, description, author?, tags?, base_url, files? }`
-  - `base_url` is a directory URL (trailing slash optional); `files` defaults to `["skill.json", "skill.md"]`
-- Installed `skill.json` records the install source in `_trayline.source` (`catalog` / `url` / `system` / `local`) and `_trayline.source_url` so **Update** knows where to re-fetch from
-
----
-
 ## 7.12 Import / Export
 
-- **Export**: zip the project folder. Add `manifest.json` at root listing skills (id + version) and MCPs the project uses. Credentials never export.
-- **Import**: extracts to `projects/[id]/` → reads manifest → checks installed skills and MCPs → if missing, dialog groups them: "This project needs 2 skills and 1 MCP you don't have. Install them now?" — installs, then chains setup wizards for MCPs.
+- **Export**: zip the project folder. Adds a `manifest.json` at root with version and timestamp. Credentials never export.
+- **Import**: extracts to `projects/[id]/` → validates `project.json` exists → runs a security audit for suspicious content → if findings exist, shows a review dialog before committing.
 - **Export without runs** option excludes `runs/` folders.
 
 ---
@@ -226,24 +200,15 @@ A first-class feature, not just a setup screen. Available whenever the user star
 - **Generate workflow** calls `trayline-author` via AI Terminal Adapter
 - During generation: centered loading circle with pre-written warm status messages (pool includes source-aware messages: "Setting up your data source…", "Configuring the schedule…", "Wiring up deduplication…")
 - Output: JSON workflow plan materialized to disk by `trayline-scaffold`
-- **Post-generation banner**: when the plan includes a Source step, a banner is shown before navigating to the project — it tells the user to open the Source step and write their fetch instructions. If unconfigured MCPs are also required, the banner names them.
+- **Post-generation banner**: when the plan includes a Source step, a banner is shown before navigating to the project — it tells the user to open the Source step and write their fetch instructions.
 - **Regenerate**: edit description and try again; previous version archived to `<project>/.history/<timestamp>/`
 - **Edit before scaffolding** (post-MVP): preview the proposed plan and tweak before files are written
 
-The `trayline-author` skill understands:
+The workflow author understands:
 - **Source steps** (`kind: "source"`): generated when the description involves polling, monitoring, or ingesting from an external source on a schedule. The plan includes `schedule_cron`, `dedup.key`, `dedup.first_run`, and a draft `source.md`.
 - **Batch workers** (`batch_mode: true`): generated when the description involves summarising or digesting many items into one output. The plan sets `batch_max` and coerces the trigger to `scheduled` or `manual`.
 
-The author skill is in `skills/_system/` — power users can edit the master prompt to bias it toward their domain.
-
----
-
-## 7.14 System Skills (`skills/_system/`)
-
-Two skills ship with the app. Restored from bundled app resources on every launch if missing or corrupted.
-
-- **`trayline-author`** — takes a free-text description, returns a structured workflow plan (JSON: ordered steps, schemas, recommended skills and MCPs per worker, draft `process.md` per worker)
-- **`trayline-scaffold`** — takes a workflow plan and writes it to disk using bundled JSON/MD templates; can be overridden by power users to add custom defaults to every project
+The author prompt lives in `resources/author-prompt.md` in the app bundle.
 
 ---
 
@@ -316,9 +281,6 @@ Two tabs: **Source** and **Config**.
 │                                                              │
 │  Adapter       [claude-code ▼]   Timeout [60s]              │
 │                                                              │
-│  MCPs          ☑ Instagram                     ✓ Ready       │
-│                ☐ GitHub                                      │
-│                                                              │
 │  [Run now]   [Pause schedule]                               │
 └──────────────────────────────────────────────────────────────┘
 ```
@@ -328,8 +290,6 @@ Two tabs: **Source** and **Config**.
 **First run** mode only applies the very first time the source runs (when `seen-ids.json` is empty or absent). After the first run it has no effect.
 
 **Adapter selector** — dropdown of all installed AI Terminal Adapters. Defaults to the global default. Per-source overrides persist in `step.json → execution.adapter`. *(Pending implementation — see N3.2)*
-
-**MCPs** — a checklist of installed MCPs the source can activate for its runs. Source steps follow the same pre-flight and credential-injection rules as workers: if a selected MCP is not Ready, the run is aborted before starting. *(Pending implementation — see N3.1 / N3.2)*
 
 **Run now** fires the source immediately, outside the cron schedule. Useful for testing `source.md` before relying on the schedule.
 
@@ -432,10 +392,6 @@ When the active adapter is `local-llm`, a soft amber note appears below the text
 
 > **Using local AI model.** Workflow generation works best with Claude Code — local models may produce simpler or incomplete plans. You can edit the result after creation.
 
-### MCPs screen badge
-
-Each installed MCP in the MCPs screen shows a "Not available with local AI model" badge when the active adapter has `supportsMcps: false`. The badge is informational — it does not block installation or configuration.
-
 ---
 
 ## 7.18 Onboarding Tour
@@ -460,6 +416,6 @@ A small set of global shortcuts wired through `useGlobalShortcuts`. They are ski
 | ⌘/Ctrl+K | Open the command palette |
 | ⌘/Ctrl+/ | Open the keyboard-shortcuts reference dialog |
 
-The **command palette** (⌘/Ctrl+K) is a quick-jump search: type to filter steps in the current workflow, other projects, and the Settings / Skills / Shortcuts screens. ↑/↓ navigate, Enter activates.
+The **command palette** (⌘/Ctrl+K) is a quick-jump search: type to filter steps in the current workflow, other projects, and the Settings / Shortcuts screens. ↑/↓ navigate, Enter activates.
 
 A **Keyboard shortcuts** button under **Settings → Help** opens the same reference dialog as ⌘/Ctrl+/.

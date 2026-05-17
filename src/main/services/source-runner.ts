@@ -20,11 +20,8 @@ import { fsService, Paths } from './fs-service'
 import { projectService } from './project-service'
 import { auditDb } from './audit-db'
 import { adapterRegistry } from '../ai-terminals/registry'
-import { mcpRegistry } from './mcp-registry'
-import { mcpCredentials } from './mcp-credentials'
 import { IPC } from '../../shared/ipc-channels'
 import type { SourceStepConfig, SourceCounters, SeenIdsEntry, SourceRunMeta, SourceState, SourceRunEvent } from '../../shared/types'
-import type { MCPDefinition } from '../ai-terminals/adapter'
 import type { Card } from '../../shared/card'
 
 // ── Broadcast ─────────────────────────────────────────────────────────────────
@@ -122,50 +119,6 @@ function stepKey(project: string, workflow: string, stepId: string): string {
   return `${project}/${workflow}/${stepId}`
 }
 
-// ── MCP pre-flight ────────────────────────────────────────────────────────────
-
-async function resolveMcps(
-  project: string, workflow: string, stepId: string, runId: string,
-  mcpIds: string[],
-): Promise<MCPDefinition[]> {
-  const defs: MCPDefinition[] = []
-  for (const id of mcpIds) {
-    const manifest = await mcpRegistry.readManifest(id)
-    if (!manifest) {
-      auditDb.insert({
-        project_id: project, workflow_id: workflow, step_id: stepId, card_id: '',
-        event: 'run_aborted_mcp_not_ready', actor: 'system',
-        details_json: JSON.stringify({ run_id: runId, mcp_id: id, reason: 'not_installed' }),
-      })
-      throw new Error(`MCP "${id}" is not installed. Set it up in the MCPs screen before running.`)
-    }
-    const status = await mcpRegistry.readStatus(id)
-    if (status.disabled) {
-      auditDb.insert({
-        project_id: project, workflow_id: workflow, step_id: stepId, card_id: '',
-        event: 'run_aborted_mcp_not_ready', actor: 'system',
-        details_json: JSON.stringify({ run_id: runId, mcp_id: id, reason: 'disabled' }),
-      })
-      throw new Error(`MCP "${manifest.name}" is disabled. Enable it in the MCPs screen before running.`)
-    }
-    if (!status.configured && manifest.credentials_schema.length > 0) {
-      auditDb.insert({
-        project_id: project, workflow_id: workflow, step_id: stepId, card_id: '',
-        event: 'run_aborted_mcp_not_ready', actor: 'system',
-        details_json: JSON.stringify({ run_id: runId, mcp_id: id, reason: 'not_configured' }),
-      })
-      throw new Error(`MCP "${manifest.name}" needs credentials. Configure it in the MCPs screen before running.`)
-    }
-    const credentials: Record<string, string> = {}
-    for (const cred of manifest.credentials_schema) {
-      const val = await mcpCredentials.readCredential(id, cred.id)
-      if (val) credentials[cred.id] = val
-    }
-    defs.push({ id, manifest: manifest as unknown as Record<string, unknown>, credentials })
-  }
-  return defs
-}
-
 // ── Run orchestration ─────────────────────────────────────────────────────────
 
 export interface RunSourceInput {
@@ -240,29 +193,14 @@ async function runSourceInner({ project, workflow, stepId, stepConfig }: RunSour
 
   const timeoutMs = (stepConfig.execution.timeout_seconds ?? 60) * 1000
 
-  // Pre-flight: reject if the adapter cannot use MCPs and this source has MCPs configured.
-  const sourceMcpIds = stepConfig.mcps ?? []
-  if (adapter.supportsMcps === false && sourceMcpIds.length > 0) {
-    const err = `${adapter.displayName} does not support MCP tools. Remove the MCPs from this source step, or switch to Claude Code in Settings.`
-    await failRun({ project, workflow, stepId, runId, stateDir, runDir, startedAt, meta, error: err })
-    return
-  }
-
   let rawOutput = ''
   let runError: string | undefined
 
   try {
-    const mcpIds = sourceMcpIds
-    const mcpDefs = mcpIds.length > 0
-      ? await resolveMcps(project, workflow, stepId, runId, mcpIds)
-      : []
-
     const session = await adapter.spawn({
       processFile: instructionFile,
       cardData: {},
-      skills: [],
       contextPacks: [],
-      mcps: mcpDefs,
       workingDir: runDir,
       timeout: timeoutMs,
     })

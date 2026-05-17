@@ -46,7 +46,7 @@
 
 - **Left rail** — the workflow as a vertical stack of step cards. Each card shows name, type icon, and a live status indicator (card count / running / idle / error).
 - **Right canvas** — when a step is selected, this panel shows everything about it: its cards, its config, its runs.
-- **Top bar** — project switcher, skills, MCPs, notifications.
+- **Top bar** — project switcher, notifications, settings.
 - **Footer** — always present, full-width strip across the bottom. Right side shows active Provider · Model · Effort and live usage indicators. See **Footer** section below.
 
 ---
@@ -137,8 +137,6 @@ Consistent set per concept:
 - `alert-triangle` — errors
 - `clock` — scheduled
 - `user` — human review
-- `blocks` — skills (top bar)
-- `plug` — MCPs (top bar)
 
 ---
 

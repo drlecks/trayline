@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useCallback } from 'react'
 import { CronExpressionParser } from 'cron-parser'
-import { AlertTriangle, Cpu, Play, Trash2, XCircle } from 'lucide-react'
+import { Cpu, Play, Trash2, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CopyButton } from '@/components/ui/copy-button'
 import {
@@ -13,7 +13,7 @@ import {
 import { useProjectStore } from '@/stores/project-store'
 import { useProviderGuard } from '@/stores/provider-guard-store'
 import TerminalPanel, { OpenExternalTerminalButton } from './TerminalPanel'
-import type { StepMeta, SkillManifest, InstalledMcpRow, McpHealthState } from '../../../shared/types'
+import type { StepMeta } from '../../../shared/types'
 import type { WorkerRun, WorkerRunEvent, WorkerRunStatus } from '../../../shared/worker-run'
 
 type Tab = 'instructions' | 'config' | 'runs'
@@ -25,33 +25,11 @@ interface WorkerDetailPanelProps {
 export default function WorkerDetailPanel({ step }: WorkerDetailPanelProps) {
   const active = useProjectStore((s) => s.active)
   const workflow = useProjectStore((s) => s.workflow)
-  const missingSkillsByStep = useProjectStore((s) => s.missingSkillsByStep)
   const setScreen = useProjectStore((s) => s.setScreen)
   const [tab, setTab] = useState<Tab>('instructions')
   const [runNowBusy, setRunNowBusy] = useState(false)
   const [runNowFeedback, setRunNowFeedback] = useState<string | null>(null)
   const [runTriggerError, setRunTriggerError] = useState<string | null>(null)
-
-  // Track whether the effective adapter supports MCPs — shown as a banner when false.
-  const [adapterSupportsMcps, setAdapterSupportsMcps] = useState(true)
-  useEffect(() => {
-    let cancelled = false
-    async function check() {
-      const raw = step.raw as { mcps?: string[]; execution?: { adapter?: string } }
-      if (!raw.mcps?.length) { setAdapterSupportsMcps(true); return }
-      const [adapters, settings] = await Promise.all([
-        window.trayline!.adapters.list(),
-        window.trayline!.settings.get(),
-      ])
-      if (cancelled) return
-      const effectiveId = raw.execution?.adapter ?? settings.defaultAdapterId
-      const adapter = adapters.find((a) => a.id === effectiveId)
-      setAdapterSupportsMcps(adapter?.supportsMcps ?? true)
-    }
-    void check()
-    const off = window.trayline!.settings.onChange(() => { void check() })
-    return () => { cancelled = true; off() }
-  }, [step.id])
 
   const status = useLatestRunStatus(step.id)
 
@@ -136,36 +114,6 @@ export default function WorkerDetailPanel({ step }: WorkerDetailPanelProps) {
           ))}
         </div>
       </div>
-
-      {(missingSkillsByStep[step.id]?.length ?? 0) > 0 && (
-        <div className="
-          flex items-start gap-2 px-6 py-2.5 shrink-0
-          bg-amber-50 dark:bg-amber-950/30
-          border-b border-amber-200/60 dark:border-amber-900/40
-          text-xs text-amber-900 dark:text-amber-300
-        ">
-          <AlertTriangle size={13} strokeWidth={1.75} className="mt-0.5 shrink-0" />
-          <span>
-            Missing skill{missingSkillsByStep[step.id].length > 1 ? 's' : ''}:{' '}
-            <strong>{missingSkillsByStep[step.id].join(', ')}</strong>. Install them in the Skills screen before running this worker.
-          </span>
-        </div>
-      )}
-
-      {!adapterSupportsMcps && (
-        <div className="
-          flex items-start gap-2 px-6 py-2.5 shrink-0
-          bg-amber-50 dark:bg-amber-950/30
-          border-b border-amber-200/60 dark:border-amber-900/40
-          text-xs text-amber-900 dark:text-amber-300
-        ">
-          <AlertTriangle size={13} strokeWidth={1.75} className="mt-0.5 shrink-0" />
-          <span>
-            The active AI provider does not support MCP tools — this worker will fail when MCPs are enabled.{' '}
-            Switch to <strong>Claude Code</strong> in Settings, or remove all MCPs from this worker.
-          </span>
-        </div>
-      )}
 
       <div className="flex-1 overflow-y-auto">
         {tab === 'instructions' && active && workflow && (
@@ -368,8 +316,6 @@ function renderMarkdown(src: string): React.ReactNode[] {
 // ─── Config tab ───────────────────────────────────────────────────────────────
 
 interface WorkerStepRaw {
-  skills?: string[]
-  mcps?: string[]
   context_packs?: string[]
   execution?: { command?: string; args?: string[]; timeout_seconds?: number; retry_attempts?: number; adapter?: string }
   trigger?: { mode?: 'on_ready' | 'scheduled' | 'manual'; schedule_cron?: string | null }
@@ -377,25 +323,8 @@ interface WorkerStepRaw {
   batch_max?: number | null
 }
 
-const MCP_HEALTH_LABEL: Record<McpHealthState, string> = {
-  ready: 'Ready',
-  unconfigured: 'Needs setup',
-  error: 'Error',
-  unknown: 'Not checked',
-  disabled: 'Disabled',
-}
-
-const MCP_HEALTH_CLASS: Record<McpHealthState, string> = {
-  ready: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300',
-  unconfigured: 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300',
-  error: 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300',
-  unknown: 'bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400',
-  disabled: 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-500',
-}
-
 function ConfigTab({ project, workflow, step }: { project: string; workflow: string; step: StepMeta }) {
   const refreshSteps = useProjectStore((s) => s.refreshSteps)
-  const setScreen = useProjectStore((s) => s.setScreen)
   const raw = step.raw as WorkerStepRaw
   const exec = raw.execution ?? {}
   const trigger = raw.trigger ?? {}
@@ -411,32 +340,19 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
   const [batchMax, setBatchMax] = useState<number | ''>(raw.batch_max ?? '')
   const [busy, setBusy] = useState(false)
 
-  // Skills + context packs
-  const [installedSkills, setInstalledSkills] = useState<SkillManifest[]>([])
-  const [selectedSkills, setSelectedSkills] = useState<string[]>(raw.skills ?? [])
   const [contextFiles, setContextFiles] = useState<string[]>([])
   const [selectedContextPacks, setSelectedContextPacks] = useState<string[]>(raw.context_packs ?? [])
 
-  // MCPs
-  const [installedMcps, setInstalledMcps] = useState<InstalledMcpRow[]>([])
-  const [selectedMcps, setSelectedMcps] = useState<string[]>(raw.mcps ?? [])
-
   // Removal confirmation modal state
-  const [removeSkillId, setRemoveSkillId] = useState<string | null>(null)
   const [removeContextPack, setRemoveContextPack] = useState<string | null>(null)
-  const [removeMcpId, setRemoveMcpId] = useState<string | null>(null)
 
   useEffect(() => {
-    void window.trayline!.project.listSkills().then(setInstalledSkills)
     void window.trayline!.project.listContextFiles(project).then(setContextFiles)
-    void window.trayline!.mcp.listInstalled().then(setInstalledMcps)
   }, [project])
 
   // Re-sync picker state when the step changes (e.g. user picks a different worker)
   useEffect(() => {
-    setSelectedSkills(raw.skills ?? [])
     setSelectedContextPacks(raw.context_packs ?? [])
-    setSelectedMcps(raw.mcps ?? [])
     setCommand(exec.command ?? 'claude')
     setTimeoutSec(exec.timeout_seconds ?? 180)
     setRetries(exec.retry_attempts ?? 1)
@@ -452,17 +368,6 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
     if (newValue && triggerMode === 'on_ready') setTriggerMode('manual')
   }
 
-  function addSkill(id: string) {
-    if (!id || selectedSkills.includes(id)) return
-    setSelectedSkills((prev) => [...prev, id])
-  }
-
-  function confirmRemoveSkill() {
-    if (!removeSkillId) return
-    setSelectedSkills((prev) => prev.filter((s) => s !== removeSkillId))
-    setRemoveSkillId(null)
-  }
-
   function addContextPack(file: string) {
     if (!file || selectedContextPacks.includes(file)) return
     setSelectedContextPacks((prev) => [...prev, file])
@@ -472,17 +377,6 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
     if (!removeContextPack) return
     setSelectedContextPacks((prev) => prev.filter((f) => f !== removeContextPack))
     setRemoveContextPack(null)
-  }
-
-  function addMcp(id: string) {
-    if (!id || selectedMcps.includes(id)) return
-    setSelectedMcps((prev) => [...prev, id])
-  }
-
-  function confirmRemoveMcp() {
-    if (!removeMcpId) return
-    setSelectedMcps((prev) => prev.filter((id) => id !== removeMcpId))
-    setRemoveMcpId(null)
   }
 
   async function save() {
@@ -497,8 +391,6 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
             mode: triggerMode,
             schedule_cron: triggerMode === 'scheduled' ? scheduleCron : null,
           },
-          skills: selectedSkills,
-          mcps: selectedMcps,
           context_packs: selectedContextPacks,
           batch_mode: batchMode,
           batch_max: typeof batchMax === 'number' ? batchMax : null,
@@ -513,26 +405,6 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
     { value: 'scheduled', label: 'Scheduled', desc: 'Run on a cron schedule, processing any waiting cards.' },
     { value: 'manual', label: 'Manual only', desc: 'Never fires automatically — only via "Run now".' },
   ]
-
-  // Skills available to add (installed user skills not yet selected)
-  const skillsToAdd = installedSkills.filter((s) => !selectedSkills.includes(s.id))
-  // Resolve selected IDs — keep missing ones as ghost entries so they stay visible
-  const selectedSkillEntries = selectedSkills.map((id) => {
-    const manifest = installedSkills.find((s) => s.id === id)
-    return manifest
-      ? { found: true as const, id, manifest }
-      : { found: false as const, id }
-  })
-
-  // MCPs available to add (installed, not yet selected)
-  const mcpsToAdd = installedMcps.filter((m) => !selectedMcps.includes(m.manifest.id))
-  // Resolve selected MCP ids to their rows
-  const selectedMcpEntries = selectedMcps.map((id) => {
-    const row = installedMcps.find((m) => m.manifest.id === id)
-    return row
-      ? { found: true as const, id, row }
-      : { found: false as const, id }
-  })
 
   // Base context files (prefix '_') are auto-included in every run — hide from selector
   const baseContextFiles = contextFiles.filter((f) => f.startsWith('_'))
@@ -640,141 +512,6 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
           )}
         </div>
 
-        {/* Skills */}
-        <div className="flex flex-col gap-2">
-          <label className="text-xs text-neutral-500">Skills</label>
-          {skillsToAdd.length > 0 && (
-            <select
-              defaultValue=""
-              onChange={(e) => { addSkill(e.target.value); e.target.value = '' }}
-              className="rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-3 py-1.5 text-xs"
-            >
-              <option value="" disabled>Add a skill…</option>
-              {skillsToAdd.map((s) => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-              ))}
-            </select>
-          )}
-          {selectedSkillEntries.length > 0 ? (
-            <ul className="flex flex-col gap-1">
-              {selectedSkillEntries.map((entry) => (
-                <li
-                  key={entry.id}
-                  className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md border bg-white dark:bg-neutral-950 ${
-                    entry.found
-                      ? 'border-neutral-200 dark:border-neutral-800'
-                      : 'border-amber-300 dark:border-amber-700/60 bg-amber-50/50 dark:bg-amber-950/20'
-                  }`}
-                >
-                  {!entry.found && (
-                    <AlertTriangle size={13} strokeWidth={1.75} className="shrink-0 text-amber-500 dark:text-amber-400" />
-                  )}
-                  <div className="flex-1 min-w-0 flex items-baseline gap-1.5 overflow-hidden">
-                    {entry.found ? (
-                      <>
-                        <span className="text-xs font-medium shrink-0">{entry.manifest.name}</span>
-                        {entry.manifest.description && (
-                          <span className="text-xs text-neutral-500 dark:text-neutral-400 truncate min-w-0">{entry.manifest.description}</span>
-                        )}
-                      </>
-                    ) : (
-                      <>
-                        <span className="text-xs font-medium font-mono">{entry.id}</span>
-                        <span className="text-xs text-amber-600 dark:text-amber-400 ml-1.5">Not installed</span>
-                      </>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setRemoveSkillId(entry.id)}
-                    className="shrink-0 text-neutral-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
-                  >
-                    <Trash2 size={13} strokeWidth={1.75} />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            skillsToAdd.length === 0 && installedSkills.length === 0 && (
-              <p className="text-xs text-neutral-400 dark:text-neutral-600 italic">
-                No skills installed — visit the Skills screen to add some.
-              </p>
-            )
-          )}
-        </div>
-
-        {/* MCPs */}
-        <div className="flex flex-col gap-2">
-          <label className="text-xs text-neutral-500">MCPs</label>
-          {mcpsToAdd.length > 0 && (
-            <select
-              defaultValue=""
-              onChange={(e) => { addMcp(e.target.value); e.target.value = '' }}
-              className="rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-3 py-1.5 text-xs"
-            >
-              <option value="" disabled>Add an MCP…</option>
-              {mcpsToAdd.map((m) => (
-                <option key={m.manifest.id} value={m.manifest.id}>{m.manifest.name}</option>
-              ))}
-            </select>
-          )}
-          {selectedMcpEntries.length > 0 ? (
-            <ul className="flex flex-col gap-1">
-              {selectedMcpEntries.map((entry) => (
-                <li
-                  key={entry.id}
-                  className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md border bg-white dark:bg-neutral-950 ${
-                    entry.found
-                      ? 'border-neutral-200 dark:border-neutral-800'
-                      : 'border-amber-300 dark:border-amber-700/60 bg-amber-50/50 dark:bg-amber-950/20'
-                  }`}
-                >
-                  {!entry.found && (
-                    <AlertTriangle size={13} strokeWidth={1.75} className="shrink-0 text-amber-500 dark:text-amber-400" />
-                  )}
-                  <div className="flex-1 min-w-0 flex items-baseline gap-1.5 overflow-hidden">
-                    {entry.found ? (
-                      <>
-                        <span className="text-xs font-medium shrink-0">{entry.row.manifest.name}</span>
-                        <span className={`text-[10px] font-medium px-1.5 py-0 rounded-full shrink-0 ${MCP_HEALTH_CLASS[entry.row.healthState]}`}>
-                          {MCP_HEALTH_LABEL[entry.row.healthState]}
-                        </span>
-                        {entry.row.healthState !== 'ready' && (
-                          <button
-                            type="button"
-                            onClick={() => setScreen('mcps')}
-                            className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline shrink-0"
-                          >
-                            Configure →
-                          </button>
-                        )}
-                      </>
-                    ) : (
-                      <>
-                        <span className="text-xs font-medium font-mono">{entry.id}</span>
-                        <span className="text-xs text-amber-600 dark:text-amber-400 ml-1.5">Not installed</span>
-                      </>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setRemoveMcpId(entry.id)}
-                    className="shrink-0 text-neutral-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
-                  >
-                    <Trash2 size={13} strokeWidth={1.75} />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            installedMcps.length === 0 && mcpsToAdd.length === 0 && (
-              <p className="text-xs text-neutral-400 dark:text-neutral-600 italic">
-                No MCPs installed — visit the MCPs screen to add integrations.
-              </p>
-            )
-          )}
-        </div>
-
         {/* Context packs */}
         <div className="flex flex-col gap-2">
           <label className="text-xs text-neutral-500">Context packs</label>
@@ -832,31 +569,6 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
         </div>
       </div>
 
-      {/* Remove skill confirmation */}
-      {(() => {
-        const entry = removeSkillId ? selectedSkillEntries.find((e) => e.id === removeSkillId) : null
-        const label = entry?.found ? entry.manifest.name : removeSkillId
-        return (
-          <Dialog open={removeSkillId !== null} onOpenChange={(open) => { if (!open) setRemoveSkillId(null) }}>
-            <DialogContent className="max-w-sm">
-              <DialogHeader>
-                <DialogTitle>Remove skill</DialogTitle>
-                <DialogDescription>
-                  Are you sure you want to remove <strong>{label}</strong> from this worker?
-                  {entry?.found
-                    ? ' The skill will remain installed — you can re-add it at any time.'
-                    : ' This skill is not currently installed.'}
-                </DialogDescription>
-              </DialogHeader>
-              <div className="flex justify-end gap-2 mt-2">
-                <Button size="sm" variant="outline" onClick={() => setRemoveSkillId(null)}>Cancel</Button>
-                <Button size="sm" variant="destructive" onClick={confirmRemoveSkill}>Remove</Button>
-              </div>
-            </DialogContent>
-          </Dialog>
-        )
-      })()}
-
       {/* Remove context pack confirmation */}
       <Dialog open={removeContextPack !== null} onOpenChange={(open) => { if (!open) setRemoveContextPack(null) }}>
         <DialogContent className="max-w-sm">
@@ -874,28 +586,6 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
         </DialogContent>
       </Dialog>
 
-      {/* Remove MCP confirmation */}
-      {(() => {
-        const entry = removeMcpId ? selectedMcpEntries.find((e) => e.id === removeMcpId) : null
-        const label = entry?.found ? entry.row.manifest.name : removeMcpId
-        return (
-          <Dialog open={removeMcpId !== null} onOpenChange={(open) => { if (!open) setRemoveMcpId(null) }}>
-            <DialogContent className="max-w-sm">
-              <DialogHeader>
-                <DialogTitle>Remove MCP</DialogTitle>
-                <DialogDescription>
-                  Remove <strong>{label}</strong> from this worker?
-                  The MCP will remain installed — you can re-add it at any time.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="flex justify-end gap-2 mt-2">
-                <Button size="sm" variant="outline" onClick={() => setRemoveMcpId(null)}>Cancel</Button>
-                <Button size="sm" variant="destructive" onClick={confirmRemoveMcp}>Remove</Button>
-              </div>
-            </DialogContent>
-          </Dialog>
-        )
-      })()}
     </>
   )
 }
@@ -1156,9 +846,6 @@ function RunSummary({ project, workflow, stepId, run }: { project: string; workf
         {run.ended_at && <> · Elapsed: {((run.elapsed_ms ?? 0) / 1000).toFixed(1)}s</>}
         {run.exit_code !== undefined && <> · Exit: {run.exit_code}</>}
         {tokenEstimate !== null && <> · ~{tokenEstimate.toLocaleString()} tokens</>}
-        {run.mcps_active && run.mcps_active.length > 0 && (
-          <> · MCPs used: {run.mcps_active.join(', ')}</>
-        )}
       </div>
       {run.error && (
         <div className="rounded-md border border-red-200 dark:border-red-900/40 bg-red-50 dark:bg-red-950/40 p-3 text-xs text-red-800 dark:text-red-300 flex items-start gap-2">

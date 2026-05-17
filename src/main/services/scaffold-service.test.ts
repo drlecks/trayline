@@ -24,7 +24,7 @@ function makePlan(overrides: Partial<WorkflowPlan> = {}): WorkflowPlan {
         },
         {
           kind: 'worker', id: '02-classify', name: 'Classify',
-          skills: ['some-skill'], mcps: ['github'], context_packs: [],
+          context_packs: [],
           process_md: '# Custom Process\n',
         },
         {
@@ -48,14 +48,13 @@ describe('scaffoldService', () => {
     await fs.mkdir(Paths.projects, { recursive: true })
   })
 
-  it('scaffolds a project layout from a plan and surfaces unconfigured MCPs', async () => {
+  it('scaffolds a project layout from a plan', async () => {
     const plan = makePlan()
     const res = await scaffoldService.scaffold(plan)
 
     expect(res.project.name).toBe('demo')
     expect(res.project.status).toBe('active')
     expect(res.project.updated_at).toBe(res.project.created_at)
-    expect(res.unconfiguredMcps).toEqual(['github'])
     expect(res.projectPath).toBe(join(Paths.projects, 'demo'))
 
     // Project files
@@ -79,8 +78,7 @@ describe('scaffoldService', () => {
     expect(await pathExists(join(worker, 'state', 'memory.md'))).toBe(true)
     expect(await fs.readFile(join(worker, 'process.md'), 'utf-8')).toBe('# Custom Process\n')
     const workerJson = JSON.parse(await fs.readFile(join(worker, 'step.json'), 'utf-8'))
-    expect(workerJson.skills).toEqual(['some-skill'])
-    expect(workerJson.mcps).toEqual(['github'])
+    expect(workerJson.context_packs).toEqual([])
 
     // 99-errors is always appended at the end
     const errStep = join(res.projectPath, 'workflows', 'main', 'steps', '99-errors')

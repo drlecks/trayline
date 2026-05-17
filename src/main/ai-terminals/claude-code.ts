@@ -11,7 +11,6 @@ import type {
   EffortInfo,
   AdapterUsageSnapshot,
   AdapterReadiness,
-  MCPDefinition,
 } from './adapter'
 import { renderProcessTemplate } from './prompt-utils'
 
@@ -249,44 +248,12 @@ const CLAUDE_MODELS: ModelInfo[] = [
   { id: 'claude-haiku-4-5',    label: 'Claude Haiku 4.5',    description: 'Fastest and cheapest; good for high-volume light tasks.' },
 ]
 
-/**
- * Translate a list of MCPDefinitions into the JSON config that Claude Code
- * expects via `--mcp-config <path>`. Credentials present as `{credId}`
- * placeholders in the command_template are interpolated into the argv;
- * remaining credentials become environment variables passed to the server.
- */
-function buildMcpServersConfig(mcps: MCPDefinition[]): Record<string, unknown> {
-  const servers: Record<string, unknown> = {}
-  for (const mcp of mcps) {
-    const commandTemplate = (mcp.manifest['command_template'] ?? '') as string
-    let cmd = commandTemplate
-    const envVars: Record<string, string> = {}
-
-    for (const [key, val] of Object.entries(mcp.credentials)) {
-      if (cmd.includes(`{${key}}`)) {
-        cmd = cmd.replace(new RegExp(`\\{${key}\\}`, 'g'), val)
-      } else {
-        envVars[key] = val
-      }
-    }
-
-    const parts = cmd.trim().split(/\s+/).filter(Boolean)
-    const [command, ...args] = parts
-    servers[mcp.id] = {
-      command,
-      args,
-      ...(Object.keys(envVars).length > 0 ? { env: envVars } : {}),
-    }
-  }
-  return { mcpServers: servers }
-}
 
 export const claudeCodeAdapter: AITerminalAdapter = {
   id: 'claude-code',
   displayName: 'Claude Code',
   kind: 'production',
   description: 'Cloud-powered — most capable. Requires external installation.',
-  supportsMcps: true,
   installUrl: 'https://docs.claude.com/en/docs/claude-code/quickstart',
 
   async checkReadiness(): Promise<AdapterReadiness> {
@@ -362,8 +329,8 @@ export const claudeCodeAdapter: AITerminalAdapter = {
     const processBody = await fs.readFile(opts.processFile, 'utf-8')
 
     const promptParts: string[] = []
-    for (const skill of opts.skills) {
-      promptParts.push(`## Skill: ${skill.id}\n\n${skill.content}`)
+    if (opts.prefetchedData) {
+      promptParts.push(`## Fetched data\n\n${opts.prefetchedData}`)
     }
     if (opts.contextPacks.length > 0) {
       promptParts.push(`## Context\n\n${opts.contextPacks.join('\n\n')}`)
@@ -378,16 +345,6 @@ export const claudeCodeAdapter: AITerminalAdapter = {
     const promptFile = join(opts.workingDir, 'prompt.txt')
     await fs.writeFile(promptFile, prompt, 'utf-8')
 
-    // If MCPs are active, write a config file and pass --mcp-config to the CLI.
-    // Claude Code then spawns the MCP servers as its own child processes so they
-    // are automatically torn down when the agent exits.
-    let mcpConfigFlag = ''
-    if (opts.mcps.length > 0) {
-      const mcpConfigFile = join(opts.workingDir, 'mcp-config.json')
-      await fs.writeFile(mcpConfigFile, JSON.stringify(buildMcpServersConfig(opts.mcps), null, 2), 'utf-8')
-      mcpConfigFlag = `--mcp-config "${mcpConfigFile}" `
-    }
-
     const isWin = process.platform === 'win32'
     const shell = isWin ? 'cmd.exe' : '/bin/sh'
     // On Windows, pass the command line as a single raw string to bypass
@@ -397,8 +354,8 @@ export const claudeCodeAdapter: AITerminalAdapter = {
     // "filename/directory/volume label syntax is incorrect". `/s /c "<cmd>"`
     // tells cmd to use everything between the outer quotes verbatim.
     const shellArgs: string | string[] = isWin
-      ? `/s /c "claude -p ${mcpConfigFlag}< "${promptFile}""`
-      : ['-c', `claude -p ${mcpConfigFlag}< "${promptFile}"`]
+      ? `/s /c "claude -p < "${promptFile}""`
+      : ['-c', `claude -p < "${promptFile}"`]
 
     // Use a very wide PTY so the CLI does not soft-wrap its stdout. ConPTY on
     // Windows emits awkward last-column autowrap artifacts that split JSON

@@ -32,8 +32,6 @@ export interface PlanWorkerStep {
   name: string
   description?: string
   icon?: string
-  skills?: string[]
-  mcps?: string[]
   context_packs?: string[]
   process_md: string
   batch_mode?: boolean

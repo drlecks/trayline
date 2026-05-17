@@ -11,38 +11,7 @@ Everything is files. SQLite is just a fast index built from those files.
 │
 ├── app-data/
 │   ├── settings.json               # User prefs (theme, default adapter, last opened project, etc.)
-│   ├── skills-index-cache.json     # Last fetched skill catalog
-│   ├── mcps-index-cache.json       # Last fetched MCP registry
-│   ├── mcps-catalog.json           # Curated MCP list (bundled in app, copied on first launch)
 │   └── audit.db                    # SQLite — searchable index of all runs
-│
-├── skills/
-│   ├── pdf-reader/
-│   │   ├── skill.json              # id, version, description, tools[]
-│   │   └── skill.md                # Instructions injected into worker prompts
-│   ├── email-sender/
-│   │
-│   └── _system/                    # App-bundled system skills (read-only, restored on launch if missing)
-│       ├── trayline-scaffold/
-│       │   ├── skill.json
-│       │   ├── skill.md
-│       │   └── templates/          # JSON/MD templates for trays, workers, cards
-│       │       ├── tray.step.json
-│       │       ├── worker.step.json
-│       │       ├── process.md
-│       │       └── workflow.json
-│       └── trayline-author/
-│           ├── skill.json
-│           └── skill.md
-│
-├── mcps/
-│   ├── gmail/
-│   │   ├── mcp.json                # id, version, description, command, credentials schema, setup steps
-│   │   ├── README.md
-│   │   └── state/
-│   │       ├── status.json         # { "configured": true, "last_health_check": "...", "last_error": null }
-│   │       └── logs/
-│   └── ...
 │
 └── projects/
     └── client-onboarding/
@@ -145,8 +114,6 @@ Cards live in three subfolders: `pending/`, `ready/`, `archived/`.
   "description": "Reads the intake card and structures it",
   "color": "#F7A14F",
   "icon": "cpu",
-  "skills": ["pdf-reader", "csv-parser"],
-  "mcps": ["gmail", "google-calendar"],
   "context_packs": ["company-info.md"],
   "execution": {
     "command": "claude",
@@ -188,7 +155,6 @@ When `batch_mode` is `true`, the worker receives all cards currently in the prev
     "timeout_seconds": 60,
     "adapter": "claude-code"
   },
-  "mcps": [],
   "paused": false
 }
 ```
@@ -202,7 +168,6 @@ When `batch_mode` is `true`, the worker receives all cards currently in the prev
 | `dedup.first_run` | What to do on the very first run: `skip_existing` (default — fetch but discard all, record IDs only), `process_all` (create cards for everything found), `process_last_n` (create cards for the N most recent) |
 | `dedup.first_run_n` | Number of most-recent items to process when `first_run` is `"process_last_n"` |
 | `execution.adapter` | Which AI Terminal Adapter to use for this source (overrides global default). Defaults to `claude-code`. |
-| `mcps` | List of MCP ids to activate for each source run — same pre-flight and credential-injection rules as workers. *(Pending implementation — N3.1 / N3.2)* |
 | `paused` | When `true`, the cron job is not registered at launch and `source:pause` / `source:resume` toggle it |
 
 **Source step folder structure:**
@@ -225,47 +190,6 @@ When `batch_mode` is `true`, the worker receives all cards currently in the prev
 A Source step is always the **first** step in a workflow (`00-<slug>`). It has no preceding step to read cards from — it generates cards by polling the world.
 
 **Atomic write protocol for `seen-ids.json`:** Write to `seen-ids.json.tmp` first, then rename to `seen-ids.json`. On app launch, any leftover `.tmp` file is discarded (the last complete `seen-ids.json` remains authoritative).
-
-### Skill `skill.json`
-
-```json
-{
-  "id": "pdf-reader",
-  "name": "PDF Reader",
-  "version": "1.2.0",
-  "description": "Extract text and tables from PDF files",
-  "_trayline": {
-    "source": "catalog | url | system | local",
-    "source_url": "https://github.com/user/pdf-reader",
-    "installed_at": "2026-05-08T10:14:22Z",
-    "installed_from_commit": "a3f9c12"
-  }
-}
-```
-
-### MCP `mcp.json`
-
-```json
-{
-  "id": "github",
-  "name": "GitHub",
-  "version": "1.0.0",
-  "description": "Issues, PRs, repos, and files via Personal Access Token",
-  "install_method": "npm",
-  "command_template": "npx -y @modelcontextprotocol/server-github",
-  "instructions": "Create a Personal Access Token at github.com/settings/tokens with repo and issues scopes.",
-  "credentials_schema": [
-    { "id": "github_pat", "type": "api_key", "label": "Personal Access Token", "env_var": "GITHUB_PERSONAL_ACCESS_TOKEN" }
-  ],
-  "has_test": true
-}
-```
-
-The Setup Wizard is derived entirely from these three fields: `instructions` → info screen, each `credentials_schema` entry → one masked (`api_key`) or plain (`text_field` / `select`) input, and `has_test: true` → connection test screen at the end.
-
-**Credentials are never in `mcp.json`.** They live in the OS keychain (keytar). `state/status.json` only stores flags (`configured: true/false`), never the secret itself.
-
-**Trayline does not support OAuth-based MCPs.** All credentials are simple key/value pairs (API keys, tokens, file paths) stored in the OS keychain via keytar. MCPs that require a browser-based OAuth flow are intentionally excluded.
 
 ### App settings (`app-data/settings.json`)
 
@@ -348,7 +272,7 @@ The renderer writes `lastOpenedProject` whenever the active project changes (ope
 ```markdown
 # Instagram Comments
 
-Use the Instagram MCP to read all comments on post {{config.post_url}}.
+Fetch all comments on post {{config.post_url}} via the Instagram API.
 
 For each comment, output a JSON array item with:
 - id: the comment's unique ID (string, used for deduplication)
@@ -403,8 +327,6 @@ Every worker run produces a single JSON object on stdout. The shape is decided b
 
 When the parsed output contains `trayline_error`, the worker-runner treats the run as **failed** regardless of the process exit code: it writes a `run_failed` audit entry with `code: message` as the error note, leaves `output.json` unwritten, and moves the source card into the project's error tray (`99-errors/cards/pending/`). The error tray card preserves the original `card.data`; the failure note lives in `card.history`.
 
-Workers are taught this contract by the bundled `trayline-worker-contract` system skill, which the runner injects automatically into every worker prompt — per-worker `process.md` files only need to *remind* the agent to use the envelope when it cannot complete the task.
-
 Success replies must **not** include `trayline_error`. The contract is exclusive: either the worker returns its task-specific success shape, or it returns the failure envelope.
 
 ---
@@ -424,8 +346,6 @@ Success replies must **not** include `trayline_error`. The contract is exclusive
 | details_json | TEXT |
 
 **Card events:** `card_created`, `card_marked_ready`, `run_started`, `run_completed`, `run_failed`, `card_approved`, `card_rejected`
-
-**MCP events:** `mcp_installed`, `mcp_uninstalled`, `mcp_configured`, `mcp_credentials_reset`, `mcp_health_check_failed`, `run_aborted_mcp_not_ready`
 
 **AI terminal events:** `ai_terminal_clear_failed` — written when the post-run `adapter.clearContext()` call throws. Non-fatal: the run's own outcome (`run_completed` / `run_failed`) is recorded separately and remains authoritative. The `details_json` carries `{ run_id, adapter, error }`.
 

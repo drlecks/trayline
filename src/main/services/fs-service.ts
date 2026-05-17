@@ -8,9 +8,6 @@ const TRAYLINE_ROOT = join(app.getPath('documents'), 'Trayline')
 export const Paths = {
   root: TRAYLINE_ROOT,
   appData: join(TRAYLINE_ROOT, 'app-data'),
-  skills: join(TRAYLINE_ROOT, 'skills'),
-  systemSkills: join(TRAYLINE_ROOT, 'skills', '_system'),
-  mcps: join(TRAYLINE_ROOT, 'mcps'),
   projects: join(TRAYLINE_ROOT, 'projects'),
 } as const
 
@@ -20,9 +17,6 @@ async function ensureDir(path: string) {
 
 async function bootstrap() {
   await ensureDir(Paths.appData)
-  await ensureDir(Paths.skills)
-  await ensureDir(Paths.systemSkills)
-  await ensureDir(Paths.mcps)
   await ensureDir(Paths.projects)
 }
 

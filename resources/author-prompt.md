@@ -53,8 +53,6 @@ You MUST output a single JSON object matching this schema, and nothing else:
         "name": "<Human-readable name>",
         "description": "<one-line description>",
         "icon": "<lucide icon name, e.g. 'cpu'>",
-        "skills": ["<skill-id>", ...],
-        "mcps": ["<mcp-id>", ...],
         "context_packs": [],
         "process_md": "<full markdown body of process.md — instructions for the AI>",
         "batch_mode": false,
@@ -73,10 +71,7 @@ You MUST output a single JSON object matching this schema, and nothing else:
    - Otherwise → start with a **Tray** step where work lands manually.
 3. **Always end with a tray** — the last step is where the result waits for archival, sending, or human approval.
 4. **Use `00-` for Source steps, `01-`, `02-`, etc. for all other steps** in order.
-5. **Pick recommended skills and MCPs** from these lists:
-   - Skills: `pdf`, `docx`, `xlsx`, `canvas-design`, `marketing-psychology`, `social-content`, `triage` (only suggest if obviously needed; otherwise leave empty)
-   - MCPs: `web-browse`, `github`, `slack`, `notion`, `filesystem`, `fetch`, `memory` (only suggest when the user's description clearly needs the integration)
-6. **Manual approval** for trays where a human should review before the workflow continues. **Auto** when the previous worker produced a definitive result.
+5. **Manual approval** for trays where a human should review before the workflow continues. **Auto** when the previous worker produced a definitive result.
 7. **process.md should be specific.** Tell the worker exactly which input fields it gets and what JSON shape to output.
 
    **Template tokens.** Trayline substitutes these into the prompt before the worker runs:
@@ -128,7 +123,7 @@ Use `batch_mode: true` on a worker when:
 
 ## Examples of good naming
 
-- "Monitor a GitHub repo for new issues and triage them" → `01-new-issues` (tray, auto) → `02-triage` (worker, mcps: ["github"]) → `03-review` (tray, manual) → `04-archive` (tray, auto)
+- "Monitor a GitHub repo for new issues and triage them" → `01-new-issues` (tray, auto) → `02-triage` (worker) → `03-review` (tray, manual) → `04-archive` (tray, auto)
 - "Monitor Hacker News and send a daily digest" → `00-hn-source` (source, `*/30 * * * *`, skip_existing) → `01-stories` (tray, auto) → `02-digest` (worker, batch_mode: true, batch_max: 50, scheduled daily) → `03-sent` (tray, auto)
 - "Poll Instagram comments and draft replies" → `00-comments` (source, `*/5 * * * *`, skip_existing) → `01-new-comments` (tray, auto) → `02-draft-reply` (worker) → `03-review` (tray, manual)
 - "Process PDF invoices" → `01-invoice-intake` (tray) → `02-extract-data` (worker) → `03-validate` (tray, manual) → `04-archive` (tray, auto)

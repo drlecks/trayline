@@ -19,7 +19,6 @@ const LOADING_MESSAGES = [
   'Imagining your workflow…',
   'Sketching out the trays…',
   'Wiring up the workers…',
-  'Picking the right skills…',
   'Setting up your data source…',
   'Configuring the schedule…',
   'Wiring up deduplication…',
@@ -29,7 +28,6 @@ const LOADING_MESSAGES = [
 export default function WorkflowAuthorScreen() {
   const setScreen = useProjectStore((s) => s.setScreen)
   const setActive = useProjectStore((s) => s.setActive)
-  const setUnconfiguredMcps = useProjectStore((s) => s.setUnconfiguredMcps)
   const refreshProjects = useProjectStore((s) => s.refreshProjects)
   const regenerateOf = useProjectStore((s) => s.regenerateOf)
   const setRegenerateOf = useProjectStore((s) => s.setRegenerateOf)
@@ -82,7 +80,6 @@ export default function WorkflowAuthorScreen() {
       return
     }
     await refreshProjects()
-    setUnconfiguredMcps(outcome.unconfiguredMcps)
     setPostGenOutcome(outcome)
   }
 
@@ -222,19 +219,10 @@ function LoadingPanel() {
 }
 
 function PostGenBanner({ outcome, onOpen }: { outcome: ProjectCreateSuccess; onOpen: () => void }) {
-  const hasMcps = outcome.unconfiguredMcps.length > 0
   const hasSource = outcome.hasSourceStep
-
-  let body: string
-  if (hasSource && hasMcps) {
-    body = `Set up ${outcome.unconfiguredMcps.join(', ')} and configure your source step to get started.`
-  } else if (hasSource) {
-    body = "Click your source step to write your fetch instructions and set the schedule."
-  } else if (hasMcps) {
-    body = `To run it, set up ${outcome.unconfiguredMcps.join(', ')} — click any worker with a ⚠ to start.`
-  } else {
-    body = "Edit anything you want, then click Run to process your first card."
-  }
+  const body = hasSource
+    ? "Click your source step to write your fetch instructions and set the schedule."
+    : "Edit anything you want, then click Run to process your first card."
 
   return (
     <div className="flex flex-col items-center justify-center w-full max-w-lg mx-auto px-8 text-center">
@@ -246,11 +234,6 @@ function PostGenBanner({ outcome, onOpen }: { outcome: ProjectCreateSuccess; onO
       </div>
       <h2 className="text-xl font-semibold tracking-tight mb-2">{"Here's a starting point."}</h2>
       <p className="text-sm text-neutral-500 dark:text-neutral-400 mb-8 leading-relaxed">{body}</p>
-      {hasMcps && (
-        <div className="w-full rounded-lg border border-amber-200 dark:border-amber-800/40 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 mb-6 text-xs text-amber-800 dark:text-amber-300 text-left">
-          <strong>MCPs needed:</strong> {outcome.unconfiguredMcps.join(', ')} — set them up in the MCPs screen before running.
-        </div>
-      )}
       <Button size="lg" onClick={onOpen}>
         Open project
         <ArrowRight size={14} strokeWidth={1.75} />
