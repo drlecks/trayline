@@ -366,4 +366,32 @@ describe('workerRunner', () => {
     // Source card untouched in ready/
     expect(await pathExists(join(stepsDir, '01-src', 'cards', 'ready', 'card_z_001.json'))).toBe(true)
   })
+
+  it('rejects before allocating a run when adapter.supportsMcps is false and MCPs are configured', async () => {
+    const project = `mcps-not-supported-${Date.now()}`
+    const { stepsDir } = await buildWorkflow({ name: project, trayId: '01-src', workerId: '02-worker', nextTrayId: '03-next' })
+
+    // local-llm is registered in the registry and has supportsMcps: false
+    await writeJson(join(stepsDir, '02-worker', 'step.json'), {
+      id: '02-worker', kind: 'worker', name: 'Worker',
+      skills: [], mcps: ['some-mcp'], context_packs: [],
+      execution: { adapter: 'local-llm', timeout_seconds: 5, retry_attempts: 0 },
+      trigger: { mode: 'on_ready' },
+      on_success: 'advance', on_failure: 'send_to_errors',
+    })
+
+    await seedReadyCard(stepsDir, '01-src', 'card_ns_001')
+
+    // triggerRun should throw before creating any run directory
+    await expect(
+      workerRunner.triggerRun({ project, workflow: 'wf', stepId: '02-worker', cardId: 'card_ns_001' }),
+    ).rejects.toThrow(/does not support MCP/)
+
+    // No run directory should exist
+    const runsDir = join(stepsDir, '02-worker', 'runs')
+    let entries: string[] = []
+    try { entries = await fs.readdir(runsDir) } catch { /* dir may not exist */ }
+    const runDirs = entries.filter((e) => e.startsWith('run_'))
+    expect(runDirs).toHaveLength(0)
+  })
 })

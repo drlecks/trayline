@@ -204,30 +204,30 @@ Model files are stored at `{app.getPath('userData')}/trayline-models/<filename>`
 
 ### 1. Branch setup
 
-- [ ] From `develop`, create `feature/local-llm`:
+- [x] From `develop`, create `feature/local-llm`:
   ```bash
   git checkout develop && git pull origin develop
   git checkout -b feature/local-llm
   git push -u origin feature/local-llm
   ```
-- [ ] All sub-task branches fork from `feature/local-llm` and merge back into it, not into `develop`.
+- [x] All sub-task branches fork from `feature/local-llm` and merge back into it, not into `develop`.
 
 ### 2. Package & build wiring
 
-- [ ] Add `node-llama-cpp` to `dependencies` in `package.json`
-- [ ] Add `@electron/rebuild` to `devDependencies`
-- [ ] Add `postinstall` script: `electron-rebuild -f -w node-llama-cpp`
-- [ ] Confirm pre-built binary loads in the Electron main process (smoke test: `const { getLlama } = require('node-llama-cpp')` without error)
+- [x] Add `node-llama-cpp` to `dependencies` in `package.json`
+- [x] Add `@electron/rebuild` to `devDependencies`
+- [x] Add `postinstall` script: `electron-rebuild -f -w node-llama-cpp`
+- [x] Confirm pre-built binary loads in the Electron main process (smoke test: `const { getLlama } = require('node-llama-cpp')` without error)
 
 ### 3. Shared types
 
-- [ ] **`src/shared/types.ts`** — extend `AdapterBlockerKind`:
+- [x] **`src/shared/types.ts`** — extend `AdapterBlockerKind`:
   ```typescript
   export type AdapterBlockerKind =
     | 'not_installed'
     | 'model_not_downloaded'   // local-llm: runtime present but no model file on disk
   ```
-- [ ] Add `LocalModelEntry` interface (used by IPC):
+- [x] Add `LocalModelEntry` interface (used by IPC):
   ```typescript
   export interface LocalModelEntry {
     id: string
@@ -242,7 +242,7 @@ Model files are stored at `{app.getPath('userData')}/trayline-models/<filename>`
     downloadedAt?: number      // ms timestamp, if downloaded
   }
   ```
-- [ ] Add IPC progress type:
+- [x] Add IPC progress type:
   ```typescript
   export interface ModelDownloadProgress {
     modelId: string
@@ -256,12 +256,12 @@ Model files are stored at `{app.getPath('userData')}/trayline-models/<filename>`
 
 Owns the model files on disk and the in-flight download.
 
-- [ ] `getModelsDir()` → `path.join(app.getPath('userData'), 'trayline-models')` — creates the directory if missing
-- [ ] `getCatalog(): LocalModelCatalogEntry[]` — reads and parses `local-models.json` from the app's resources directory (not the renderer bundle)
-- [ ] `isDownloaded(filename: string): boolean` — synchronously checks file existence in `getModelsDir()`
-- [ ] `getModelPath(filename: string): string` — full absolute path
-- [ ] `listWithStatus(): LocalModelEntry[]` — merges catalog with downloaded flags (resolves `downloaded` and `downloadedAt`)
-- [ ] `downloadModel(modelId: string, onProgress: (p: ModelDownloadProgress) => void): Promise<void>`:
+- [x] `getModelsDir()` → `path.join(app.getPath('userData'), 'trayline-models')` — creates the directory if missing
+- [x] `getCatalog(): LocalModelCatalogEntry[]` — reads and parses `local-models.json` from the app's resources directory (not the renderer bundle)
+- [x] `isDownloaded(filename: string): boolean` — synchronously checks file existence in `getModelsDir()`
+- [x] `getModelPath(filename: string): string` — full absolute path
+- [x] `listWithStatus(): LocalModelEntry[]` — merges catalog with downloaded flags (resolves `downloaded` and `downloadedAt`)
+- [x] `downloadModel(modelId: string, onProgress: (p: ModelDownloadProgress) => void): Promise<void>`:
   - Looks up model in catalog by id
   - Creates `getModelsDir()` if missing
   - Opens a write stream to `<modelsDir>/<filename>.part`
@@ -269,9 +269,9 @@ Owns the model files on disk and the in-flight download.
   - Reports progress on each chunk via `onProgress`
   - On complete: `fs.rename` from `.part` to final filename (atomic)
   - On error: deletes the `.part` file
-- [ ] `cancelDownload(modelId: string): void` — calls `AbortController.abort()` on the in-flight request; rejects the `downloadModel` promise
-- [ ] `deleteModel(modelId: string): Promise<void>` — removes model file
-- [ ] Write `local-model-service.test.ts`:
+- [x] `cancelDownload(modelId: string): void` — calls `AbortController.abort()` on the in-flight request; rejects the `downloadModel` promise
+- [x] `deleteModel(modelId: string): Promise<void>` — removes model file
+- [x] Write `local-model-service.test.ts`:
   - `isDownloaded()` returns false when no file exists, true when it does
   - `listWithStatus()` merges catalog correctly — downloaded flag reflects actual disk state
   - `downloadModel()` writes the file and calls onProgress (mock `https.get`)
@@ -279,18 +279,18 @@ Owns the model files on disk and the in-flight download.
 
 ### 5. Local LLM adapter — `src/main/ai-terminals/local-llm.ts`
 
-- [ ] `checkReadiness(): Promise<AdapterReadiness>`:
+- [x] `checkReadiness(): Promise<AdapterReadiness>`:
   - Calls `localModelService.listWithStatus()`
   - If no model has `downloaded: true` → returns `installed: false` with one blocker: `{ kind: 'model_not_downloaded', message: 'No local model has been downloaded yet.' }`
   - If at least one model is downloaded → returns `installed: true, version: <model label>, blockers: []`
-- [ ] `detectInstalled()` — delegates to `checkReadiness().then(r => r.installed)` (deprecated shim)
-- [ ] `getVersion()` — returns the first downloaded model's label (deprecated shim)
-- [ ] `listModels()` — returns only downloaded models as `ModelInfo[]`, keyed by `id`
-- [ ] `listEfforts()` — returns `[]` (local models don't expose effort tiers)
-- [ ] `getUsage()` — returns `null`
-- [ ] `clearContext()` — no-op (each `spawn()` creates a fresh context; model is stateless across runs)
-- [ ] `supportsMcps: false` — add this optional flag to the `AITerminalAdapter` interface in `adapter.ts`; set to `true` by default so existing adapters are unaffected; the local adapter sets it `false`
-- [ ] `spawn(opts: SpawnOptions): Promise<AISession>`:
+- [x] `detectInstalled()` — delegates to `checkReadiness().then(r => r.installed)` (deprecated shim)
+- [x] `getVersion()` — returns the first downloaded model's label (deprecated shim)
+- [x] `listModels()` — returns only downloaded models as `ModelInfo[]`, keyed by `id`
+- [x] `listEfforts()` — returns `[]` (local models don't expose effort tiers)
+- [x] `getUsage()` — returns `null`
+- [x] `clearContext()` — no-op (each `spawn()` creates a fresh context; model is stateless across runs)
+- [x] `supportsMcps: false` — add this optional flag to the `AITerminalAdapter` interface in `adapter.ts`; set to `true` by default so existing adapters are unaffected; the local adapter sets it `false`
+- [x] `spawn(opts: SpawnOptions): Promise<AISession>`:
   - Reads the worker's `processFile`, assembles the prompt exactly as `claude-code.ts` does (skills + context packs + `renderProcessTemplate`)
   - **Prepends a JSON-enforcement line** as the very first line of the assembled prompt: `"Respond with a single JSON object only. No prose, no markdown fences, no explanations before or after the JSON."` — this is the mitigation for small models that tend to add preamble.
   - Picks the first downloaded model (from `localModelService.listWithStatus()`)
@@ -306,7 +306,7 @@ Owns the model files on disk and the in-flight download.
     - `kill()`: signals abort to the llama generation
     - `result()`: resolves with `{ exitCode: 0, output, terminalLog, startedAt, endedAt }` when generation ends
   - Writes `terminal.log` to `opts.workingDir` on completion (same pattern as Claude Code adapter)
-- [ ] Write `local-llm.test.ts`:
+- [x] Write `local-llm.test.ts`:
   - `checkReadiness()` returns `model_not_downloaded` blocker when no models are downloaded
   - `checkReadiness()` returns `installed: true` when at least one model file exists
   - `listModels()` returns only downloaded models
@@ -318,21 +318,21 @@ MCP support is a firm "never" for the local adapter. The goal is not just to blo
 
 #### 6a. Runtime pre-flight hard blocks
 
-- [ ] **`src/main/services/worker-runner.ts`** — before spawning, if `adapter.supportsMcps === false` and `mcpIds.length > 0`, abort with audit row `run_aborted_mcp_not_ready` and error: `"This worker uses MCPs which require an external AI agent. Switch to Claude Code (or another cloud adapter) in Settings → AI Terminal to run it."`
-- [ ] **`src/main/services/source-runner.ts`** — same check: if `adapter.supportsMcps === false`, abort before spawning with: `"Source steps fetch data from external services and require an external AI agent. Switch to Claude Code in Settings → AI Terminal to run this source."`
+- [x] **`src/main/services/worker-runner.ts`** — before spawning, if `adapter.supportsMcps === false` and `mcpIds.length > 0`, abort with audit row `run_aborted_mcp_not_ready` and error: `"This worker uses MCPs which require an external AI agent. Switch to Claude Code (or another cloud adapter) in Settings → AI Terminal to run it."`
+- [x] **`src/main/services/source-runner.ts`** — same check: if `adapter.supportsMcps === false`, abort before spawning with: `"Source steps fetch data from external services and require an external AI agent. Switch to Claude Code in Settings → AI Terminal to run this source."`
 
 #### 6b. Worker detail view warning banner
 
 When the active default adapter is `local-llm` and a worker step has one or more MCPs configured, the worker detail panel must show a visible warning — before the user tries to run it.
 
-- [ ] **`src/renderer/components/worker/WorkerDetail.tsx`** (or equivalent) — read `adapterStore.defaultAdapterId` and the worker's `mcps` array. If adapter is `local-llm` and `mcps.length > 0`, render an amber warning banner above the Run button:
+- [x] **`src/renderer/components/worker/WorkerDetail.tsx`** (or equivalent) — read `adapterStore.defaultAdapterId` and the worker's `mcps` array. If adapter is `local-llm` and `mcps.length > 0`, render an amber warning banner above the Run button:
   > **This worker uses MCPs and cannot run with the local AI model.**  
   > Switch to Claude Code in [Settings → AI Terminal](#) to enable it.
-- [ ] The "Run" button itself is not disabled (user may switch adapter before running), but the banner is prominent enough that they know what to expect.
+- [x] The "Run" button itself is not disabled (user may switch adapter before running), but the banner is prominent enough that they know what to expect.
 
 #### 6c. Source step detail view warning
 
-- [ ] **Source step detail panel** — same pattern: if adapter is `local-llm`, show an amber banner:
+- [x] **Source step detail panel** — same pattern: if adapter is `local-llm`, show an amber banner:
   > **Source steps require an external AI agent to fetch data.**  
   > Switch to Claude Code in [Settings → AI Terminal](#) to run this source.
 
@@ -340,22 +340,22 @@ When the active default adapter is `local-llm` and a worker step has one or more
 
 When the user selects "Local AI (offline)" as their default adapter in Settings → AI Terminal, check whether any installed project has workers or source steps that use MCPs.
 
-- [ ] In the Settings AI Terminal section, after the user selects `local-llm` as default: query all projects for steps that have MCPs configured. If any exist, show an inline callout below the adapter selector:
+- [x] In the Settings AI Terminal section, after the user selects `local-llm` as default: query all projects for steps that have MCPs configured. If any exist, show an inline callout below the adapter selector:
   > **Some of your workers use MCPs and will not run with the local AI model.** Those steps will still work with Claude Code — you can switch adapters at any time.
-- [ ] This check runs client-side on the adapter selection change. It does not block the switch — it is informational only.
+- [x] This check runs client-side on the adapter selection change. It does not block the switch — it is informational only.
 
 #### 6e. MCP screen — adapter compatibility indicator
 
 In the MCPs management screen (the list of installed MCPs), add a small indicator next to each MCP showing which adapters support it.
 
-- [ ] Add a "Requires external agent" badge (or tooltip) on each MCP entry in the MCP list panel. Copy: `"Not available with local AI model"`.
-- [ ] This is a static label — all MCPs get it, because no MCP works with the local adapter.
+- [x] Add a "Requires external agent" badge (or tooltip) on each MCP entry in the MCP list panel. Copy: `"Not available with local AI model"`.
+- [x] This is a static label — all MCPs get it, because no MCP works with the local adapter.
 
 #### 6f. Immediate error response on Run click — fail before the run is created
 
 MCP-credential errors (missing credentials, disabled MCP) create a run entry and then mark it failed — that is correct, because the failure is a run-time condition discovered during execution. Adapter incompatibility is different: it is known before execution starts, so we should reject the call **before** allocating a run ID or creating the run directory. This way the renderer gets an IPC-level error, not a near-instant failed run that the user has to hunt down in the runs tab.
 
-- [ ] **`src/main/services/worker-runner.ts`** — move the `adapter.supportsMcps === false` check to **before** `nextRunId()` and `fs.mkdir(runDir)`. Throw directly from `runInner` before any run state is created:
+- [x] **`src/main/services/worker-runner.ts`** — move the `adapter.supportsMcps === false` check to **before** `nextRunId()` and `fs.mkdir(runDir)`. Throw directly from `runInner` before any run state is created:
   ```typescript
   if (adapter.supportsMcps === false && mcpIds.length > 0) {
     throw new Error(
@@ -366,9 +366,9 @@ MCP-credential errors (missing credentials, disabled MCP) create a run entry and
   ```
   Because this throw happens before any run directory or audit entry is created, `triggerRun` will reject and the IPC call will surface as an error — not a failed run in the list.
 
-- [ ] **`src/main/services/source-runner.ts`** — same placement: check `adapter.supportsMcps === false` before run allocation and throw so the IPC call rejects.
+- [x] **`src/main/services/source-runner.ts`** — same placement: check `adapter.supportsMcps === false` before run allocation and throw so the IPC call rejects.
 
-- [ ] **`src/renderer/components/project/WorkerDetailPanel.tsx`** — in the "Run now" button click handler, wrap the `worker.triggerRun` call in a try/catch (or `.catch`). On error, display an inline error alert directly below the Run button (not a toast, not a modal) — matches the existing `run.error` red box style (`border-red-200 bg-red-50 text-red-800`) but scoped to the trigger action, not a specific run:
+- [x] **`src/renderer/components/project/WorkerDetailPanel.tsx`** — in the "Run now" button click handler, wrap the `worker.triggerRun` call in a try/catch (or `.catch`). On error, display an inline error alert directly below the Run button (not a toast, not a modal) — matches the existing `run.error` red box style (`border-red-200 bg-red-50 text-red-800`) but scoped to the trigger action, not a specific run:
   ```
   ┌─────────────────────────────────────────────────────────┐
   │  ✕  This worker uses MCPs which require an external AI  │
@@ -378,18 +378,18 @@ MCP-credential errors (missing credentials, disabled MCP) create a run entry and
   ```
   The "Go to Settings" link navigates to Settings → AI Terminal. The alert is dismissed on the next successful run trigger or when the user navigates away.
 
-- [ ] **`src/renderer/components/project/SourceDetailPanel.tsx`** — same pattern in the source "Run now" handler: catch the IPC error and show the inline alert with copy: `"Source steps require an external AI agent. Switch to Claude Code in Settings → AI Terminal."`
+- [x] **`src/renderer/components/project/SourceDetailPanel.tsx`** — same pattern in the source "Run now" handler: catch the IPC error and show the inline alert with copy: `"Source steps require an external AI agent. Switch to Claude Code in Settings → AI Terminal."`
 
 ### 7. Stale `.part` file cleanup on startup
 
-- [ ] **`src/main/services/local-model-service.ts`** — add `cleanupStaleParts(): Promise<void>`: scans `getModelsDir()` for any `*.part` files and deletes them. These are left by interrupted downloads (app crash, force quit, network error mid-stream).
-- [ ] **`src/main/index.ts`** — call `localModelService.cleanupStaleParts()` inside `app.whenReady()`, before `adapterReadinessService.checkAll()`. Order matters: clean up before the readiness check so a leftover `.part` file is never mistaken for a valid model (it won't be — `isDownloaded` checks the final filename, not `.part` — but cleanup keeps `trayline-models/` tidy).
+- [x] **`src/main/services/local-model-service.ts`** — add `cleanupStaleParts(): Promise<void>`: scans `getModelsDir()` for any `*.part` files and deletes them. These are left by interrupted downloads (app crash, force quit, network error mid-stream).
+- [x] **`src/main/index.ts`** — call `localModelService.cleanupStaleParts()` inside `app.whenReady()`, before `adapterReadinessService.checkAll()`. Order matters: clean up before the readiness check so a leftover `.part` file is never mistaken for a valid model (it won't be — `isDownloaded` checks the final filename, not `.part` — but cleanup keeps `trayline-models/` tidy).
 
 ### 8. Batch run guard
 
 The `supportsMcps` check in task 6 covers single-card runs (`runInner`), but `worker-runner.ts` has a separate code path for batch runs (`runBatchInner`) with its own MCP resolution. Both must be guarded.
 
-- [ ] **`src/main/services/worker-runner.ts` — `runBatchInner`** — add the same early throw before run allocation:
+- [x] **`src/main/services/worker-runner.ts` — `runBatchInner`** — add the same early throw before run allocation:
   ```typescript
   if (adapter.supportsMcps === false && batchMcpIds.length > 0) {
     throw new Error(
@@ -398,20 +398,20 @@ The `supportsMcps` check in task 6 covers single-card runs (`runInner`), but `wo
     )
   }
   ```
-- [ ] The renderer's batch-run trigger handler also needs the same try/catch + inline error alert pattern as the single-run handler (task 6f).
+- [x] The renderer's batch-run trigger handler also needs the same try/catch + inline error alert pattern as the single-run handler (task 6f). (Covered by the existing `handleRunNow` catch in `WorkerDetailPanel` — batch and single runs share the same IPC call and catch block.)
 
 ### 9. Registry
 
-- [ ] **`src/main/ai-terminals/registry.ts`** — add:
+- [x] **`src/main/ai-terminals/registry.ts`** — add:
   ```typescript
   import { localLlmAdapter } from './local-llm'
   register(localLlmAdapter)
   ```
-- [ ] **`src/main/ai-terminals/mock.ts`** — add `supportsMcps: true` (explicit, so tests that rely on MCP pre-flight pass-through are not broken by the default-true assumption). The mock adapter is `kind: 'mock'` and never used in production runs, but the field should be set to avoid ambiguity.
+- [x] **`src/main/ai-terminals/mock.ts`** — add `supportsMcps: true` (explicit, so tests that rely on MCP pre-flight pass-through are not broken by the default-true assumption). The mock adapter is `kind: 'mock'` and never used in production runs, but the field should be set to avoid ambiguity.
 
 ### 10. IPC channels
 
-- [ ] **`src/shared/ipc-channels.ts`** — add:
+- [x] **`src/shared/ipc-channels.ts`** — add:
   ```
   local-model:list             → LocalModelEntry[]
   local-model:download         → starts download (modelId arg), resolves when done
@@ -425,8 +425,8 @@ The `supportsMcps` check in task 6 covers single-card runs (`runInner`), but `wo
   local-model:download-complete → { modelId: string }
   local-model:download-error    → { modelId: string; error: string }
   ```
-- [ ] **`src/main/ipc/handlers.ts`** — wire the five invoke handlers and the three event emitters
-- [ ] **`src/preload/index.ts`** — expose under `window.trayline.localModel`:
+- [x] **`src/main/ipc/handlers.ts`** — wire the five invoke handlers and the three event emitters
+- [x] **`src/preload/index.ts`** — expose under `window.trayline.localModel`:
   - `list()`, `download(modelId)`, `cancel(modelId)`, `delete(modelId)`, `recheckAdapter()`
   - `onProgress(cb)`, `onDownloadComplete(cb)`, `onDownloadError(cb)`
 
@@ -434,76 +434,76 @@ The `supportsMcps` check in task 6 covers single-card runs (`runInner`), but `wo
 
 Full-window overlay shown when the user clicks "Download local model" on the `AdapterSetupScreen`.
 
-- [ ] **Idle state** (no active download):
+- [x] **Idle state** (no active download):
   - Title: "Download a local AI model"
   - Subtitle: "Pick a model to download. Trayline will use it to run your workflows — no internet required after this."
   - List of `LocalModelEntry` cards: label, description, size in MB, "Recommended" badge if flagged
   - Each card has a radio selector; the `recommended` model is pre-selected
   - "Download" button (primary) — disabled until a model is selected
   - "Cancel" text button — closes the modal without downloading
-- [ ] **Downloading state** (after "Download" is clicked):
+- [x] **Downloading state** (after "Download" is clicked):
   - Model name + "Downloading…" header
-  - Progress bar (`shadcn/ui Progress`) — percent from `onProgress` events
+  - Progress bar (inline Tailwind CSS — no shadcn Progress component in this project) — percent from `onProgress` events
   - "X.X MB of Y.Y MB" byte counter below the bar
   - "Cancel download" link — calls `localModel.cancel(modelId)` then resets to idle
   - Dismissal is blocked while downloading (no close button, no backdrop click)
-- [ ] **Complete state** (after `download-complete` event):
+- [x] **Complete state** (after `download-complete` event):
   - "Model ready" message with a checkmark
   - "Start using Trayline" button → calls `localModel.recheckAdapter()` → if `installed: true`, calls `onReady()` prop
-- [ ] **Error state**:
+- [x] **Error state**:
   - Error message from `download-error` event
   - "Try again" → resets to idle
-- [ ] Props: `open: boolean`, `onOpenChange: (v: boolean) => void`, `onReady: () => void`
+- [x] Props: `open: boolean`, `onOpenChange: (v: boolean) => void`, `onReady: () => void`
 
 ### 12. Updated `AdapterSetupScreen.tsx` and wizard suppression for local-llm
 
-- [ ] Detect `local-llm` adapter by `adapter.id` and render a variant card:
+- [x] Detect `local-llm` adapter by `adapter.id` and render a variant card:
   - **No install guide link** (no `installUrl` on local adapter)
   - Show a short description line below the adapter name explaining it runs offline
   - Show **"Download local model"** as the primary button
   - When clicked: opens `ModelDownloadModal` with `onReady={onReady}`
   - If readiness shows `installed: true` (model already downloaded on a return visit): render the same "Check again" / "Setup guide" buttons as other adapters
-- [ ] Keep existing Claude Code card rendering unchanged
-- [ ] Add a `description` field to adapter cards (sourced from adapter list IPC), show it in small muted text under the display name:
+- [x] Keep existing Claude Code card rendering unchanged
+- [x] Add a `description` field to adapter cards (sourced from adapter list IPC), show it in small muted text under the display name:
   - Claude Code: `"Cloud-powered — most capable. Requires external installation."`
   - Local AI: `"Runs entirely on your machine — no account or internet needed after setup."`
-- [ ] Import and render `ModelDownloadModal` at the bottom of the component
-- [ ] **Suppress `AdapterSetupWizard` for local-llm.** The existing wizard (built in N6.2) handles the `not_installed` blocker kind with install instructions and a `fixCommand`. It has no step for `model_not_downloaded`. Do not open the wizard for local-llm on any path — remove the "Setup guide" button from the local-llm adapter card entirely. The download modal is the wizard for local-llm.
+- [x] Import and render `ModelDownloadModal` at the bottom of the component
+- [x] **Suppress `AdapterSetupWizard` for local-llm.** The existing wizard (built in N6.2) handles the `not_installed` blocker kind with install instructions and a `fixCommand`. It has no step for `model_not_downloaded`. Do not open the wizard for local-llm on any path — remove the "Setup guide" button from the local-llm adapter card entirely. The download modal is the wizard for local-llm.
 
 ### 13. Adapter display metadata (IPC layer)
 
-- [ ] Add `description` and `requiresExternalInstall: boolean` to the adapter list IPC response payload in `handlers.ts`
-- [ ] Add `description` field to each adapter (`claude-code.ts`, `local-llm.ts`, `mock.ts`) so the renderer doesn't need to hard-code adapter IDs for branching logic
+- [x] Add `description` and `requiresExternalInstall: boolean` to the adapter list IPC response payload in `handlers.ts`
+- [x] Add `description` field to each adapter (`claude-code.ts`, `local-llm.ts`, `mock.ts`) so the renderer doesn't need to hard-code adapter IDs for branching logic
 
 ### 14. Settings panel — local model management
 
 After first-run, the user needs a way to manage downloaded models from Settings. The Settings → AI Terminal section already exists; add a "Local AI model" subsection beneath it.
 
-- [ ] **`src/renderer/components/settings/SettingsPanel.tsx`** (or equivalent) — when `local-llm` is a registered adapter, render a "Local AI model" subsection:
+- [x] **`src/renderer/components/settings/SettingsPanel.tsx`** (or equivalent) — when `local-llm` is a registered adapter, render a "Local AI model" subsection:
   - List of downloaded models with: name, size on disk, download date, and a **Delete** button (calls `localModel.delete(modelId)`, then refreshes the list and rechecks adapter readiness)
   - A **"Download another model"** link/button that opens the `ModelDownloadModal` (reusing the existing component, same flow as first-run but with `onReady` being a no-op since the gate is already dismissed)
   - If no model is downloaded: shows a prompt "No local model downloaded" with a "Download now" button
-- [ ] After a model is deleted, call `adapter.recheck('local-llm')` to update the adapter readiness state. If no models remain, the adapter becomes not-ready — the gate will show on next launch, but the current session continues (do not re-show the gate mid-session).
+- [x] After a model is deleted, call `adapter.recheck('local-llm')` to update the adapter readiness state. If no models remain, the adapter becomes not-ready — the gate will show on next launch, but the current session continues (do not re-show the gate mid-session).
 
 ### 15. Author service warning in workflow creation UI
 
 The audit flags that small local models may produce invalid or incomplete workflow plans. The `AuthorError` paths already handle parse failures gracefully, but the user should be warned *before* they try.
 
-- [ ] In the **"Describe your workflow"** UI (workflow author dialog/screen), when the active default adapter is `local-llm`, show a soft inline note below the description textarea:
+- [x] In the **"Describe your workflow"** UI (workflow author dialog/screen), when the active default adapter is `local-llm`, show a soft inline note below the description textarea:
   > **Using local AI model.** Workflow generation works best with Claude Code — local models may produce simpler or incomplete plans. You can edit the result after creation.
-- [ ] This is informational only — do not block the Generate button. The `AuthorError` paths handle failure gracefully.
+- [x] This is informational only — do not block the Generate button. The `AuthorError` paths handle failure gracefully.
 
 ### 17. Documentation & alignment audit
 
-- [ ] **`docs/tech-stack.md`** — add `node-llama-cpp` to Backend/System section; note that `@electron/rebuild` is required at build time; add `local-models.json` catalog reference
-- [ ] **`docs/features.md`** — describe the model download modal and local adapter card variant in the first-run gate section; add note about which worker types are local-compatible
-- [ ] **`docs/user-flows.md`** — add flow 6.17 "First Launch — Download Local Model" (idle → downloading → complete → app opens)
-- [ ] **`docs/app-description.md`** — update "AI agent" section to reflect that no external install is required when local model is used; update any language that implies Claude Code is the only option
-- [ ] **`docs/skills-and-mcps.md`** — add a note that MCPs are not available when using the local adapter; document the `supportsMcps` adapter flag
-- [ ] **`docs/data-model.md`** — no changes needed (card model is unchanged); verify nothing implies Claude Code exclusively
-- [ ] **`docs/design-principles.md`** — no changes expected; verify
-- [ ] **`docs/implementation/tasks.md`** — check off N7 on completion
-- [ ] Read through all docs listed above and flag any language that assumes Claude Code is the only AI option — update to say "AI adapter" or "Local AI / Claude Code" as appropriate
+- [x] **`docs/tech-stack.md`** — add `node-llama-cpp` to Backend/System section; note that `@electron/rebuild` is required at build time; add `local-models.json` catalog reference
+- [x] **`docs/features.md`** — describe the model download modal and local adapter card variant in the first-run gate section; add note about which worker types are local-compatible
+- [x] **`docs/user-flows.md`** — add flow 6.17 "First Launch — Download Local Model" (idle → downloading → complete → app opens)
+- [x] **`docs/app-description.md`** — update "AI agent" section to reflect that no external install is required when local model is used; update any language that implies Claude Code is the only option
+- [x] **`docs/skills-and-mcps.md`** — add a note that MCPs are not available when using the local adapter; document the `supportsMcps` adapter flag
+- [x] **`docs/data-model.md`** — no changes needed (card model is unchanged); verify nothing implies Claude Code exclusively
+- [x] **`docs/design-principles.md`** — no changes expected; verify
+- [ ] **`docs/implementation/tasks.md`** — check off N7 on completion (done after merge to develop)
+- [x] Read through all docs listed above and flag any language that assumes Claude Code is the only AI option — update to say "AI adapter" or "Local AI / Claude Code" as appropriate
 
 ---
 

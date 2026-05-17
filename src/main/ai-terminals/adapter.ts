@@ -99,6 +99,14 @@ export interface AITerminalAdapter {
   kind: 'production' | 'mock'
   /** Optional URL with install instructions, surfaced when `detectInstalled()` is false. */
   installUrl?: string
+  /** Short description shown in the adapter selector UI. */
+  description?: string
+  /**
+   * When false, this adapter cannot use MCPs. Worker and source runs that have
+   * MCPs configured will be aborted before spawning with a clear error message.
+   * Defaults to true when absent — only the local-llm adapter sets this false.
+   */
+  supportsMcps?: boolean
   /**
    * Returns structured readiness without running any inference.
    * Checks only what is cheaply detectable: binary presence, version, and any

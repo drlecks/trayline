@@ -13,6 +13,7 @@ import type {
   AdapterReadiness,
   MCPDefinition,
 } from './adapter'
+import { renderProcessTemplate } from './prompt-utils'
 
 // Strip ANSI escape sequences before trying to parse output as JSON. The PTY
 // preserves cursor moves, colour codes, AND OSC title sequences from the
@@ -214,29 +215,6 @@ class ClaudePtySession implements AISession {
   }
 }
 
-/**
- * Substitute `{{card.data}}` and `{{card.data.<dotted.path>}}` tokens in a
- * worker's process.md body with values from the card payload.
- *
- * - `{{card.data}}` → the full payload pretty-printed as JSON.
- * - `{{card.data.foo}}` → the value at that path; strings are inlined verbatim,
- *   objects/arrays are JSON-stringified. Missing paths render as empty string.
- *
- * The regex tolerates internal whitespace (e.g. `{{ card.data.foo }}`).
- */
-function renderProcessTemplate(body: string, cardData: object): string {
-  const data = cardData as Record<string, unknown>
-  const dotted = body.replace(/\{\{\s*card\.data\.([a-zA-Z_$][\w$]*(?:\.[a-zA-Z_$][\w$]*)*)\s*\}\}/g, (_, path: string) => {
-    const value = path.split('.').reduce<unknown>((acc, key) => {
-      if (acc && typeof acc === 'object') return (acc as Record<string, unknown>)[key]
-      return undefined
-    }, data)
-    if (value === undefined || value === null) return ''
-    if (typeof value === 'string') return value
-    return JSON.stringify(value)
-  })
-  return dotted.replace(/\{\{\s*card\.data\s*\}\}/g, JSON.stringify(data, null, 2))
-}
 
 /**
  * Pull a JSON value out of a text blob even when it's wrapped in markdown
@@ -307,6 +285,8 @@ export const claudeCodeAdapter: AITerminalAdapter = {
   id: 'claude-code',
   displayName: 'Claude Code',
   kind: 'production',
+  description: 'Cloud-powered — most capable. Requires external installation.',
+  supportsMcps: true,
   installUrl: 'https://docs.claude.com/en/docs/claude-code/quickstart',
 
   async checkReadiness(): Promise<AdapterReadiness> {

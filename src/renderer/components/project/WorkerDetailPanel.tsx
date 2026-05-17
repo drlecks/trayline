@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useCallback } from 'react'
 import { CronExpressionParser } from 'cron-parser'
-import { AlertTriangle, Cpu, Play, Trash2 } from 'lucide-react'
+import { AlertTriangle, Cpu, Play, Trash2, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CopyButton } from '@/components/ui/copy-button'
 import {
@@ -26,9 +26,32 @@ export default function WorkerDetailPanel({ step }: WorkerDetailPanelProps) {
   const active = useProjectStore((s) => s.active)
   const workflow = useProjectStore((s) => s.workflow)
   const missingSkillsByStep = useProjectStore((s) => s.missingSkillsByStep)
+  const setScreen = useProjectStore((s) => s.setScreen)
   const [tab, setTab] = useState<Tab>('instructions')
   const [runNowBusy, setRunNowBusy] = useState(false)
   const [runNowFeedback, setRunNowFeedback] = useState<string | null>(null)
+  const [runTriggerError, setRunTriggerError] = useState<string | null>(null)
+
+  // Track whether the effective adapter supports MCPs — shown as a banner when false.
+  const [adapterSupportsMcps, setAdapterSupportsMcps] = useState(true)
+  useEffect(() => {
+    let cancelled = false
+    async function check() {
+      const raw = step.raw as { mcps?: string[]; execution?: { adapter?: string } }
+      if (!raw.mcps?.length) { setAdapterSupportsMcps(true); return }
+      const [adapters, settings] = await Promise.all([
+        window.trayline!.adapters.list(),
+        window.trayline!.settings.get(),
+      ])
+      if (cancelled) return
+      const effectiveId = raw.execution?.adapter ?? settings.defaultAdapterId
+      const adapter = adapters.find((a) => a.id === effectiveId)
+      setAdapterSupportsMcps(adapter?.supportsMcps ?? true)
+    }
+    void check()
+    const off = window.trayline!.settings.onChange(() => { void check() })
+    return () => { cancelled = true; off() }
+  }, [step.id])
 
   const status = useLatestRunStatus(step.id)
 
@@ -36,11 +59,14 @@ export default function WorkerDetailPanel({ step }: WorkerDetailPanelProps) {
     if (!active || !workflow || !window.trayline) return
     setRunNowBusy(true)
     setRunNowFeedback(null)
+    setRunTriggerError(null)
     try {
       const ok = await useProviderGuard.getState().ensureReady()
       if (!ok) return
       const { triggered } = await window.trayline.worker.runNow(active.name, workflow.name, step.id)
       setRunNowFeedback(triggered > 0 ? `Started ${triggered} run${triggered > 1 ? 's' : ''}` : 'No ready cards')
+    } catch (err) {
+      setRunTriggerError(err instanceof Error ? err.message : String(err))
     } finally {
       setRunNowBusy(false)
       setTimeout(() => setRunNowFeedback(null), 3000)
@@ -75,6 +101,24 @@ export default function WorkerDetailPanel({ step }: WorkerDetailPanelProps) {
           </div>
         </div>
 
+        {runTriggerError && (
+          <div className="
+            flex items-start gap-2 mt-3 px-3 py-2.5 rounded-md
+            border border-red-200 dark:border-red-800/60
+            bg-red-50 dark:bg-red-950/30
+            text-xs text-red-800 dark:text-red-300
+          ">
+            <XCircle size={13} strokeWidth={1.75} className="mt-0.5 shrink-0 text-red-500" />
+            <span className="flex-1">{runTriggerError}</span>
+            <button
+              className="shrink-0 text-red-600 dark:text-red-400 hover:underline font-medium"
+              onClick={() => setScreen('settings')}
+            >
+              Go to Settings
+            </button>
+          </div>
+        )}
+
         <div className="flex gap-1 mt-4 -mb-5">
           {(['instructions', 'config', 'runs'] as Tab[]).map((t) => (
             <button
@@ -104,6 +148,21 @@ export default function WorkerDetailPanel({ step }: WorkerDetailPanelProps) {
           <span>
             Missing skill{missingSkillsByStep[step.id].length > 1 ? 's' : ''}:{' '}
             <strong>{missingSkillsByStep[step.id].join(', ')}</strong>. Install them in the Skills screen before running this worker.
+          </span>
+        </div>
+      )}
+
+      {!adapterSupportsMcps && (
+        <div className="
+          flex items-start gap-2 px-6 py-2.5 shrink-0
+          bg-amber-50 dark:bg-amber-950/30
+          border-b border-amber-200/60 dark:border-amber-900/40
+          text-xs text-amber-900 dark:text-amber-300
+        ">
+          <AlertTriangle size={13} strokeWidth={1.75} className="mt-0.5 shrink-0" />
+          <span>
+            The active AI provider does not support MCP tools — this worker will fail when MCPs are enabled.{' '}
+            Switch to <strong>Claude Code</strong> in Settings, or remove all MCPs from this worker.
           </span>
         </div>
       )}
