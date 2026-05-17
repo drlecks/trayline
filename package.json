@@ -50,6 +50,7 @@
     "keytar": "^7.9.0",
     "lucide-react": "^0.469.0",
     "node-cron": "^4.2.1",
+    "node-llama-cpp": "~3.18.1",
     "node-pty": "^1.1.0",
     "pnpm": "^11.1.2",
     "react-hook-form": "^7.53.0",
@@ -94,7 +95,9 @@
     "asarUnpack": [
       "**/node_modules/better-sqlite3/**",
       "**/node_modules/bindings/**",
-      "**/node_modules/node-pty/**"
+      "**/node_modules/node-pty/**",
+      "**/node_modules/node-llama-cpp/**",
+      "**/node_modules/@node-llama-cpp/**"
     ],
     "extraResources": [
       {
@@ -108,6 +111,10 @@
       {
         "from": "resources/example-project",
         "to": "example-project"
+      },
+      {
+        "from": "src/main/ai-terminals/local-models.json",
+        "to": "local-models.json"
       }
     ],
     "publish": [
