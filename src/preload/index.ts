@@ -107,7 +107,7 @@ const api = {
     get: (): Promise<UsageSnapshot> => ipcRenderer.invoke(IPC.usage.get),
   },
   adapters: {
-    list: (): Promise<{ id: string; displayName: string; kind: 'production' | 'mock'; installUrl: string | null }[]> =>
+    list: (): Promise<{ id: string; displayName: string; kind: 'production' | 'mock'; installUrl: string | null; description: string | null; supportsMcps: boolean }[]> =>
       ipcRenderer.invoke(IPC.adapters.list),
     checkProviderReady: (): Promise<ProviderReadyResult> =>
       ipcRenderer.invoke(IPC.adapters.checkProviderReady),

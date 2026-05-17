@@ -21,6 +21,27 @@ export default function SourceDetailPanel({ step }: SourceDetailPanelProps) {
   const [sourceState, setSourceState] = useState<SourceState | null>(null)
   const [runNowBusy, setRunNowBusy] = useState(false)
 
+  // Track whether the effective adapter supports MCPs.
+  const [adapterSupportsMcps, setAdapterSupportsMcps] = useState(true)
+  useEffect(() => {
+    let cancelled = false
+    async function check() {
+      const raw = step.raw as { mcps?: string[]; execution?: { adapter?: string } }
+      if (!raw.mcps?.length) { setAdapterSupportsMcps(true); return }
+      const [adapters, settings] = await Promise.all([
+        window.trayline!.adapters.list(),
+        window.trayline!.settings.get(),
+      ])
+      if (cancelled) return
+      const effectiveId = raw.execution?.adapter ?? settings.defaultAdapterId
+      const adapter = adapters.find((a) => a.id === effectiveId)
+      setAdapterSupportsMcps(adapter?.supportsMcps ?? true)
+    }
+    void check()
+    const off = window.trayline!.settings.onChange(() => { void check() })
+    return () => { cancelled = true; off() }
+  }, [step.id])
+
   const loadState = useCallback(async () => {
     if (!active || !workflow) return
     try {
@@ -142,6 +163,21 @@ export default function SourceDetailPanel({ step }: SourceDetailPanelProps) {
           ))}
         </div>
       </div>
+
+      {!adapterSupportsMcps && (
+        <div className="
+          flex items-start gap-2 px-6 py-2.5 shrink-0
+          bg-amber-50 dark:bg-amber-950/30
+          border-b border-amber-200/60 dark:border-amber-900/40
+          text-xs text-amber-900 dark:text-amber-300
+        ">
+          <AlertTriangle size={13} strokeWidth={1.75} className="mt-0.5 shrink-0" />
+          <span>
+            The active AI provider does not support MCP tools — this source step will fail when MCPs are enabled.{' '}
+            Switch to <strong>Claude Code</strong> in Settings, or remove all MCPs from this source.
+          </span>
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto">
         {tab === 'source' && active && workflow && (

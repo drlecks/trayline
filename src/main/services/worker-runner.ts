@@ -368,6 +368,19 @@ async function runInner(input: TriggerRunInput): Promise<TriggerRunResult> {
 
   const mcpIds = worker.mcps ?? []
 
+  // Pre-flight: reject before allocating the run if the adapter cannot use MCPs.
+  // This surfaces a clean error to the renderer rather than a confusing spawn failure.
+  if (mcpIds.length > 0) {
+    const earlyAdapterId = worker.execution?.adapter ?? settingsStore.get('defaultAdapterId') ?? 'claude-code'
+    const earlyAdapter = adapterRegistry.get(earlyAdapterId)
+    if (earlyAdapter && earlyAdapter.supportsMcps === false) {
+      throw new Error(
+        `${earlyAdapter.displayName} does not support MCP tools. ` +
+        `Remove the MCPs from this worker, or switch to Claude Code in Settings.`,
+      )
+    }
+  }
+
   // 1. Allocate run + write input.json, meta.json (status=running)
   const workerDir = projectService.paths.stepDir(project, workflow, stepId)
   const runId = await nextRunId(workerDir)
@@ -695,6 +708,18 @@ async function runBatchInner(input: TriggerBatchRunInput): Promise<TriggerRunRes
     sourceCards.push({ id: cardId, card })
   }
   if (sourceCards.length === 0) return { runId: 'noop' }
+
+  const batchMcpPreflightIds = worker.mcps ?? []
+  if (batchMcpPreflightIds.length > 0) {
+    const earlyAdapterId = worker.execution?.adapter ?? settingsStore.get('defaultAdapterId') ?? 'claude-code'
+    const earlyAdapter = adapterRegistry.get(earlyAdapterId)
+    if (earlyAdapter && earlyAdapter.supportsMcps === false) {
+      throw new Error(
+        `${earlyAdapter.displayName} does not support MCP tools. ` +
+        `Remove the MCPs from this worker, or switch to Claude Code in Settings.`,
+      )
+    }
+  }
 
   const batchData = { cards: sourceCards.map(({ id, card }) => ({ id, data: card.data })), count: sourceCards.length }
 
