@@ -902,6 +902,22 @@ async function runBatchInner(input: TriggerBatchRunInput): Promise<TriggerRunRes
 async function runNow(project: string, workflow: string, stepId: string): Promise<{ triggered: number }> {
   const wf = await readWorkflow(project, workflow)
   const worker = await readStepJson<WorkerStepJson>(project, workflow, stepId)
+
+  // Pre-flight: surface adapter incompatibility before any run is spawned.
+  // triggerRun/triggerBatchRun do the same check, but they swallow the error
+  // via .catch so the IPC caller never sees it. Check once here and reject.
+  const mcpIds = worker.mcps ?? []
+  if (mcpIds.length > 0) {
+    const adapterId = worker.execution?.adapter ?? settingsStore.get('defaultAdapterId') ?? 'claude-code'
+    const adapter = adapterRegistry.get(adapterId)
+    if (adapter && adapter.supportsMcps === false) {
+      throw new Error(
+        `${adapter.displayName} does not support MCP tools. ` +
+        `Remove the MCPs from this worker, or switch to Claude Code in Settings.`,
+      )
+    }
+  }
+
   const prevStepId = findPrevStep(wf, stepId)
   if (!prevStepId) return { triggered: 0 }
 

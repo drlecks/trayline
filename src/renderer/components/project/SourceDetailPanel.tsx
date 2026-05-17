@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from 'react'
-import { Rss, Play, Pause, RotateCcw, AlertTriangle, Trash2 } from 'lucide-react'
+import { Rss, Play, Pause, RotateCcw, AlertTriangle, Trash2, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -17,9 +17,11 @@ interface SourceDetailPanelProps {
 export default function SourceDetailPanel({ step }: SourceDetailPanelProps) {
   const active = useProjectStore((s) => s.active)
   const workflow = useProjectStore((s) => s.workflow)
+  const setScreen = useProjectStore((s) => s.setScreen)
   const [tab, setTab] = useState<Tab>('source')
   const [sourceState, setSourceState] = useState<SourceState | null>(null)
   const [runNowBusy, setRunNowBusy] = useState(false)
+  const [runTriggerError, setRunTriggerError] = useState<string | null>(null)
 
   // Track whether the effective adapter supports MCPs.
   const [adapterSupportsMcps, setAdapterSupportsMcps] = useState(true)
@@ -78,10 +80,13 @@ export default function SourceDetailPanel({ step }: SourceDetailPanelProps) {
   async function handleRunNow() {
     if (!active || !workflow) return
     setRunNowBusy(true)
+    setRunTriggerError(null)
     try {
       const ok = await useProviderGuard.getState().ensureReady()
       if (!ok) return
       await window.trayline.source.runNow(active.name, workflow.name, step.id)
+    } catch (err) {
+      setRunTriggerError(err instanceof Error ? err.message : String(err))
     } finally {
       setRunNowBusy(false)
     }
@@ -143,6 +148,24 @@ export default function SourceDetailPanel({ step }: SourceDetailPanelProps) {
             {sourceState.nextRunAt && !sourceState.paused && (
               <NextRunCountdown nextRunAt={sourceState.nextRunAt} />
             )}
+          </div>
+        )}
+
+        {runTriggerError && (
+          <div className="
+            flex items-start gap-2 mt-3 px-3 py-2.5 rounded-md
+            border border-red-200 dark:border-red-800/60
+            bg-red-50 dark:bg-red-950/30
+            text-xs text-red-800 dark:text-red-300
+          ">
+            <XCircle size={13} strokeWidth={1.75} className="mt-0.5 shrink-0 text-red-500" />
+            <span className="flex-1">{runTriggerError}</span>
+            <button
+              className="shrink-0 text-red-600 dark:text-red-400 hover:underline font-medium"
+              onClick={() => setScreen('settings')}
+            >
+              Go to Settings
+            </button>
           </div>
         )}
 

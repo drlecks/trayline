@@ -379,6 +379,19 @@ export function registerIpcHandlers(
   ipcMain.handle('source:run-now', async (_: unknown, project: string, workflow: string, stepId: string) => {
     const stepDir = projectService.paths.stepDir(project, workflow, stepId)
     const cfg = await fsService.readJson<SourceStepConfig>(join(stepDir, 'step.json'))
+
+    // Pre-flight: surface adapter incompatibility before allocating any run.
+    // source:run-now is fire-and-forget so errors inside runSource are swallowed;
+    // check here so the IPC call can reject cleanly.
+    const adapterId = cfg.execution?.adapter ?? settingsStore.get('defaultAdapterId') ?? 'claude-code'
+    const srcAdapter = adapterRegistry.get(adapterId)
+    if (srcAdapter && srcAdapter.supportsMcps === false) {
+      throw new Error(
+        `${srcAdapter.displayName} does not support source steps. ` +
+        `Source steps require an external AI agent to fetch data. Switch to Claude Code in Settings → AI Terminal.`,
+      )
+    }
+
     void sourceRunner.runSource({ project, workflow, stepId, stepConfig: cfg }).catch((e) => {
       // eslint-disable-next-line no-console
       console.error('[source:run-now] failed:', e)
