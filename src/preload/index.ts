@@ -23,6 +23,8 @@ import type {
   ImportSuccess,
   ProjectLiveStats,
   ProjectReadiness,
+  LocalModelEntry,
+  ModelDownloadProgress,
 } from '../shared/types'
 import type { MissingSkillsEntry } from '../shared/types'
 import type { Card, CardStatus, CardCounts } from '../shared/card'
@@ -107,7 +109,7 @@ const api = {
     get: (): Promise<UsageSnapshot> => ipcRenderer.invoke(IPC.usage.get),
   },
   adapters: {
-    list: (): Promise<{ id: string; displayName: string; kind: 'production' | 'mock'; installUrl: string | null; description: string | null; supportsMcps: boolean }[]> =>
+    list: (): Promise<{ id: string; displayName: string; kind: 'production' | 'mock'; installUrl: string | null; description: string | null; supportsMcps: boolean; requiresExternalInstall: boolean }[]> =>
       ipcRenderer.invoke(IPC.adapters.list),
     checkProviderReady: (): Promise<ProviderReadyResult> =>
       ipcRenderer.invoke(IPC.adapters.checkProviderReady),
@@ -320,6 +322,33 @@ const api = {
       const listener = (_e: unknown, payload: { projectName: string; workflowName: string; cardId: string }) => handler(payload)
       ipcRenderer.on(IPC.notification.navigate, listener)
       return () => ipcRenderer.off(IPC.notification.navigate, listener)
+    },
+  },
+  localModel: {
+    list: (): Promise<LocalModelEntry[]> =>
+      ipcRenderer.invoke(IPC.localModel.list),
+    download: (modelId: string): Promise<void> =>
+      ipcRenderer.invoke(IPC.localModel.download, modelId),
+    cancel: (modelId: string): Promise<void> =>
+      ipcRenderer.invoke(IPC.localModel.cancel, modelId),
+    delete: (modelId: string): Promise<void> =>
+      ipcRenderer.invoke(IPC.localModel.delete, modelId),
+    recheckAdapter: (): Promise<AdapterReadiness> =>
+      ipcRenderer.invoke(IPC.localModel.recheckAdapter),
+    onProgress: (handler: (p: ModelDownloadProgress) => void): (() => void) => {
+      const listener = (_e: unknown, p: ModelDownloadProgress) => handler(p)
+      ipcRenderer.on(IPC.localModel.onProgress, listener)
+      return () => ipcRenderer.off(IPC.localModel.onProgress, listener)
+    },
+    onDownloadComplete: (handler: (payload: { modelId: string }) => void): (() => void) => {
+      const listener = (_e: unknown, payload: { modelId: string }) => handler(payload)
+      ipcRenderer.on(IPC.localModel.onDownloadComplete, listener)
+      return () => ipcRenderer.off(IPC.localModel.onDownloadComplete, listener)
+    },
+    onDownloadError: (handler: (payload: { modelId: string; error: string }) => void): (() => void) => {
+      const listener = (_e: unknown, payload: { modelId: string; error: string }) => handler(payload)
+      ipcRenderer.on(IPC.localModel.onDownloadError, listener)
+      return () => ipcRenderer.off(IPC.localModel.onDownloadError, listener)
     },
   },
   platform: process.platform as NodeJS.Platform,
