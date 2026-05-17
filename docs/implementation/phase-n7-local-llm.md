@@ -217,7 +217,7 @@ Model files are stored at `{app.getPath('userData')}/trayline-models/<filename>`
 - [x] Add `node-llama-cpp` to `dependencies` in `package.json`
 - [x] Add `@electron/rebuild` to `devDependencies`
 - [x] Add `postinstall` script: `electron-rebuild -f -w node-llama-cpp`
-- [ ] Confirm pre-built binary loads in the Electron main process (smoke test: `const { getLlama } = require('node-llama-cpp')` without error)
+- [x] Confirm pre-built binary loads in the Electron main process (smoke test: `const { getLlama } = require('node-llama-cpp')` without error)
 
 ### 3. Shared types
 
@@ -398,7 +398,7 @@ The `supportsMcps` check in task 6 covers single-card runs (`runInner`), but `wo
     )
   }
   ```
-- [ ] The renderer's batch-run trigger handler also needs the same try/catch + inline error alert pattern as the single-run handler (task 6f).
+- [x] The renderer's batch-run trigger handler also needs the same try/catch + inline error alert pattern as the single-run handler (task 6f). (Covered by the existing `handleRunNow` catch in `WorkerDetailPanel` — batch and single runs share the same IPC call and catch block.)
 
 ### 9. Registry
 
@@ -434,41 +434,41 @@ The `supportsMcps` check in task 6 covers single-card runs (`runInner`), but `wo
 
 Full-window overlay shown when the user clicks "Download local model" on the `AdapterSetupScreen`.
 
-- [ ] **Idle state** (no active download):
+- [x] **Idle state** (no active download):
   - Title: "Download a local AI model"
   - Subtitle: "Pick a model to download. Trayline will use it to run your workflows — no internet required after this."
   - List of `LocalModelEntry` cards: label, description, size in MB, "Recommended" badge if flagged
   - Each card has a radio selector; the `recommended` model is pre-selected
   - "Download" button (primary) — disabled until a model is selected
   - "Cancel" text button — closes the modal without downloading
-- [ ] **Downloading state** (after "Download" is clicked):
+- [x] **Downloading state** (after "Download" is clicked):
   - Model name + "Downloading…" header
-  - Progress bar (`shadcn/ui Progress`) — percent from `onProgress` events
+  - Progress bar (inline Tailwind CSS — no shadcn Progress component in this project) — percent from `onProgress` events
   - "X.X MB of Y.Y MB" byte counter below the bar
   - "Cancel download" link — calls `localModel.cancel(modelId)` then resets to idle
   - Dismissal is blocked while downloading (no close button, no backdrop click)
-- [ ] **Complete state** (after `download-complete` event):
+- [x] **Complete state** (after `download-complete` event):
   - "Model ready" message with a checkmark
   - "Start using Trayline" button → calls `localModel.recheckAdapter()` → if `installed: true`, calls `onReady()` prop
-- [ ] **Error state**:
+- [x] **Error state**:
   - Error message from `download-error` event
   - "Try again" → resets to idle
-- [ ] Props: `open: boolean`, `onOpenChange: (v: boolean) => void`, `onReady: () => void`
+- [x] Props: `open: boolean`, `onOpenChange: (v: boolean) => void`, `onReady: () => void`
 
 ### 12. Updated `AdapterSetupScreen.tsx` and wizard suppression for local-llm
 
-- [ ] Detect `local-llm` adapter by `adapter.id` and render a variant card:
+- [x] Detect `local-llm` adapter by `adapter.id` and render a variant card:
   - **No install guide link** (no `installUrl` on local adapter)
   - Show a short description line below the adapter name explaining it runs offline
   - Show **"Download local model"** as the primary button
   - When clicked: opens `ModelDownloadModal` with `onReady={onReady}`
   - If readiness shows `installed: true` (model already downloaded on a return visit): render the same "Check again" / "Setup guide" buttons as other adapters
-- [ ] Keep existing Claude Code card rendering unchanged
-- [ ] Add a `description` field to adapter cards (sourced from adapter list IPC), show it in small muted text under the display name:
+- [x] Keep existing Claude Code card rendering unchanged
+- [x] Add a `description` field to adapter cards (sourced from adapter list IPC), show it in small muted text under the display name:
   - Claude Code: `"Cloud-powered — most capable. Requires external installation."`
   - Local AI: `"Runs entirely on your machine — no account or internet needed after setup."`
-- [ ] Import and render `ModelDownloadModal` at the bottom of the component
-- [ ] **Suppress `AdapterSetupWizard` for local-llm.** The existing wizard (built in N6.2) handles the `not_installed` blocker kind with install instructions and a `fixCommand`. It has no step for `model_not_downloaded`. Do not open the wizard for local-llm on any path — remove the "Setup guide" button from the local-llm adapter card entirely. The download modal is the wizard for local-llm.
+- [x] Import and render `ModelDownloadModal` at the bottom of the component
+- [x] **Suppress `AdapterSetupWizard` for local-llm.** The existing wizard (built in N6.2) handles the `not_installed` blocker kind with install instructions and a `fixCommand`. It has no step for `model_not_downloaded`. Do not open the wizard for local-llm on any path — remove the "Setup guide" button from the local-llm adapter card entirely. The download modal is the wizard for local-llm.
 
 ### 13. Adapter display metadata (IPC layer)
 
@@ -479,31 +479,31 @@ Full-window overlay shown when the user clicks "Download local model" on the `Ad
 
 After first-run, the user needs a way to manage downloaded models from Settings. The Settings → AI Terminal section already exists; add a "Local AI model" subsection beneath it.
 
-- [ ] **`src/renderer/components/settings/SettingsPanel.tsx`** (or equivalent) — when `local-llm` is a registered adapter, render a "Local AI model" subsection:
+- [x] **`src/renderer/components/settings/SettingsPanel.tsx`** (or equivalent) — when `local-llm` is a registered adapter, render a "Local AI model" subsection:
   - List of downloaded models with: name, size on disk, download date, and a **Delete** button (calls `localModel.delete(modelId)`, then refreshes the list and rechecks adapter readiness)
   - A **"Download another model"** link/button that opens the `ModelDownloadModal` (reusing the existing component, same flow as first-run but with `onReady` being a no-op since the gate is already dismissed)
   - If no model is downloaded: shows a prompt "No local model downloaded" with a "Download now" button
-- [ ] After a model is deleted, call `adapter.recheck('local-llm')` to update the adapter readiness state. If no models remain, the adapter becomes not-ready — the gate will show on next launch, but the current session continues (do not re-show the gate mid-session).
+- [x] After a model is deleted, call `adapter.recheck('local-llm')` to update the adapter readiness state. If no models remain, the adapter becomes not-ready — the gate will show on next launch, but the current session continues (do not re-show the gate mid-session).
 
 ### 15. Author service warning in workflow creation UI
 
 The audit flags that small local models may produce invalid or incomplete workflow plans. The `AuthorError` paths already handle parse failures gracefully, but the user should be warned *before* they try.
 
-- [ ] In the **"Describe your workflow"** UI (workflow author dialog/screen), when the active default adapter is `local-llm`, show a soft inline note below the description textarea:
+- [x] In the **"Describe your workflow"** UI (workflow author dialog/screen), when the active default adapter is `local-llm`, show a soft inline note below the description textarea:
   > **Using local AI model.** Workflow generation works best with Claude Code — local models may produce simpler or incomplete plans. You can edit the result after creation.
-- [ ] This is informational only — do not block the Generate button. The `AuthorError` paths handle failure gracefully.
+- [x] This is informational only — do not block the Generate button. The `AuthorError` paths handle failure gracefully.
 
 ### 17. Documentation & alignment audit
 
-- [ ] **`docs/tech-stack.md`** — add `node-llama-cpp` to Backend/System section; note that `@electron/rebuild` is required at build time; add `local-models.json` catalog reference
-- [ ] **`docs/features.md`** — describe the model download modal and local adapter card variant in the first-run gate section; add note about which worker types are local-compatible
-- [ ] **`docs/user-flows.md`** — add flow 6.17 "First Launch — Download Local Model" (idle → downloading → complete → app opens)
-- [ ] **`docs/app-description.md`** — update "AI agent" section to reflect that no external install is required when local model is used; update any language that implies Claude Code is the only option
-- [ ] **`docs/skills-and-mcps.md`** — add a note that MCPs are not available when using the local adapter; document the `supportsMcps` adapter flag
-- [ ] **`docs/data-model.md`** — no changes needed (card model is unchanged); verify nothing implies Claude Code exclusively
-- [ ] **`docs/design-principles.md`** — no changes expected; verify
-- [ ] **`docs/implementation/tasks.md`** — check off N7 on completion
-- [ ] Read through all docs listed above and flag any language that assumes Claude Code is the only AI option — update to say "AI adapter" or "Local AI / Claude Code" as appropriate
+- [x] **`docs/tech-stack.md`** — add `node-llama-cpp` to Backend/System section; note that `@electron/rebuild` is required at build time; add `local-models.json` catalog reference
+- [x] **`docs/features.md`** — describe the model download modal and local adapter card variant in the first-run gate section; add note about which worker types are local-compatible
+- [x] **`docs/user-flows.md`** — add flow 6.17 "First Launch — Download Local Model" (idle → downloading → complete → app opens)
+- [x] **`docs/app-description.md`** — update "AI agent" section to reflect that no external install is required when local model is used; update any language that implies Claude Code is the only option
+- [x] **`docs/skills-and-mcps.md`** — add a note that MCPs are not available when using the local adapter; document the `supportsMcps` adapter flag
+- [x] **`docs/data-model.md`** — no changes needed (card model is unchanged); verify nothing implies Claude Code exclusively
+- [x] **`docs/design-principles.md`** — no changes expected; verify
+- [ ] **`docs/implementation/tasks.md`** — check off N7 on completion (done after merge to develop)
+- [x] Read through all docs listed above and flag any language that assumes Claude Code is the only AI option — update to say "AI adapter" or "Local AI / Claude Code" as appropriate
 
 ---
 
