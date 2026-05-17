@@ -42,10 +42,19 @@ export default function WorkflowAuthorScreen() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<{ message: string; raw?: string } | null>(null)
   const [postGenOutcome, setPostGenOutcome] = useState<ProjectCreateSuccess | null>(null)
+  const [isLocalLlm, setIsLocalLlm] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
     textareaRef.current?.focus()
+  }, [])
+
+  useEffect(() => {
+    void (async () => {
+      const settings = await window.trayline.settings.get()
+      setIsLocalLlm(settings.defaultAdapterId === 'local-llm')
+    })()
+    return window.trayline.settings.onChange((s) => setIsLocalLlm(s.defaultAdapterId === 'local-llm'))
   }, [])
 
   // Clear regenerateOf when the user navigates away
@@ -119,6 +128,14 @@ export default function WorkflowAuthorScreen() {
           resize-y
         "
       />
+
+      {isLocalLlm && (
+        <p className="w-full text-[11px] text-neutral-500 dark:text-neutral-400 mb-3 -mt-2">
+          <strong className="text-neutral-600 dark:text-neutral-300">Using local AI model.</strong>{' '}
+          Workflow generation works best with Claude Code — local models may produce simpler or incomplete plans.
+          You can edit the result after creation.
+        </p>
+      )}
 
       <div className="w-full mb-6">
         <div className="text-[11px] uppercase tracking-wider text-neutral-400 mb-2">
