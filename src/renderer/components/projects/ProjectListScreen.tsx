@@ -1,10 +1,9 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { AlertTriangle, Plus, Trash2, Upload, Download, PauseCircle, PlayCircle } from 'lucide-react'
 import { useProjectStore } from '@/stores/project-store'
-import type { ProjectMeta, ProjectStatus, ImportSuccess, ImportNeedsReview, ProjectLiveStats, ProjectReadiness } from '../../../shared/types'
+import type { ProjectMeta, ProjectStatus, ImportNeedsReview, ProjectLiveStats, ProjectReadiness } from '../../../shared/types'
 import GlobalActivityBar from './GlobalActivityBar'
 import ExportProjectDialog from './ExportProjectDialog'
-import ImportMissingSkillsDialog from './ImportMissingSkillsDialog'
 import ImportSecurityAuditDialog from './ImportSecurityAuditDialog'
 import iconUrl from '../../../../resources/icon-128.png'
 
@@ -29,13 +28,11 @@ interface PillData {
 
 export default function ProjectListScreen() {
   const all = useProjectStore((s) => s.all)
-  const projectsWithMissingSkills = useProjectStore((s) => s.projectsWithMissingSkills)
   const setActive = useProjectStore((s) => s.setActive)
   const setScreen = useProjectStore((s) => s.setScreen)
   const refreshProjects = useProjectStore((s) => s.refreshProjects)
 
   const [exportTarget, setExportTarget] = useState<ProjectMeta | null>(null)
-  const [importResult, setImportResult] = useState<ImportSuccess | null>(null)
   const [importAudit, setImportAudit] = useState<ImportNeedsReview | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
   const [importing, setImporting] = useState(false)
@@ -164,8 +161,6 @@ export default function ProjectListScreen() {
       await refreshProjects()
       if (result.ok === 'needs_review') {
         setImportAudit(result)
-      } else if (result.missingSkills.length > 0 || result.missingMcps.length > 0) {
-        setImportResult(result)
       }
     } catch (e) {
       setImportError(e instanceof Error ? e.message : String(e))
@@ -175,22 +170,14 @@ export default function ProjectListScreen() {
   }
 
   async function handleAuditCommit(token: string) {
-    const committed = await window.trayline.project.importCommit(token)
+    await window.trayline.project.importCommit(token)
     setImportAudit(null)
     await refreshProjects()
-    if (committed.missingSkills.length > 0 || committed.missingMcps.length > 0) {
-      setImportResult(committed)
-    }
   }
 
   function handleAuditAbort(token: string) {
     void window.trayline.project.importAbort(token)
     setImportAudit(null)
-  }
-
-  function handleMissingSkillsDone() {
-    setImportResult(null)
-    void refreshProjects()
   }
 
   const anyActive = all.some((p) => pillData[p.name]?.mounted ?? p.status === 'active')
@@ -358,12 +345,6 @@ export default function ProjectListScreen() {
                     )}
                   </div>
                   <div className="shrink-0 flex items-center gap-2">
-                    {projectsWithMissingSkills.has(p.name) && (
-                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
-                        <AlertTriangle size={10} strokeWidth={2} />
-                        Missing skills
-                      </span>
-                    )}
                     <span className="text-xs text-neutral-400 dark:text-neutral-500">
                       {formatRelative(p.updated_at)}
                     </span>
@@ -427,16 +408,6 @@ export default function ProjectListScreen() {
         />
       )}
 
-      {importResult && (
-        <ImportMissingSkillsDialog
-          projectName={importResult.projectName}
-          missingSkills={importResult.missingSkills}
-          missingMcps={importResult.missingMcps}
-          open={!!importResult}
-          onOpenChange={(o) => { if (!o) setImportResult(null) }}
-          onDone={handleMissingSkillsDone}
-        />
-      )}
     </div>
   )
 }

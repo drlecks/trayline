@@ -1,10 +1,10 @@
-// Runs the `trayline-author` system skill against a free-text user description
+// Runs the workflow author prompt against a free-text user description
 // and returns a parsed WorkflowPlan.
 
 import { join } from 'path'
 import fs from 'fs/promises'
 import os from 'os'
-import { Paths } from './fs-service'
+import { app } from 'electron'
 import { adapterRegistry } from '../ai-terminals/registry'
 import { settingsStore } from './settings-store'
 import type { WorkflowPlan } from '../../shared/workflow-plan'
@@ -29,11 +29,17 @@ export interface AuthorError {
 
 export type AuthorOutcome = AuthorResult | AuthorError
 
-async function loadSystemSkill(skillId: string): Promise<{ id: string; content: string } | null> {
-  const md = join(Paths.systemSkills, skillId, 'skill.md')
+function getAuthorPromptPath(): string {
+  // Packaged: app.getAppPath() is the asar root → ../resources is the electron resources dir.
+  // Dev/Test: app.getAppPath() is the project root → resources/ is directly inside.
+  return app.isPackaged
+    ? join(app.getAppPath(), '..', 'resources', 'author-prompt.md')
+    : join(app.getAppPath(), 'resources', 'author-prompt.md')
+}
+
+async function loadAuthorPrompt(): Promise<string | null> {
   try {
-    const content = await fs.readFile(md, 'utf-8')
-    return { id: skillId, content }
+    return await fs.readFile(getAuthorPromptPath(), 'utf-8')
   } catch {
     return null
   }
@@ -130,29 +136,26 @@ async function generate(description: string, opts: { adapterId?: string } = {}):
     }
   }
 
-  const skill = await loadSystemSkill('trayline-author')
-  if (!skill) {
+  const authorPrompt = await loadAuthorPrompt()
+  if (!authorPrompt) {
     return {
       ok: false,
       reason: 'unknown',
-      message: 'trayline-author system skill is missing. Try restarting the app.',
+      message: 'Author prompt file is missing. Try restarting the app.',
     }
   }
 
-  // Prepare a temp working dir + minimal process.md. The skill body carries
-  // the full master prompt, including the output schema. process.md just hands
-  // the user's description to the agent as the input payload.
+  // Write the author prompt as the process file. The card data carries the
+  // user's description and is substituted via {{card.data}} at spawn time.
   const workingDir = await fs.mkdtemp(join(os.tmpdir(), 'trayline-author-'))
   const processFile = join(workingDir, 'process.md')
-  await fs.writeFile(processFile, '{{card.data}}\n', 'utf-8')
+  await fs.writeFile(processFile, authorPrompt + '\n\n{{card.data}}\n', 'utf-8')
 
   try {
     const session = await adapter.spawn({
       processFile,
       cardData: { description },
-      skills: [skill],
       contextPacks: [],
-      mcps: [],
       workingDir,
       timeout: 120_000,
     })

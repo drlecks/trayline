@@ -56,17 +56,15 @@ Clicking an example fills the textbox so the user can edit before submitting.
 **Local AI model note:** When the active adapter is `local-llm`, a soft warning appears below the textarea: *"Using local AI model. Workflow generation works best with Claude Code — local models may produce simpler or incomplete plans. You can edit the result after creation."* The user can still proceed.
 
 **On submit:**
-1. A loading screen with a soft animated circle and rotating status messages: *"Imagining your workflow..."* / *"Sketching out the trays..."* / *"Wiring up the workers..."* / *"Picking the right skills..."* / *"Almost there..."*
-2. Trayline runs the system skill `trayline-author` against the user's description via the AI Terminal Adapter.
-3. `trayline-author` outputs a structured JSON workflow plan: ordered trays and workers, each with name, description, tray schemas, recommended skills, MCPs, and a draft `process.md` per worker.
-4. The system skill `trayline-scaffold` writes that plan to disk — creating the project folder, all step folders, JSON files, and process files from templates.
+1. A loading screen with a soft animated circle and rotating status messages: *"Imagining your workflow..."* / *"Sketching out the trays..."* / *"Wiring up the workers..."* / *"Almost there..."*
+2. Trayline runs the author prompt (`resources/author-prompt.md`) against the user's description via the AI Terminal Adapter.
+3. The author outputs a structured JSON workflow plan: ordered steps with names, descriptions, tray schemas, and a draft `process.md` per worker.
+4. The scaffold service writes that plan to disk — creating the project folder, all step folders, JSON files, and process files from templates.
 5. Loading screen fades out. User lands in the project view with the workflow already on the left rail.
-   - If no MCPs need setup: banner says *"Here's a starting point for you. Edit anything you want."*
-   - If MCPs need setup: banner says *"Here's a starting point. To run it, set up Gmail and Calendar — click any worker with a ⚠ to start."*
+   - If the plan includes a Source step: banner tells the user to open it and write their fetch instructions.
+   - Otherwise: banner says *"Here's a starting point for you. Edit anything you want."*
 
 **Regenerate:** A **Regenerate** button at the top of the new project lets the user refine their description and try again. The previous version is archived to `<project>/.history/<timestamp>/`.
-
-**Why two system skills, not one:** authoring (creative) and scaffolding (mechanical) are separate concerns. They can be evolved independently, and power users can override the master prompt in `trayline-author/skill.md` to bias the author toward their domain.
 
 ---
 
@@ -74,7 +72,7 @@ Clicking an example fills the textbox so the user can edit before submitting.
 
 1. Click **+ Add step** at the bottom of the left rail
 2. Small modal: **Tray** or **Worker**
-3. Inline form: name, description, and (for trays) schema builder, (for workers) skill picker + `process.md` editor
+3. Inline form: name, description, and (for trays) schema builder, (for workers) `process.md` editor
 4. New step appears at the bottom of the rail
 5. Drag-to-reorder: drag handle on the left of each step card; releasing renumbers folders on disk
 
@@ -127,20 +125,10 @@ Clicking an example fills the textbox so the user can edit before submitting.
 
 ---
 
-## 6.8 Installing a Skill
-
-1. Top bar → **Skills**
-2. Two tabs: **Installed** and **+ Add skill**
-3. **Browse catalog** tab: fetches JSON index from GitHub URL (configurable), search box, list with **Install** per skill
-4. **From URL** tab: paste a GitHub repo, zip URL, or raw `skill.json` URL — Trayline validates before accepting (see `docs/skills-and-mcps.md`)
-5. Skill is installed to `~/Documents/Trayline/skills/` and available in any worker's skill picker
-
----
-
 ## 6.9 Importing / Exporting a Project
 
-- **Export**: project menu → **Export as zip**. Bundles the project folder. Includes a `manifest.json` listing required skills and MCPs. **Export without runs** option available.
-- **Import**: file menu → **Import project**. Opens zip, extracts to `projects/`. If skills or MCPs in `manifest.json` aren't installed, shows a dialog: "This project needs 2 skills and 1 MCP you don't have. Install them now?" — installs and chains setup wizards for any MCPs that need credentials.
+- **Export**: project menu → **Export as zip**. Bundles the project folder. Includes a `manifest.json` with version and timestamp. **Export without runs** option available.
+- **Import**: file menu → **Import project**. Opens zip, extracts to `projects/`. If the project contains suspicious content, a security review dialog is shown before committing.
 
 ---
 
@@ -150,18 +138,6 @@ Clicking an example fills the textbox so the user can edit before submitting.
 - Shows every card currently sitting in a manual-approval tray
 - Grouped by project, sorted by oldest first
 - One-click jump to the card
-
----
-
-## 6.11 Setting Up an MCP
-
-1. Top bar → **MCPs**
-2. Installed MCPs shown with status badges (✓ Ready / ⚠ Setup needed / ⚠ Auth expired / ✗ Error / ⏸ Disabled)
-3. Available (not installed) MCPs from the curated catalog shown below
-4. **Install** → chains to **Setup Wizard** (linear next/back/cancel modal)
-5. Wizard steps are derived from `mcp.json` fields: `instructions` → info screen; each `credentials_schema` entry → one masked input (`api_key`) or plain input (`text_field` / `select`); `has_test: true` → connection test screen at the end. No OAuth flows — all credentials are simple key/value pairs.
-6. Credentials stored in OS keychain via keytar — never in plain files
-7. If a worker has an MCP marked but not Ready, the rail card shows a ⚠ triangle with tooltip before the user can run it
 
 ---
 

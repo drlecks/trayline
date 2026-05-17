@@ -70,8 +70,8 @@ const JSON_SYSTEM_PREFIX =
 async function buildFullPrompt(opts: SpawnOptions): Promise<string> {
   const processBody = await fs.readFile(opts.processFile, 'utf-8')
   const parts: string[] = [JSON_SYSTEM_PREFIX]
-  for (const skill of opts.skills) {
-    parts.push(`## Skill: ${skill.id}\n\n${skill.content}`)
+  if (opts.prefetchedData) {
+    parts.push(`## Fetched data\n\n${opts.prefetchedData}`)
   }
   if (opts.contextPacks.length > 0) {
     parts.push(`## Context\n\n${opts.contextPacks.join('\n\n')}`)
@@ -180,8 +180,6 @@ export const localLlmAdapter: AITerminalAdapter = {
   displayName: 'Local AI (no account needed)',
   kind: 'production',
   description: 'Runs entirely on your device — no internet, no API key required.',
-  supportsMcps: false,
-
   async checkReadiness(): Promise<AdapterReadiness> {
     const models = await localModelService.listWithStatus()
     const downloaded = models.filter((m) => m.downloaded)

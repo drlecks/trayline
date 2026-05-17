@@ -1,19 +1,20 @@
-// Materializes a JSON workflow plan to disk under ~/Documents/Trayline/projects/<name>.
-// This is the "trayline-scaffold" system skill made concrete in code — the
-// system skill's skill.md documents the contract; this file implements it.
-
+import { app } from 'electron'
 import { join } from 'path'
 import fs from 'fs/promises'
 import { Paths } from './fs-service'
-import { systemSkillsService } from './system-skills-service'
 import type { WorkflowPlan, PlanStep } from '../../shared/workflow-plan'
 import type { ProjectMeta } from '../../shared/types'
 
-const TEMPLATE_DIR_REL = join('trayline-scaffold', 'templates')
+function templatePath(name: string): string {
+  // Packaged: app.getAppPath() is the asar root → ../resources is the electron resources dir.
+  // Dev/Test: app.getAppPath() is the project root → resources/ is directly inside.
+  return app.isPackaged
+    ? join(app.getAppPath(), '..', 'resources', 'templates', name)
+    : join(app.getAppPath(), 'resources', 'templates', name)
+}
 
 async function readTemplate(name: string): Promise<string> {
-  const path = join(Paths.systemSkills, TEMPLATE_DIR_REL, name)
-  return fs.readFile(path, 'utf-8')
+  return fs.readFile(templatePath(name), 'utf-8')
 }
 
 async function pathExists(p: string): Promise<boolean> {
@@ -49,7 +50,6 @@ interface ScaffoldOptions {
 interface ScaffoldResult {
   project: ProjectMeta
   projectPath: string
-  unconfiguredMcps: string[]
   hasSourceStep: boolean
 }
 
@@ -67,9 +67,6 @@ async function scaffold(plan: WorkflowPlan, options: ScaffoldOptions = {}): Prom
       await fs.rm(projectPath, { recursive: true, force: true })
     }
   }
-
-  // Ensure system skills are available before we start (templates live there)
-  await systemSkillsService.ensureInstalled()
 
   // ── 1. Project root ─────────────────────────────────────────────────────────
   await fs.mkdir(projectPath, { recursive: true })
@@ -108,7 +105,6 @@ async function scaffold(plan: WorkflowPlan, options: ScaffoldOptions = {}): Prom
   const workflowTemplate = await readTemplate('workflow.json')
 
   const stepIds: string[] = []
-  const unconfiguredMcps = new Set<string>()
   let hasSourceStep = false
 
   for (const step of plan.workflow.steps) {
@@ -168,8 +164,6 @@ async function scaffold(plan: WorkflowPlan, options: ScaffoldOptions = {}): Prom
         description: step.description ?? '',
         icon: defaultIcon(step),
       }))
-      json.skills = step.skills ?? []
-      json.mcps = step.mcps ?? []
       json.context_packs = step.context_packs ?? []
       if (step.batch_mode) {
         json.batch_mode = true
@@ -177,9 +171,6 @@ async function scaffold(plan: WorkflowPlan, options: ScaffoldOptions = {}): Prom
         // Batch workers default to manual trigger
         if (json.trigger?.mode === 'on_ready') json.trigger.mode = 'manual'
       }
-
-      // Track MCPs the user has not yet installed
-      for (const mcp of json.mcps as string[]) unconfiguredMcps.add(mcp)
 
       await writeFileAtomic(join(stepPath, 'step.json'), JSON.stringify(json, null, 2))
       await writeFileAtomic(
@@ -229,7 +220,6 @@ async function scaffold(plan: WorkflowPlan, options: ScaffoldOptions = {}): Prom
   return {
     project: projectMeta,
     projectPath,
-    unconfiguredMcps: [...unconfiguredMcps],
     hasSourceStep,
   }
 }

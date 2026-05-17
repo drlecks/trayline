@@ -3,7 +3,6 @@
   "kind": "worker",
   "name": "Summarize & Tag",
   "description": "Reads each feedback card and adds a one-sentence summary and a sentiment tag.",
-  "skills": [],
   "trigger": {
     "mode": "on_ready"
   }
