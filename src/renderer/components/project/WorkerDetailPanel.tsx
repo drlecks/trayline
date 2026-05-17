@@ -30,6 +30,27 @@ export default function WorkerDetailPanel({ step }: WorkerDetailPanelProps) {
   const [runNowBusy, setRunNowBusy] = useState(false)
   const [runNowFeedback, setRunNowFeedback] = useState<string | null>(null)
 
+  // Track whether the effective adapter supports MCPs — shown as a banner when false.
+  const [adapterSupportsMcps, setAdapterSupportsMcps] = useState(true)
+  useEffect(() => {
+    let cancelled = false
+    async function check() {
+      const raw = step.raw as { mcps?: string[]; execution?: { adapter?: string } }
+      if (!raw.mcps?.length) { setAdapterSupportsMcps(true); return }
+      const [adapters, settings] = await Promise.all([
+        window.trayline!.adapters.list(),
+        window.trayline!.settings.get(),
+      ])
+      if (cancelled) return
+      const effectiveId = raw.execution?.adapter ?? settings.defaultAdapterId
+      const adapter = adapters.find((a) => a.id === effectiveId)
+      setAdapterSupportsMcps(adapter?.supportsMcps ?? true)
+    }
+    void check()
+    const off = window.trayline!.settings.onChange(() => { void check() })
+    return () => { cancelled = true; off() }
+  }, [step.id])
+
   const status = useLatestRunStatus(step.id)
 
   async function handleRunNow() {
@@ -104,6 +125,21 @@ export default function WorkerDetailPanel({ step }: WorkerDetailPanelProps) {
           <span>
             Missing skill{missingSkillsByStep[step.id].length > 1 ? 's' : ''}:{' '}
             <strong>{missingSkillsByStep[step.id].join(', ')}</strong>. Install them in the Skills screen before running this worker.
+          </span>
+        </div>
+      )}
+
+      {!adapterSupportsMcps && (
+        <div className="
+          flex items-start gap-2 px-6 py-2.5 shrink-0
+          bg-amber-50 dark:bg-amber-950/30
+          border-b border-amber-200/60 dark:border-amber-900/40
+          text-xs text-amber-900 dark:text-amber-300
+        ">
+          <AlertTriangle size={13} strokeWidth={1.75} className="mt-0.5 shrink-0" />
+          <span>
+            The active AI provider does not support MCP tools — this worker will fail when MCPs are enabled.{' '}
+            Switch to <strong>Claude Code</strong> in Settings, or remove all MCPs from this worker.
           </span>
         </div>
       )}
