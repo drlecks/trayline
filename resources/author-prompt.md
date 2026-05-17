@@ -87,7 +87,7 @@ You MUST output a single JSON object matching this schema, and nothing else:
    { "trayline_error": { "code": "<short_snake_case>", "message": "<one-line explanation>" } }
    ```
 
-   The worker contract skill is injected automatically at runtime — process.md just needs to remind the worker to *use* it on failure.
+   The worker contract is part of the runtime prompt — process.md just needs to remind the worker to *use* it on failure.
 
 8. **source.md should specify the output format and the unique ID field.** Tell the AI exactly what to fetch, what JSON fields to include, and which field uniquely identifies each item. Always include: "Return an empty array `[]` if there is nothing to fetch."
 

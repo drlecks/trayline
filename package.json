@@ -101,8 +101,12 @@
     ],
     "extraResources": [
       {
-        "from": "resources/system-skills",
-        "to": "system-skills"
+        "from": "resources/templates",
+        "to": "templates"
+      },
+      {
+        "from": "resources/author-prompt.md",
+        "to": "author-prompt.md"
       },
       {
         "from": "resources/icon-fill-128.png",
