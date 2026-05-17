@@ -53,6 +53,8 @@ The magic-moment first impression. The user lands on a clean centered screen:
 
 Clicking an example fills the textbox so the user can edit before submitting.
 
+**Local AI model note:** When the active adapter is `local-llm`, a soft warning appears below the textarea: *"Using local AI model. Workflow generation works best with Claude Code — local models may produce simpler or incomplete plans. You can edit the result after creation."* The user can still proceed.
+
 **On submit:**
 1. A loading screen with a soft animated circle and rotating status messages: *"Imagining your workflow..."* / *"Sketching out the trays..."* / *"Wiring up the workers..."* / *"Picking the right skills..."* / *"Almost there..."*
 2. Trayline runs the system skill `trayline-author` against the user's description via the AI Terminal Adapter.
@@ -190,10 +192,15 @@ App opens → adapter:check-readiness
   └── no production adapter has installed: true
         └── AdapterSetupScreen (full window, no rail or header)
               ├── One card per registered production adapter
-              │     • install command in a copyable code block
-              │     • "Open install guide" link
-              │     • [Check again] → calls adapter:recheck inline
-              │     • [Setup guide] → opens AdapterSetupWizard modal
+              │     CLI adapters (e.g. Claude Code):
+              │       • install command in a copyable code block
+              │       • "Open install guide" link
+              │       • [Check again] → calls adapter:recheck inline
+              │       • [Setup guide] → opens AdapterSetupWizard modal
+              │     local-llm adapter:
+              │       • no install guide or setup guide button
+              │       • [Download local model] → opens ModelDownloadModal (see 6.17)
+              │       • [Check again] → shown instead once a model is downloaded
               └── When any adapter becomes installed → onReady() → normal routing
 ```
 
@@ -268,3 +275,34 @@ Triggered automatically by the cron scheduler, or manually via **Run now**:
 **On crash mid-run:**
 - If the app crashes after AI output but before `seen-ids.json` is written, the `seen-ids.json.tmp` file is the signal — on next launch, if `.tmp` exists, the runner discards it and replays using the last good `seen-ids.json`
 - Cards already written to `ready/` in a crashed run may be duplicates on the next run; this is acceptable (at-least-once delivery) and noted in the audit log
+
+---
+
+## 6.17 First Launch — Download Local Model
+
+When the user selects the **local-llm** adapter from the `AdapterSetupScreen` and no model has been downloaded yet:
+
+```
+AdapterSetupScreen
+  └── local-llm card → [Download local model]
+        └── ModelDownloadModal opens (idle state)
+              ├── Model list (radio buttons): label, description, size, Recommended badge
+              ├── User selects a model and clicks [Download]
+              │     └── State → downloading
+              │           ├── Progress bar: downloaded / total bytes, percent
+              │           └── [Cancel download] link
+              │                 └── cancels in-flight HTTPS stream → state → idle
+              ├── Download completes (onDownloadComplete event)
+              │     └── State → complete
+              │           └── [Start using Trayline] → localModel.recheckAdapter()
+              │                 └── AdapterReadiness.installed = true → onReady() → normal routing
+              └── Download fails (onDownloadError event)
+                    └── State → error
+                          └── [Try again] → state → idle
+```
+
+**Key constraints:**
+- The dialog cannot be dismissed (Escape or outside-click) while a download is in progress; the X button is visually suppressed.
+- Downloads stream via HTTPS and write to a `.part` file, renamed atomically to the final `.gguf` path only on completion.
+- On app startup, `localModelService.cleanupStaleParts()` removes any `.part` files left by a previous crash.
+- The user can also open the download modal from **Settings → Local AI model → Download a model now** at any time after first launch.

@@ -33,7 +33,7 @@ Everything lives on disk as folders and JSON files. A whole project is a zip you
 | **Context Pack** | Markdown files with project knowledge injected into worker prompts |
 | **Run** | One execution of a worker on one card |
 | **Audit Log** | The append-only history of everything that happened |
-| **AI Terminal Adapter** | The interface that wraps a CLI agent (Claude Code, Open Code, etc.) so workers don't depend on a specific tool |
+| **AI Terminal Adapter** | The interface that wraps an AI agent (Claude Code CLI, local GGUF model, Open Code, etc.) so workers don't depend on a specific tool |
 | **Workflow Author** | The "describe what you want" screen that generates a starting workflow |
 | **Credential Set** | The credentials (OAuth tokens, API keys, etc.) that an MCP needs to function. Stored in the OS keychain, never in plain JSON. |
 | **Setup Wizard** | The guided step-by-step flow that an MCP defines for configuration (e.g. open the browser for OAuth, paste an API key). |
@@ -57,7 +57,7 @@ Trayline is **not** for programmers. It is for people who manage real processes 
 - **Linear-only = approachable.** Branching graphs scare people. A stack of steps is something everyone has built (Trello columns, email rules, etc.).
 - **Sources + trays + workers = one mental model.** It's not "nodes and connections", it's "data comes in, it waits, a thing happens, it waits again." Sources handle automatic ingestion with built-in memory so the same item is never processed twice. That maps to how offices actually work.
 - **Terminal is hidden but available.** Power users get full debug access. Everyone else never sees it.
-- **Offline = no pricing dread.** The app itself costs nothing to run. The only API costs come from whichever CLI agent the user points it at, and they manage that themselves.
+- **Offline = no pricing dread.** The app itself costs nothing to run. Users can point Trayline at whichever AI they prefer — Claude Code (requires a subscription, best quality), or a downloaded local GGUF model that runs entirely on-device with no ongoing cost or internet requirement.
 
 ---
 
