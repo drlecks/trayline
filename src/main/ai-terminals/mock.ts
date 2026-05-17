@@ -95,6 +95,7 @@ export const mockAdapter: AITerminalAdapter = {
   id: 'mock',
   displayName: 'Mock (test)',
   kind: 'mock',
+  supportsMcps: true,
   async checkReadiness(): Promise<AdapterReadiness> {
     const base: AdapterReadiness = {
       adapterId: 'mock',

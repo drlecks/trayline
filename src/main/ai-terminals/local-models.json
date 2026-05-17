@@ -1,0 +1,35 @@
+[
+  {
+    "id": "qwen2.5-1.5b",
+    "label": "Qwen 2.5 1.5B",
+    "description": "Fastest local model — runs on any machine. Good for simple, focused tasks.",
+    "filename": "Qwen2.5-1.5B-Instruct-Q4_K_M.gguf",
+    "url": "https://huggingface.co/bartowski/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/Qwen2.5-1.5B-Instruct-Q4_K_M.gguf",
+    "sizeMb": 986,
+    "sizeBytes": 1034000000,
+    "recommended": true,
+    "minRamMb": 2048
+  },
+  {
+    "id": "qwen2.5-3b",
+    "label": "Qwen 2.5 3B",
+    "description": "Balanced quality and speed — handles most workflow tasks well.",
+    "filename": "Qwen2.5-3B-Instruct-Q4_K_M.gguf",
+    "url": "https://huggingface.co/bartowski/Qwen2.5-3B-Instruct-GGUF/resolve/main/Qwen2.5-3B-Instruct-Q4_K_M.gguf",
+    "sizeMb": 1920,
+    "sizeBytes": 2013000000,
+    "recommended": false,
+    "minRamMb": 4096
+  },
+  {
+    "id": "phi-4-mini",
+    "label": "Phi-4 Mini (Microsoft)",
+    "description": "Strongest reasoning in a small package — best for complex multi-step instructions.",
+    "filename": "Phi-4-mini-instruct-Q4_K_M.gguf",
+    "url": "https://huggingface.co/bartowski/phi-4-mini-instruct-GGUF/resolve/main/phi-4-mini-instruct-Q4_K_M.gguf",
+    "sizeMb": 2480,
+    "sizeBytes": 2600000000,
+    "recommended": false,
+    "minRamMb": 6144
+  }
+]
