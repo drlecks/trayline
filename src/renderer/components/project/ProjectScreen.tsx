@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Inbox, Cpu, AlertTriangle, RefreshCw, AlertCircle, Plus, FileText, ChevronDown, ChevronRight, Rss, Layers } from 'lucide-react'
+import { Inbox, Cpu, AlertTriangle, RefreshCw, Plus, FileText, ChevronDown, ChevronRight, Rss, Layers } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useProjectStore } from '@/stores/project-store'
 import AddTrayDialog from './AddTrayDialog'
@@ -20,9 +20,6 @@ export default function ProjectScreen() {
   const steps = useProjectStore((s) => s.steps)
   const selectedStepId = useProjectStore((s) => s.selectedStepId)
   const setSelectedStepId = useProjectStore((s) => s.setSelectedStepId)
-  const unconfiguredMcps = useProjectStore((s) => s.unconfiguredMcps)
-  const missingSkillsByStep = useProjectStore((s) => s.missingSkillsByStep)
-  const unconfiguredMcpsByStep = useProjectStore((s) => s.unconfiguredMcpsByStep)
   const setScreen = useProjectStore((s) => s.setScreen)
   const setRegenerateOf = useProjectStore((s) => s.setRegenerateOf)
   const refreshSteps = useProjectStore((s) => s.refreshSteps)
@@ -45,21 +42,6 @@ export default function ProjectScreen() {
 
   return (
     <div className="flex flex-col w-full h-full">
-      {unconfiguredMcps.length > 0 && (
-        <div className="
-          flex items-center gap-2 px-6 py-2.5 shrink-0
-          bg-amber-50 dark:bg-amber-950/30
-          border-b border-amber-200/60 dark:border-amber-900/40
-          text-xs text-amber-900 dark:text-amber-300
-        ">
-          <AlertCircle size={13} strokeWidth={1.75} />
-          <span>
-            Here's a starting point. To run it, set up{' '}
-            <strong>{unconfiguredMcps.join(', ')}</strong> — click any worker with a ⚠ to start.
-          </span>
-        </div>
-      )}
-
       <div className="flex flex-1 min-h-0">
         {/* Left rail */}
         <aside data-tour="left-rail" className="w-72 shrink-0 border-r border-black/[0.06] dark:border-white/[0.06] overflow-y-auto py-5 px-3 flex flex-col">
@@ -76,8 +58,6 @@ export default function ProjectScreen() {
                 key={step.id}
                 step={step}
                 selected={step.id === selectedStepId && !showContextEditor}
-                missingSkills={missingSkillsByStep[step.id] ?? []}
-                unconfiguredMcps={unconfiguredMcpsByStep[step.id] ?? []}
                 onClick={() => { setSelectedStepId(step.id); setShowContextEditor(false) }}
               />
             ))}
@@ -267,8 +247,6 @@ function ErrorTraySection({
           <StepCard
             step={step}
             selected={selected}
-            missingSkills={[]}
-            unconfiguredMcps={[]}
             onClick={onSelect}
           />
         </div>
@@ -277,7 +255,7 @@ function ErrorTraySection({
   )
 }
 
-function StepCard({ step, selected, missingSkills, unconfiguredMcps, onClick }: { step: StepMeta; selected: boolean; missingSkills: string[]; unconfiguredMcps: string[]; onClick: () => void }) {
+function StepCard({ step, selected, onClick }: { step: StepMeta; selected: boolean; onClick: () => void }) {
   const isBatch = step.kind === 'worker' && !!(step.raw as { batch_mode?: boolean }).batch_mode
   const Icon = step.kind === 'source'
     ? Rss
@@ -425,16 +403,6 @@ function StepCard({ step, selected, missingSkills, unconfiguredMcps, onClick }: 
           {counts && counts.pending > 0 && step.kind === 'tray' && !isError && (
             <span className="shrink-0 inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-400 text-[11px] font-semibold">
               {counts.pending}
-            </span>
-          )}
-          {step.kind === 'worker' && missingSkills.length > 0 && (
-            <span title="Missing skill" className="shrink-0">
-              <AlertTriangle size={13} strokeWidth={2} className="text-amber-500" />
-            </span>
-          )}
-          {step.kind === 'worker' && unconfiguredMcps.length > 0 && (
-            <span title={`${unconfiguredMcps.join(', ')} needs setup`} className="shrink-0">
-              <AlertTriangle size={13} strokeWidth={2} className="text-amber-500" />
             </span>
           )}
           {step.kind === 'worker' && <WorkerStatusBubble status={workerStatus} />}

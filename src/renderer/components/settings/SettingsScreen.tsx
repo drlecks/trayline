@@ -32,7 +32,6 @@ export default function SettingsScreen() {
   const [usageLoading, setUsageLoading] = useState(false)
   const [wizardAdapter, setWizardAdapter] = useState<AdapterEntry | null>(null)
   const [wizardOpen, setWizardOpen] = useState(false)
-  const [localLlmMcpWarning, setLocalLlmMcpWarning] = useState(false)
   const [localModels, setLocalModels] = useState<LocalModelEntry[]>([])
   const [localModelBusy, setLocalModelBusy] = useState<string | null>(null)
   const [settingsDownloadOpen, setSettingsDownloadOpen] = useState(false)
@@ -162,24 +161,6 @@ export default function SettingsScreen() {
   async function setAdapter(id: string) {
     const next = await window.trayline.settings.set('defaultAdapterId', id)
     setSettings(next)
-    setLocalLlmMcpWarning(false)
-    if (id === 'local-llm') {
-      // Check if any installed project has steps with MCPs configured.
-      try {
-        const projects = await window.trayline.project.list()
-        for (const p of projects) {
-          const workflows = await window.trayline.project.listWorkflows(p.name)
-          for (const wf of workflows) {
-            const steps = await window.trayline.project.listSteps(p.name, wf.name)
-            const hasMcps = steps.some((s) => {
-              const raw = s.raw as { mcps?: string[] }
-              return (raw.mcps?.length ?? 0) > 0
-            })
-            if (hasMcps) { setLocalLlmMcpWarning(true); return }
-          }
-        }
-      } catch { /* best-effort check; never block the switch */ }
-    }
   }
 
   async function persistModel(modelId: string | null) {
@@ -361,20 +342,6 @@ export default function SettingsScreen() {
             )
           })}
         </div>
-
-        {localLlmMcpWarning && (
-          <div className="
-            flex items-start gap-2 px-3 py-2.5 mb-3 rounded-md
-            border border-amber-200 dark:border-amber-800/60
-            bg-amber-50 dark:bg-amber-950/30
-            text-xs text-amber-800 dark:text-amber-300
-          ">
-            <span>
-              <strong>Some of your workers use MCPs and will not run with the local AI model.</strong>{' '}
-              Those steps will still work with Claude Code — you can switch adapters at any time.
-            </span>
-          </div>
-        )}
 
         {/* Model dropdown */}
         {activeAdapter?.installed && models.length > 0 && (

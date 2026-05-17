@@ -32,7 +32,7 @@
 - **archiver / adm-zip** — zip-based project import/export (write / read)
 - **node-cron** — scheduler for workers that poll on an interval
 - **fast-glob** — folder scanning
-- **keytar** — OS keychain access for MCP credentials (Keychain on macOS, Credential Manager on Windows, libsecret on Linux)
+- **keytar** — OS keychain access (Keychain on macOS, Credential Manager on Windows, libsecret on Linux); used by the Credentials store (N9+)
 - **Electron.Notification** (built-in) — OS push notifications when cards need review; guarded by `Notification.isSupported()`
 - **app.setBadgeCount / BrowserWindow.setOverlayIcon** (built-in) — dock/taskbar badge showing pending-review count; SVG-drawn overlay on Windows, native badge count on macOS and Linux
 
@@ -53,9 +53,7 @@
 - No cloud services
 - No accounts
 - No telemetry
-- **One outbound call:** the Skill Finder fetches a public skill index (a single JSON file from a known GitHub repo) when the user opens it
 - **Optional one-time download:** the local-llm adapter downloads a GGUF model file (~3–8 GB) from a known URL on first use; all inference after that is fully offline
-- MCP credentials live in the OS keychain — never in plain files
 
 ---
 
@@ -67,13 +65,13 @@ Workers don't know they're talking to Claude Code specifically. They talk to an 
 src/main/ai-terminals/
 ├── adapter.ts          # The interface every adapter implements
 ├── claude-code.ts      # Claude Code adapter (default)
-├── local-llm.ts        # Local GGUF model adapter (node-llama-cpp; no MCP support)
+├── local-llm.ts        # Local GGUF model adapter (node-llama-cpp)
 ├── open-code.ts        # Open Code adapter (future)
 ├── mock.ts             # Test fake — returns scripted responses
 └── registry.ts         # Lookup by name from worker config
 ```
 
-The `local-llm` adapter uses `node-llama-cpp` for in-process inference. It streams token output, enforces JSON-only output via grammar constraints, and sets `supportsMcps: false` — workers and sources that have MCPs assigned will be blocked from running with this adapter. The model catalog is defined in `app-data/local-models.json` (bundled with the app); downloaded GGUF files live in `~/Documents/Trayline/local-models/`.
+The `local-llm` adapter uses `node-llama-cpp` for in-process inference. It streams token output and enforces JSON-only output via grammar constraints. The model catalog is defined in `app-data/local-models.json` (bundled with the app); downloaded GGUF files live in `~/Documents/Trayline/local-models/`.
 
 The adapter interface:
 
@@ -83,12 +81,6 @@ interface AITerminalAdapter {
   displayName: string;
   kind: 'production' | 'mock';
   installUrl?: string;
-  /**
-   * When false, the adapter cannot use MCP tools. Any worker or source step
-   * with MCPs assigned will be blocked from running and shown an inline error.
-   * Omitting the field (or setting it to true) means MCPs are supported.
-   */
-  supportsMcps?: boolean;
   /**
    * Returns structured readiness without running any inference.
    * Checks only what is cheaply detectable: binary presence, version, and any
@@ -111,11 +103,10 @@ interface AITerminalAdapter {
   spawn(opts: {
     processFile: string;
     cardData: object;
-    skills: SkillDefinition[];
     contextPacks: string[];
-    mcps: MCPDefinition[];
     workingDir: string;
     timeout: number;
+    prefetchedData?: string;
   }): Promise<AISession>;
 }
 

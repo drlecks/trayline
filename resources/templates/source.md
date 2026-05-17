@@ -22,5 +22,4 @@ _Describe here: what data to retrieve, from which source or API, what fields to 
 ## Tips
 
 - Be specific about the JSON field names so the worker that processes the cards knows what to expect.
-- If you need web access, the `fetch` MCP can retrieve pages and APIs.
 - Keep the output focused — only include fields the downstream workers actually need.

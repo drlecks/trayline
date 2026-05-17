@@ -31,8 +31,6 @@ export interface WorkerRunMeta {
   next_card_id?: string
   /** For batch runs: number of input cards consumed. */
   batch_card_count?: number
-  /** MCP ids that were active during this run. */
-  mcps_active?: string[]
 }
 
 export type WorkerRun = WorkerRunMeta

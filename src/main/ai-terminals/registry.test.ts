@@ -39,9 +39,7 @@ describe('mockAdapter', () => {
     const session = await mockAdapter.spawn({
       processFile: '/tmp/process.md',
       cardData: { foo: 'bar' },
-      skills: [],
       contextPacks: [],
-      mcps: [],
       workingDir: '/tmp',
       timeout: 1000,
     })

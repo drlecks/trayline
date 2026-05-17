@@ -153,7 +153,6 @@ describe('localLlmAdapter', () => {
     it('has the correct id and kind', () => {
       expect(localLlmAdapter.id).toBe('local-llm')
       expect(localLlmAdapter.kind).toBe('production')
-      expect(localLlmAdapter.supportsMcps).toBe(false)
     })
   })
 
@@ -209,9 +208,7 @@ describe('localLlmAdapter', () => {
       return {
         processFile,
         cardData: { subject: 'test card' },
-        skills: [],
         contextPacks: [],
-        mcps: [],
         workingDir,
         timeout: 30_000,
       }

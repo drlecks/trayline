@@ -171,8 +171,6 @@ async function addWorker(input: AddWorkerInput): Promise<PlanWorkerStep & { id: 
     description: input.description ?? '',
     color: '#F7A14F',
     icon: input.icon ?? 'cpu',
-    skills: [] as string[],
-    mcps: [] as string[],
     context_packs: [] as string[],
     execution: {
       command: 'claude',
@@ -210,8 +208,6 @@ async function addWorker(input: AddWorkerInput): Promise<PlanWorkerStep & { id: 
     name: input.name,
     description: input.description,
     icon: input.icon ?? 'cpu',
-    skills: [],
-    mcps: [],
     context_packs: [],
     process_md: input.process_md ?? DEFAULT_PROCESS_MD,
   }
@@ -351,7 +347,6 @@ async function addSource(input: AddSourceInput): Promise<SourceStepConfig & { id
       timeout_seconds: 60,
       adapter: 'claude-code',
     },
-    mcps: [],
     paused: false,
   }
 

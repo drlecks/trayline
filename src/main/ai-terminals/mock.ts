@@ -7,7 +7,6 @@ import type {
   EffortInfo,
   AdapterUsageSnapshot,
   AdapterReadiness,
-  MCPDefinition,
 } from './adapter'
 
 /**
@@ -19,7 +18,6 @@ import type {
 let scriptedOutput: object | string = { summary: 'mock-result', fields: {} }
 let scriptedExitCode = 0
 let clearContextCalls = 0
-let lastSpawnedMcps: MCPDefinition[] = []
 let readinessOverride: Partial<AdapterReadiness> | null = null
 
 export function setMockScript(opts: { output?: object | string; exitCode?: number }) {
@@ -37,8 +35,6 @@ export function resetReadinessOverride() {
 
 export function getMockClearContextCalls(): number { return clearContextCalls }
 export function resetMockClearContextCalls(): void { clearContextCalls = 0 }
-export function getLastSpawnedMcps(): MCPDefinition[] { return lastSpawnedMcps }
-export function resetLastSpawnedMcps(): void { lastSpawnedMcps = [] }
 
 async function* lines(strs: string[]): AsyncIterable<string> {
   for (const s of strs) yield s
@@ -95,7 +91,6 @@ export const mockAdapter: AITerminalAdapter = {
   id: 'mock',
   displayName: 'Mock (test)',
   kind: 'mock',
-  supportsMcps: true,
   async checkReadiness(): Promise<AdapterReadiness> {
     const base: AdapterReadiness = {
       adapterId: 'mock',
@@ -117,8 +112,7 @@ export const mockAdapter: AITerminalAdapter = {
     }
   },
   async clearContext() { clearContextCalls++ },
-  async spawn(opts: SpawnOptions): Promise<AISession> {
-    lastSpawnedMcps = opts.mcps
+  async spawn(_opts: SpawnOptions): Promise<AISession> {
     return new MockSession()
   },
 }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Cpu, Inbox, AlertTriangle, FolderOpen, Settings, Package, HelpCircle } from 'lucide-react'
+import { Cpu, Inbox, AlertTriangle, FolderOpen, Settings, HelpCircle } from 'lucide-react'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { useProjectStore } from '@/stores/project-store'
 
@@ -56,12 +56,6 @@ export default function CommandPalette({ open, onOpenChange, onOpenShortcuts }: 
       label: 'Settings',
       icon: Settings,
       run: () => { setScreen('settings'); onOpenChange(false) },
-    })
-    out.push({
-      id: 'nav:skills',
-      label: 'Skills',
-      icon: Package,
-      run: () => { setScreen('skills'); onOpenChange(false) },
     })
     out.push({
       id: 'help:shortcuts',
