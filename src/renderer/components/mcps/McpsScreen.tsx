@@ -96,6 +96,9 @@ function InstalledMcpCard({
           <span className="text-xs font-medium">{row.manifest.name}</span>
           <span className="text-[10px] font-mono text-neutral-500 dark:text-neutral-400">v{row.manifest.version}</span>
           <McpStatusBadge state={row.healthState} />
+          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] border border-neutral-200 dark:border-neutral-800 text-neutral-500 dark:text-neutral-400 bg-neutral-50 dark:bg-neutral-900">
+            Not available with local AI model
+          </span>
         </div>
         <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5 line-clamp-2">{row.manifest.description}</p>
         {row.manifest.tags && row.manifest.tags.length > 0 && (

@@ -340,16 +340,16 @@ When the active default adapter is `local-llm` and a worker step has one or more
 
 When the user selects "Local AI (offline)" as their default adapter in Settings → AI Terminal, check whether any installed project has workers or source steps that use MCPs.
 
-- [ ] In the Settings AI Terminal section, after the user selects `local-llm` as default: query all projects for steps that have MCPs configured. If any exist, show an inline callout below the adapter selector:
+- [x] In the Settings AI Terminal section, after the user selects `local-llm` as default: query all projects for steps that have MCPs configured. If any exist, show an inline callout below the adapter selector:
   > **Some of your workers use MCPs and will not run with the local AI model.** Those steps will still work with Claude Code — you can switch adapters at any time.
-- [ ] This check runs client-side on the adapter selection change. It does not block the switch — it is informational only.
+- [x] This check runs client-side on the adapter selection change. It does not block the switch — it is informational only.
 
 #### 6e. MCP screen — adapter compatibility indicator
 
 In the MCPs management screen (the list of installed MCPs), add a small indicator next to each MCP showing which adapters support it.
 
-- [ ] Add a "Requires external agent" badge (or tooltip) on each MCP entry in the MCP list panel. Copy: `"Not available with local AI model"`.
-- [ ] This is a static label — all MCPs get it, because no MCP works with the local adapter.
+- [x] Add a "Requires external agent" badge (or tooltip) on each MCP entry in the MCP list panel. Copy: `"Not available with local AI model"`.
+- [x] This is a static label — all MCPs get it, because no MCP works with the local adapter.
 
 #### 6f. Immediate error response on Run click — fail before the run is created
 
@@ -368,7 +368,7 @@ MCP-credential errors (missing credentials, disabled MCP) create a run entry and
 
 - [x] **`src/main/services/source-runner.ts`** — same placement: check `adapter.supportsMcps === false` before run allocation and throw so the IPC call rejects.
 
-- [ ] **`src/renderer/components/project/WorkerDetailPanel.tsx`** — in the "Run now" button click handler, wrap the `worker.triggerRun` call in a try/catch (or `.catch`). On error, display an inline error alert directly below the Run button (not a toast, not a modal) — matches the existing `run.error` red box style (`border-red-200 bg-red-50 text-red-800`) but scoped to the trigger action, not a specific run:
+- [x] **`src/renderer/components/project/WorkerDetailPanel.tsx`** — in the "Run now" button click handler, wrap the `worker.triggerRun` call in a try/catch (or `.catch`). On error, display an inline error alert directly below the Run button (not a toast, not a modal) — matches the existing `run.error` red box style (`border-red-200 bg-red-50 text-red-800`) but scoped to the trigger action, not a specific run:
   ```
   ┌─────────────────────────────────────────────────────────┐
   │  ✕  This worker uses MCPs which require an external AI  │
@@ -378,7 +378,7 @@ MCP-credential errors (missing credentials, disabled MCP) create a run entry and
   ```
   The "Go to Settings" link navigates to Settings → AI Terminal. The alert is dismissed on the next successful run trigger or when the user navigates away.
 
-- [ ] **`src/renderer/components/project/SourceDetailPanel.tsx`** — same pattern in the source "Run now" handler: catch the IPC error and show the inline alert with copy: `"Source steps require an external AI agent. Switch to Claude Code in Settings → AI Terminal."`
+- [x] **`src/renderer/components/project/SourceDetailPanel.tsx`** — same pattern in the source "Run now" handler: catch the IPC error and show the inline alert with copy: `"Source steps require an external AI agent. Switch to Claude Code in Settings → AI Terminal."`
 
 ### 7. Stale `.part` file cleanup on startup
 
