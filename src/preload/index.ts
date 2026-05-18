@@ -79,6 +79,8 @@ const api = {
     delete: (name: string): Promise<void> => ipcRenderer.invoke(IPC.project.delete, name),
     setStatus: (name: string, status: ProjectStatus): Promise<ProjectMeta> =>
       ipcRenderer.invoke(IPC.project.setStatus, name, status),
+    updateMeta: (name: string, patch: { display_name?: string; description?: string }): Promise<ProjectMeta> =>
+      ipcRenderer.invoke(IPC.project.updateMeta, name, patch),
     getOrchestration: (name: string): Promise<{ name: string; mounted: boolean }> =>
       ipcRenderer.invoke(IPC.project.getOrchestration, name),
     onStatusChanged: (

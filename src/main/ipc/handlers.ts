@@ -100,6 +100,12 @@ export function registerIpcHandlers(
     }
     return result
   })
+  ipcMain.handle('project:updateMeta', async (
+    _: unknown,
+    name: string,
+    patch: { display_name?: string; description?: string },
+  ) => projectService.updateMeta(name, patch))
+
   ipcMain.handle('project:setStatus', async (_: unknown, name: string, status: 'active' | 'inactive') => {
     const meta = await projectService.setStatus(name, status)
     if (status === 'active') {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Inbox, Cpu, AlertTriangle, RefreshCw, Plus, FileText, ChevronDown, ChevronRight, Rss, Layers, Send } from 'lucide-react'
+import { Inbox, Cpu, AlertTriangle, RefreshCw, Plus, FileText, Settings, ChevronDown, ChevronRight, Rss, Layers, Send } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useProjectStore } from '@/stores/project-store'
 import AddTrayDialog from './AddTrayDialog'
@@ -11,6 +11,7 @@ import WorkerDetailPanel from './WorkerDetailPanel'
 import SourceDetailPanel from './SourceDetailPanel'
 import OutletDetailPanel from './OutletDetailPanel'
 import ContextPackEditor from './ContextPackEditor'
+import ProjectSettingsPanel from './ProjectSettingsPanel'
 import FirstProjectGuide from '../onboarding/FirstProjectGuide'
 import type { StepMeta, SourceRunEvent } from '../../../shared/types'
 import type { CardCounts } from '../../../shared/card'
@@ -33,6 +34,7 @@ export default function ProjectScreen() {
   const [addWorkerOpen, setAddWorkerOpen] = useState(false)
   const [addSourceOpen, setAddSourceOpen] = useState(false)
   const [showContextEditor, setShowContextEditor] = useState(false)
+  const [showProjectSettings, setShowProjectSettings] = useState(false)
   const [errorsExpanded, setErrorsExpanded] = useState(false)
 
   // Refresh steps whenever the active project changes
@@ -62,7 +64,7 @@ export default function ProjectScreen() {
                 key={step.id}
                 step={step}
                 selected={step.id === selectedStepId && !showContextEditor}
-                onClick={() => { setSelectedStepId(step.id); setShowContextEditor(false) }}
+                onClick={() => { setSelectedStepId(step.id); setShowContextEditor(false); setShowProjectSettings(false) }}
               />
             ))}
 
@@ -83,7 +85,7 @@ export default function ProjectScreen() {
                 expanded={errorsExpanded}
                 selected={selectedStepId === '99-errors' && !showContextEditor}
                 onToggle={() => setErrorsExpanded((v) => !v)}
-                onSelect={() => { setSelectedStepId('99-errors'); setShowContextEditor(false) }}
+                onSelect={() => { setSelectedStepId('99-errors'); setShowContextEditor(false); setShowProjectSettings(false) }}
               />
             )}
           </div>
@@ -91,7 +93,20 @@ export default function ProjectScreen() {
           <div className="mt-auto pt-4 border-t border-black/[0.06] dark:border-white/[0.06] px-2 flex flex-col gap-2">
             <button
               type="button"
-              onClick={() => { setShowContextEditor(true); setSelectedStepId(null) }}
+              onClick={() => { setShowProjectSettings(true); setShowContextEditor(false); setSelectedStepId(null) }}
+              className={`
+                flex items-center gap-2 w-full px-2 py-1.5 rounded text-[13px] text-left transition-colors
+                ${showProjectSettings
+                  ? 'bg-neutral-100 dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200'
+                  : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-neutral-50 dark:hover:bg-neutral-900'}
+              `}
+            >
+              <Settings size={14} strokeWidth={1.75} />
+              Project settings
+            </button>
+            <button
+              type="button"
+              onClick={() => { setShowContextEditor(true); setShowProjectSettings(false); setSelectedStepId(null) }}
               className={`
                 flex items-center gap-2 w-full px-2 py-1.5 rounded text-[13px] text-left transition-colors
                 ${showContextEditor
@@ -116,7 +131,9 @@ export default function ProjectScreen() {
 
         {/* Right canvas */}
         <section data-tour="detail-panel" className="flex-1 min-w-0 overflow-hidden">
-          {showContextEditor && active ? (
+          {showProjectSettings ? (
+            <ProjectSettingsPanel />
+          ) : showContextEditor && active ? (
             <ContextPackEditor project={active.name} />
           ) : selectedStep
             ? (selectedStep.kind === 'worker'
@@ -132,7 +149,7 @@ export default function ProjectScreen() {
                   hasSourceStep={steps.some((s) => s.kind === 'source')}
                   sourceStepId={steps.find((s) => s.kind === 'source')?.id}
                   firstTrayId={steps.find((s) => s.kind === 'tray')?.id}
-                  onSelectStep={(id) => { setSelectedStepId(id); setShowContextEditor(false) }}
+                  onSelectStep={(id) => { setSelectedStepId(id); setShowContextEditor(false); setShowProjectSettings(false) }}
                   onDismiss={() => setJustCreatedProject(null)}
                   onTour={() => window.dispatchEvent(new Event('trayline:open-tour'))}
                 />

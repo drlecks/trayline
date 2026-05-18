@@ -172,10 +172,31 @@ async function deleteContextFile(projectName: string, file: string): Promise<voi
   if (await pathExists(p)) await fs.unlink(p)
 }
 
+async function updateMeta(
+  projectName: string,
+  patch: { display_name?: string; description?: string },
+): Promise<ProjectMeta> {
+  const path = join(projectDir(projectName), 'project.json')
+  const raw = await readJsonSafe<Partial<ProjectMeta>>(path)
+  if (!raw) throw new Error(`Project not found: ${projectName}`)
+  const next = normalizeMeta({
+    ...raw,
+    name: raw.name ?? projectName,
+    display_name: patch.display_name ?? raw.display_name ?? projectName,
+    description: patch.description ?? raw.description ?? '',
+    updated_at: new Date().toISOString(),
+  })
+  const tmp = path + '.tmp'
+  await fs.writeFile(tmp, JSON.stringify(next, null, 2), 'utf-8')
+  await fs.rename(tmp, path)
+  return next
+}
+
 export const projectService = {
   listProjects,
   getProject,
   setStatus,
+  updateMeta,
   listWorkflows,
   getWorkflow,
   listSteps,

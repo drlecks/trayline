@@ -243,11 +243,11 @@ Saving writes the updated `display_name` and `description` to `project.json` and
 
 #### Tasks
 
-- [ ] **H1** Add `project:update` IPC channel: accepts `{ projectName, displayName, description }`, updates `project.json`, emits `project:onStatusChanged`.
-- [ ] **H2** Add `ProjectSettingsPanel.tsx` in `src/renderer/components/project/` with the form above. Uses `react-hook-form` for validation.
-- [ ] **H3** In `ProjectScreen.tsx`: add a `showProjectSettings` state alongside `showContextEditor`. Add the "Project settings" button in the bottom rail section (above Context files). When active, render `ProjectSettingsPanel` in the right canvas.
-- [ ] **H4** Update `docs/features.md` — add section 7.23 "Project Settings Panel" describing the name/description edit flow.
-- [ ] **H5** Update `docs/user-flows.md` — add flow 6.24 "Editing Project Settings".
+- [x] **H1** Add `project:updateMeta` IPC channel: accepts `{ projectName, displayName, description }`, updates `project.json` atomically.
+- [x] **H2** Add `ProjectSettingsPanel.tsx` in `src/renderer/components/project/` with Name + Description form.
+- [x] **H3** In `ProjectScreen.tsx`: add `showProjectSettings` state, "Project settings" left-rail button, render `ProjectSettingsPanel` in the right canvas when active.
+- [x] **H4** Update `docs/features.md` — added section 7.22 "Project Settings Panel".
+- [x] **H5** Update `docs/user-flows.md` — added flow 6.23 "Editing Project Settings".
 
 ---
 
