@@ -53,8 +53,6 @@ The magic-moment first impression. The user lands on a clean centered screen:
 
 Clicking an example fills the textbox so the user can edit before submitting.
 
-**Local AI model note:** When the active adapter is `local-llm`, a soft warning appears below the textarea: *"Using local AI model. Workflow generation works best with Claude Code — local models may produce simpler or incomplete plans. You can edit the result after creation."* The user can still proceed.
-
 **On submit:**
 1. A loading screen with a soft animated circle and rotating status messages: *"Imagining your workflow..."* / *"Sketching out the trays..."* / *"Wiring up the workers..."* / *"Almost there..."*
 2. Trayline runs the author prompt (`resources/author-prompt.md`) against the user's description via the AI Terminal Adapter.

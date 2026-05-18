@@ -185,8 +185,8 @@ Keep the existing `AdapterSetupScreen` / `AdapterSetupWizard` abstraction — fu
 - [x] **F3** In `AdapterSetupScreen.tsx`: filter the adapter list to `kind === 'production'` only — `kind: 'mock'` adapters must never appear.
 - [x] **F4** In `src/main/ai-terminals/registry.ts` (or wherever `adapters:list` is handled): ensure the IPC handler already filters mock adapters before returning, so no renderer code needs to defend against it independently.
 - [x] **F5** In `SettingsScreen.tsx`: remove any `local-llm`-specific UI blocks (Local AI model section, download/delete model links). The provider dropdown already reads from the registry, so it will naturally show only Claude Code once local-llm is removed in N11-A.
-- [ ] **F6** Update `docs/user-flows.md` — update flow 6.14 "AI Setup — First Launch": remove local-llm card description, describe the generic single-card layout, note that currently only Claude Code is shown.
-- [ ] **F7** Update `docs/features.md` — update section 7.20 "AI Setup Screen": remove local-llm "Recommended" / CLI "Power user" distinction; describe the generic card; note current adapter set is Claude Code only.
+- [x] **F6** Update `docs/user-flows.md` — update flow 6.14 "AI Setup — First Launch": remove local-llm card description, describe the generic single-card layout, note that currently only Claude Code is shown.
+- [x] **F7** Update `docs/features.md` — update section 7.20 "AI Setup Screen": remove local-llm "Recommended" / CLI "Power user" distinction; describe the generic card; note current adapter set is Claude Code only.
 
 ---
 
