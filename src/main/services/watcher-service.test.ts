@@ -84,6 +84,29 @@ describe('watcherService', () => {
     expect(watchers[0].dir.endsWith(join('01-src', 'cards', 'ready'))).toBe(true)
   })
 
+  it('watcher for a worker following a source step points at the source cards/ready/', async () => {
+    const project = 'p-source'
+    await writeJson(join(Paths.projects, project, 'project.json'), {
+      id: project, name: project, display_name: project, description: '', created_at: new Date().toISOString(),
+    })
+    const wfDir = join(Paths.projects, project, 'workflows', 'wf')
+    await writeJson(join(wfDir, 'workflow.json'), {
+      id: 'wf', name: 'wf', display_name: 'wf', step_ids: ['00-source', '01-process'],
+    })
+    await writeJson(join(wfDir, 'steps', '00-source', 'step.json'), {
+      id: '00-source', kind: 'source', name: 'Source',
+    })
+    await writeJson(join(wfDir, 'steps', '01-process', 'step.json'), {
+      id: '01-process', kind: 'worker', name: 'Process',
+      trigger: { mode: 'on_ready' },
+    })
+
+    await watcherService.mountWorkflow(project, 'wf')
+
+    expect(watchers).toHaveLength(1)
+    expect(watchers[0].dir.endsWith(join('00-source', 'cards', 'ready'))).toBe(true)
+  })
+
   it('does not mount when trigger.mode is not on_ready', async () => {
     await buildWorkflow('p-sched', { triggerMode: 'scheduled' })
     await watcherService.mountWorkflow('p-sched', 'wf')
