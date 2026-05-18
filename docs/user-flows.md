@@ -167,18 +167,17 @@ Trayline checks adapter readiness at startup before any other routing:
 App opens → adapter:check-readiness
   └── no production adapter has installed: true
         └── AdapterSetupScreen (full window, no rail or header)
-              ├── One card per registered production adapter
-              │     CLI adapters (e.g. Claude Code):
-              │       • install command in a copyable code block
-              │       • "Open install guide" link
+              ├── One card per registered production adapter (mock adapters filtered out)
+              │     Currently: Claude Code only
+              │       • adapter name + description
+              │       • install command in a copyable code block (from blockers[0].fixCommand)
+              │       • "Install guide" external link
               │       • [Check again] → calls adapter:recheck inline
               │       • [Setup guide] → opens AdapterSetupWizard modal
-              │     local-llm adapter:
-              │       • no install guide or setup guide button
-              │       • [Download local model] → opens ModelDownloadModal (see 6.17)
-              │       • [Check again] → shown instead once a model is downloaded
               └── When any adapter becomes installed → onReady() → normal routing
 ```
+
+Header copy: *"Install an AI adapter to get started. Claude Code is the recommended choice."*
 
 ### Adapter installed
 
@@ -339,37 +338,6 @@ Card arrives in prev-tray/cards/ready/card-id.json
               ├── Move card to 99-errors/cards/ready/
               └── Emit outlet:run-failed (left rail shows "⚠ Failed")
 ```
-
----
-
-## 6.17 First Launch — Download Local Model
-
-When the user selects the **local-llm** adapter from the `AdapterSetupScreen` and no model has been downloaded yet:
-
-```
-AdapterSetupScreen
-  └── local-llm card → [Download local model]
-        └── ModelDownloadModal opens (idle state)
-              ├── Model list (radio buttons): label, description, size, Recommended badge
-              ├── User selects a model and clicks [Download]
-              │     └── State → downloading
-              │           ├── Progress bar: downloaded / total bytes, percent
-              │           └── [Cancel download] link
-              │                 └── cancels in-flight HTTPS stream → state → idle
-              ├── Download completes (onDownloadComplete event)
-              │     └── State → complete
-              │           └── [Start using Trayline] → localModel.recheckAdapter()
-              │                 └── AdapterReadiness.installed = true → onReady() → normal routing
-              └── Download fails (onDownloadError event)
-                    └── State → error
-                          └── [Try again] → state → idle
-```
-
-**Key constraints:**
-- The dialog cannot be dismissed (Escape or outside-click) while a download is in progress; the X button is visually suppressed.
-- Downloads stream via HTTPS and write to a `.part` file, renamed atomically to the final `.gguf` path only on completion.
-- On app startup, `localModelService.cleanupStaleParts()` removes any `.part` files left by a previous crash.
-- The user can also open the download modal from **Settings → Local AI model → Download a model now** at any time after first launch.
 
 ---
 
