@@ -35,8 +35,8 @@ Update `docs/new-feature-revision.md`:
   - Local AI with guided in-app model download IS the zero-setup path.
   - The one-time model download (~3–8 GB) is fully guided in the app, requires no terminal, no account, and no external site.
   - Claude Code is an opt-in power-user upgrade, clearly labelled as such. It is not required.
-- [ ] Update the "Zero-setup principle" compliance rule (#1) to reflect this: "No installation beyond Trayline itself, except the optional one-time local AI model download which is fully guided in-app."
-- [ ] Remove Gap 1 from the "Active gaps" section and move it to a "Resolved gaps" section.
+- [x] Update the "Zero-setup principle" compliance rule (#1) to reflect this: "No installation beyond Trayline itself, except the optional one-time local AI model download which is fully guided in-app."
+- [x] Remove Gap 1 from the "Active gaps" section and move it to a "Resolved gaps" section. (Gaps section removed entirely per doc reframe — `docs/new-feature-revision.md` is now a pure instructional/rules document.)
 
 ---
 
@@ -150,13 +150,13 @@ export const CREDENTIAL_PROVIDERS: ProviderPreset[] = [
 
 ### 3b. Update `ImapCredentialDialog.tsx`
 
-- [ ] Add a `selectedProvider` state (default: `null`).
-- [ ] Render a **provider picker row** at the top of the form: pill buttons for each provider (`CREDENTIAL_PROVIDERS`). "Custom / other" is always last.
-- [ ] When a provider (not custom) is selected:
+- [x] Add a `selectedProvider` state (default: `null`).
+- [x] Render a **provider picker row** at the top of the form: pill buttons for each provider (`CREDENTIAL_PROVIDERS`). "Custom / other" is always last.
+- [x] When a provider (not custom) is selected:
   - Auto-fill `host`, `port`, `secure` from the preset. Keep `name` editable (default to provider name if empty).
   - If the provider has `authGuide`: change the password field label to `authGuide.passwordLabel` and show the guide block below the password field (see below).
-- [ ] When "Custom / other" is selected: show bare fields as today, no guide.
-- [ ] **App Password guide block** (shown when `authGuide` is present):
+- [x] When "Custom / other" is selected: show bare fields as today, no guide.
+- [x] **App Password guide block** (shown when `authGuide` is present):
   ```
   ┌─────────────────────────────────────────────────────────────────┐
   │ ⓘ Gmail requires an App Password, not your regular password.    │
@@ -170,21 +170,21 @@ export const CREDENTIAL_PROVIDERS: ProviderPreset[] = [
   └─────────────────────────────────────────────────────────────────┘
   ```
   - The guide block is always visible when a provider with `authGuide` is selected (no collapse needed — these steps are exactly what the user needs).
-  - "Open Gmail settings" button calls `window.trayline.app.openUrl(authGuide.settingsUrl)`.
-- [ ] Host, port, and SSL fields remain visible but read-only (showing pre-filled values) when a named provider is selected. "Custom / other" leaves them editable.
+  - "Open Gmail settings" uses `href` + `target="_blank"` (Electron opens in the OS browser — same pattern as other external links in the app).
+- [x] Host, port, and SSL fields remain visible but read-only (showing pre-filled values) when a named provider is selected. "Custom / other" leaves them editable.
 
 ### 3c. Update `SmtpCredentialDialog.tsx`
 
-- [ ] Same provider picker, same auto-fill, same guide pattern as IMAP.
-- [ ] Only SMTP providers appear in the picker (filter by `preset.smtp !== undefined`).
-- [ ] `From name` and `From address` are never pre-filled — user always provides these.
-- [ ] Host, port, secure are read-only when a named provider is selected.
+- [x] Same provider picker, same auto-fill, same guide pattern as IMAP.
+- [x] Only SMTP providers appear in the picker (filter by `preset.smtp !== undefined`).
+- [x] `From name` and `From address` are never pre-filled — user always provides these.
+- [x] Host, port, secure are read-only when a named provider is selected.
 
 ### 3d. Update `CredentialsScreen.tsx` type picker
 
 Currently the "+ Add" button opens a type picker: HTTP / IMAP / SMTP.
 
-- [ ] Keep the same structure (3 types). No changes to the top-level picker — the provider selection happens inside the IMAP/SMTP dialogs as added in 3b/3c.
+- [x] Keep the same structure (3 types). No changes to the top-level picker — the provider selection happens inside the IMAP/SMTP dialogs as added in 3b/3c.
 
 ---
 
@@ -204,7 +204,7 @@ Create `src/renderer/components/onboarding/FirstProjectGuide.tsx`:
 
 - [x] Props: `{ hasSourceStep: boolean; sourceStepId?: string; firstTrayId?: string; onDismiss: () => void; onTour: () => void }`
 - [x] Renders as the right-panel content when no step is selected and the project is fresh.
-- [ ] **Layout:**
+- [x] **Layout:**
   ```
   ┌────────────────────────────────────────────────────────────────┐
   │  ✦  Your workflow is ready.                                    │
@@ -242,10 +242,10 @@ Create `src/renderer/components/onboarding/FirstProjectGuide.tsx`:
           Review and approve or edit before the workflow continues.
   ```
 
-- [ ] "Go to Source/tray" button → calls `setSelectedStepId(...)` from the store.
-- [ ] "Take a quick tour" → calls `onTour()` (opens the `OnboardingTour` overlay).
-- [ ] "Dismiss" → calls `onDismiss()`.
-- [ ] No tests required (UI component; see testing policy).
+- [x] "Go to Source/tray" button → calls `setSelectedStepId(...)` from the store.
+- [x] "Take a quick tour" → calls `onTour()` (opens the `OnboardingTour` overlay).
+- [x] "Dismiss" → calls `onDismiss()`.
+- [x] No tests required (UI component; see testing policy).
 
 ### 4c. Wire `FirstProjectGuide` into `ProjectScreen.tsx`
 
@@ -278,10 +278,10 @@ The existing tour steps assume the user is in a project (left rail, detail panel
 
 ## Task 5 — Documentation updates
 
-- [ ] **`docs/new-feature-revision.md`**: Apply Gap 1 reframe (Task 1). Add note about N10 changes to the active gaps section.
-- [ ] **`docs/user-flows.md`**: Add flow 6.22 "First project — guided onboarding" describing the `FirstProjectGuide` flow and the refactored `OnboardingTour` trigger.
-- [ ] **`docs/features.md`**: Add section 7.21 "First Project Guide" and update 7.14 "AI setup screen" to reflect the priority reordering and updated copy.
-- [ ] **`docs/implementation/tasks.md`**: Add N10 entry and check it off on completion.
+- [x] **`docs/new-feature-revision.md`**: Gap 1 reframe applied; gaps section removed entirely — doc is now a pure instructional/rules document.
+- [x] **`docs/user-flows.md`**: Added flow 6.22 "First project — guided onboarding".
+- [x] **`docs/features.md`**: Added sections 7.20 (AI Setup Screen N10) and 7.21 (First Project Guide).
+- [x] **`docs/implementation/tasks.md`**: N10 entry added.
 
 ---
 
