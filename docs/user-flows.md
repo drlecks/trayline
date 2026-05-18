@@ -238,7 +238,7 @@ Triggered automatically by the cron scheduler, or manually via **Run now**:
 5. **Persist dedup index (IMAP only)** — write the updated seen set to `state/seen-ids.json.tmp`, then rename to `state/seen-ids.json` (atomic); prune oldest entries if length exceeds `max_memory`
 6. **Update counters** — write `state/counters.json` with updated `runs_total`, `items_found`, `items_new`, `last_run_at`
 7. **Emit completion event** — IPC event fires to the renderer
-8. **Next step picks up cards** — the Worker step following the Source has a chokidar watcher on `cards/ready/`; new files trigger normal card handling (AI processing happens there)
+8. **Next step picks up cards** — the Worker step following the Source has a chokidar watcher on `<source-step>/cards/ready/` (resolved from `workflow.json:step_ids[i-1]`); new card files trigger the worker automatically, with no user action required
 
 **IMAP first run (`first_run: skip_existing`):**
 - All emails are added to the seen index but no cards are created
