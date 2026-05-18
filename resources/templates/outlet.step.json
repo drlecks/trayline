@@ -12,5 +12,6 @@
     "subject": "",
     "body": "{{card.data}}"
   },
-  "on_failure": "send_to_errors"
+  "on_failure": "send_to_errors",
+  "prompt": null
 }

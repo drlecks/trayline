@@ -21,6 +21,7 @@ import { credentialService } from './credential-service'
 import { notificationService } from './notification-service'
 import { auditDb } from './audit-db'
 import { IPC } from '../../shared/ipc-channels'
+import { runAIStep } from './ai-step-helper'
 import type { SourceStepConfig, SourceCounters, SeenIdsEntry, SourceRunMeta, SourceState, SourceRunEvent, HttpCredential, ImapCredential, HttpErrorDetail } from '../../shared/types'
 import type { Card } from '../../shared/card'
 
@@ -240,6 +241,17 @@ async function runSourceInner({ project, workflow, stepId, stepConfig }: RunSour
 
     await fs.writeFile(join(runDir, 'output.txt'), rawBody, 'utf-8')
 
+    let cardData: object = { body: rawBody }
+    if (stepConfig.prompt) {
+      try {
+        const aiResult = await runAIStep({ runDir, prompt: stepConfig.prompt, prefetchedData: rawBody })
+        cardData = typeof aiResult.output === 'object' ? aiResult.output : { ai_output: aiResult.output }
+      } catch (err) {
+        await failRun({ project, workflow, stepId, runId, stateDir, runDir, startedAt, meta, error: `AI step failed: ${err instanceof Error ? err.message : String(err)}` })
+        return
+      }
+    }
+
     const cardId = await nextCardId(project, workflow, stepId, 1)
     auditDb.insert({
       project_id: project, workflow_id: workflow, step_id: stepId, card_id: cardId,
@@ -248,7 +260,7 @@ async function runSourceInner({ project, workflow, stepId, stepConfig }: RunSour
     })
     const card: Card = {
       id: cardId, created_at: now, created_by: 'source', source_step: stepId,
-      data: { body: rawBody },
+      data: cardData,
       history: [{ at: now, step: stepId, event: 'created', by: 'system' }],
     }
     await fsService.writeJsonAtomic(join(readyDir, `${cardId}.json`), card)
@@ -325,6 +337,18 @@ async function runSourceInner({ project, workflow, stepId, stepConfig }: RunSour
       const item = cardsToCreate[i]
       const itemId = String(item[dedupKey] ?? '')
       const cardId = await nextCardId(project, workflow, stepId, i + 1)
+
+      let cardData: object = item
+      if (stepConfig.prompt) {
+        try {
+          const aiResult = await runAIStep({ runDir, prompt: stepConfig.prompt, prefetchedData: JSON.stringify(item, null, 2) })
+          cardData = typeof aiResult.output === 'object' ? aiResult.output : { ai_output: aiResult.output }
+        } catch (err) {
+          await failRun({ project, workflow, stepId, runId, stateDir, runDir, startedAt, meta, error: `AI step failed for item ${itemId}: ${err instanceof Error ? err.message : String(err)}` })
+          return
+        }
+      }
+
       auditDb.insert({
         project_id: project, workflow_id: workflow, step_id: stepId, card_id: cardId,
         event: 'source_item_new', actor: 'system',
@@ -332,7 +356,7 @@ async function runSourceInner({ project, workflow, stepId, stepConfig }: RunSour
       })
       const card: Card = {
         id: cardId, created_at: now, created_by: 'source', source_step: stepId,
-        data: item,
+        data: cardData,
         history: [{ at: now, step: stepId, event: 'created', by: 'system' }],
       }
       await fsService.writeJsonAtomic(join(readyDir, `${cardId}.json`), card)

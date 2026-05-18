@@ -208,7 +208,7 @@ Password stored in keytar as `account='password'`.
 }
 ```
 
-Source steps are **channel-based** — no AI is involved in fetching. The runner calls the channel directly (HTTP GET or IMAP) and creates cards. AI processing of the retrieved data happens in a Worker step that follows.
+Source steps are **channel-based**. The runner calls the channel directly (HTTP GET or IMAP) and creates cards. Optionally, an AI prompt can shape the card data before it is written (see `prompt` field below).
 
 `channel` is **required**. When `null`, the source cannot run and will fail with a configuration error.
 
@@ -250,6 +250,7 @@ IMAP creates one card per email, deduplicated by `dedup.key`. `dedup` is only us
 | `dedup.first_run` | **IMAP only.** What to do on the very first run: `skip_existing` (default), `process_all`, `process_last_n`. |
 | `dedup.first_run_n` | **IMAP only.** Number of most-recent emails to process when `first_run` is `"process_last_n"`. |
 | `paused` | When `true`, the cron job is not registered at launch and `source:pause` / `source:resume` toggle it |
+| `prompt` | **Optional.** If set, the AI adapter processes the raw fetched data using these instructions before `card.data` is written. For HTTP GET: `prefetchedData` = response body. For IMAP: called once per email item. If the AI returns a JSON object it becomes `card.data`; a string is stored as `{ ai_output: "..." }`. Run fails if the AI step fails. |
 
 **Source step folder structure:**
 ```
@@ -302,6 +303,14 @@ A Source step is always the **first** step in a workflow (`00-<slug>`). It has n
     "method": "POST",
     "body": "{ \"status\": 2, \"reply\": {{card.data.reply | json}} }"
   }
+}
+```
+
+**Optional AI instructions:** If `"prompt"` is set, the AI adapter runs against `card.data` before the channel dispatch. If it returns a JSON object, that object replaces `card.data` for token resolution; string output is merged in as `card.data.ai_output`. The run fails if the AI step fails.
+
+```json
+{
+  "prompt": "Format the card data as a professional client-facing email. Keep it under 200 words."
 }
 ```
 

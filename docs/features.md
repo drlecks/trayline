@@ -260,7 +260,7 @@ Status states on the left rail card:
 
 Two tabs: **Config** and **Runs**.
 
-Source steps are **channel-based** — no AI is involved in fetching. The runner calls the configured channel directly (HTTP GET or IMAP) and creates cards from the raw response. AI processing of the fetched data happens in a Worker step that immediately follows the source.
+Source steps are **channel-based**. The runner calls the configured channel directly (HTTP GET or IMAP) and creates cards from the raw response. An optional **Instructions** field allows the AI adapter to shape `card.data` before the card is written — useful when you want structured fields extracted directly from the raw response rather than passing the raw text to a downstream worker.
 
 **Config tab:**
 
@@ -296,6 +296,14 @@ Source steps are **channel-based** — no AI is involved in fetching. The runner
 │  First run     ○ Skip existing (default)                     │
 │                ○ Process all                                 │
 │                ○ Process last N  [N: ___]                    │
+├──────────────────────────────────────────────────────────────┤
+│  INSTRUCTIONS (optional)                                     │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │ Extract the title, author, and date from the HTML.  │   │
+│  │ Return JSON with keys: title, author, published_at. │   │
+│  └──────────────────────────────────────────────────────┘   │
+│  If set, the AI parses the raw fetched data using these      │
+│  instructions before creating the card.                      │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -453,6 +461,14 @@ Two tabs: **Config** and **Runs**.
 │  {{card.data.field}}  — specific field value                 │
 │  {{card.data}}        — full card as pretty JSON             │
 │  {{card.data | json}} — full card as compact JSON string     │
+│                                                              │
+│  INSTRUCTIONS (optional)                                     │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │ Format the card as a professional client email.     │   │
+│  │ Keep it under 200 words.                            │   │
+│  └──────────────────────────────────────────────────────┘   │
+│  If set, the AI formats card.data using these instructions   │
+│  before the channel dispatch.                                │
 │                                                              │
 │  [Save]                                                      │
 └──────────────────────────────────────────────────────────────┘

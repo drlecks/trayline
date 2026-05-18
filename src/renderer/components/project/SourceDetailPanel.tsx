@@ -559,6 +559,21 @@ function SourceConfigTab({
         </div>
       )}
 
+      <div className="flex flex-col gap-1.5">
+        <Label className="text-xs">Instructions (optional)</Label>
+        <textarea
+          defaultValue={config.prompt ?? ''}
+          onBlur={(e) => {
+            const v = e.target.value.trim()
+            if (v !== (config.prompt ?? '').trim()) void save({ prompt: v || null })
+          }}
+          rows={4}
+          className="w-full text-sm rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-neutral-300 dark:focus:ring-neutral-700 resize-none font-normal"
+          placeholder="e.g. Extract the title, author, and date from the fetched HTML. Return JSON with keys: title, author, published_at."
+        />
+        <p className="text-xs text-neutral-500">If set, the AI will parse the raw fetched data using these instructions before creating the card.</p>
+      </div>
+
       <div className="flex items-center justify-between pt-2">
         <Button size="sm" variant="ghost" onClick={handleDelete} disabled={saving} className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/40">
           <Trash2 size={13} strokeWidth={1.75} /> Delete source

@@ -10,6 +10,7 @@ import { projectService } from './project-service'
 import { credentialService } from './credential-service'
 import { auditDb } from './audit-db'
 import { resolveTokens } from '../ai-terminals/prompt-utils'
+import { runAIStep } from './ai-step-helper'
 import { IPC } from '../../shared/ipc-channels'
 import type { OutletStepConfig, OutletRunMeta, OutletRunEvent, HttpCredential, SmtpCredential } from '../../shared/types'
 import type { Card } from '../../shared/card'
@@ -124,7 +125,28 @@ async function runOutletInner(
     return
   }
 
-  const cardData = card.data as Record<string, unknown>
+  let cardData = card.data as Record<string, unknown>
+
+  // Apply AI formatting if a prompt is configured
+  if (stepConfig.prompt) {
+    try {
+      const aiResult = await runAIStep({
+        runDir,
+        prompt: stepConfig.prompt,
+        cardData,
+        timeoutMs: 60_000,
+      })
+      if (typeof aiResult.output === 'object') {
+        cardData = aiResult.output as Record<string, unknown>
+      } else {
+        // String output — use as body override, keyed under ai_output
+        cardData = { ...cardData, ai_output: aiResult.output }
+      }
+    } catch (err) {
+      await completeWithError(project, workflow, stepId, runId, runDir, cardId, prevStepDir, meta, `AI step failed: ${err instanceof Error ? err.message : String(err)}`)
+      return
+    }
+  }
 
   // Load credential
   const credential = await credentialService.get(stepConfig.channel.credential_id)

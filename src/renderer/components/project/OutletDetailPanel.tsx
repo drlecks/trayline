@@ -14,6 +14,7 @@ export default function OutletDetailPanel({ step }: Props) {
   const workflow = useProjectStore((s) => s.workflow)
   const [tab, setTab] = useState<Tab>('config')
   const [config, setConfig] = useState<OutletStepConfig | null>(null)
+  const [instructions, setInstructions] = useState('')
   const [runs, setRuns] = useState<OutletRunMeta[]>([])
   const [credentials, setCredentials] = useState<CredentialSummary[]>([])
   const [saving, setSaving] = useState(false)
@@ -24,7 +25,11 @@ export default function OutletDetailPanel({ step }: Props) {
     try {
       const raw = await window.trayline.project.listSteps(active.name, workflow.name)
       const s = raw.find((r) => r.id === step.id)
-      if (s) setConfig(s.raw as unknown as OutletStepConfig)
+      if (s) {
+        const cfg = s.raw as unknown as OutletStepConfig
+        setConfig(cfg)
+        setInstructions(cfg.prompt ?? '')
+      }
     } catch { /* ignore */ }
   }, [active, workflow, step.id])
 
@@ -65,7 +70,7 @@ export default function OutletDetailPanel({ step }: Props) {
         project: active.name,
         workflow: workflow.name,
         stepId: step.id,
-        patch: { channel: config.channel },
+        patch: { channel: config.channel, prompt: instructions.trim() || null },
       })
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : String(err))
@@ -183,6 +188,18 @@ export default function OutletDetailPanel({ step }: Props) {
               <p><code className="font-mono">{'{{card.data.field}}'}</code> — specific field value</p>
               <p><code className="font-mono">{'{{card.data}}'}</code> — full card as pretty JSON</p>
               <p><code className="font-mono">{'{{card.data | json}}'}</code> — full card as compact JSON string</p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium mb-1.5">Instructions (optional)</label>
+              <textarea
+                value={instructions}
+                onChange={(e) => setInstructions(e.target.value)}
+                rows={4}
+                className="w-full text-sm rounded-md border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 px-3 py-2 focus:outline-none focus:ring-1 focus:ring-violet-500 resize-none"
+                placeholder="e.g. Format the card data as a professional client-facing email. Keep it under 200 words."
+              />
+              <p className="text-xs text-neutral-400 mt-1">If set, the AI will format the card data using these instructions before sending.</p>
             </div>
 
             {saveError && <p className="text-xs text-red-500">{saveError}</p>}

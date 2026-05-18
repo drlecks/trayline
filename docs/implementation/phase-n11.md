@@ -69,17 +69,17 @@ Before dispatching via SMTP or HTTP POST, the outlet runner spawns the AI adapte
 
 #### Tasks
 
-- [ ] **B1** Add `prompt?: string` to the `SourceStepConfig` type in `src/shared/types.ts`.
-- [ ] **B2** Add `prompt?: string` to the Outlet step type in `src/shared/types.ts`.
-- [ ] **B3** Update `src/main/services/source-runner.ts`: after the channel fetch, if `step.prompt` is set, spawn the AI adapter with the raw data + instructions and use its output as `card.data`; otherwise keep existing verbatim behaviour.
-- [ ] **B4** Update the outlet runner (wherever that lives): if `step.prompt` is set, run the AI against `card.data` before dispatching; use the AI output as the final message body.
-- [ ] **B5** In `SourceDetailPanel.tsx` — add a **Instructions** tab (or a collapsible section in Config) with a `<textarea>` bound to `step.prompt`. Auto-saves on blur. Show a hint: *"Optional. If set, the AI will parse the raw fetched data using these instructions before creating the card."*
-- [ ] **B6** In `OutletDetailPanel.tsx` — add an **Instructions** tab with the same textarea. Hint: *"Optional. If set, the AI will format the card data using these instructions before sending."*
-- [ ] **B7** Update `resources/templates/source.step.json` to include `"prompt": null`.
-- [ ] **B8** Update the outlet step template (if one exists) to include `"prompt": null`.
-- [ ] **B9** Write tests in `source-runner.test.ts`: verify that when `step.prompt` is set and AI returns structured data, `card.data` reflects that; verify fallback when `step.prompt` is absent.
-- [ ] **B10** Update `docs/data-model.md` — add `prompt` field to Source and Outlet `step.json` schemas.
-- [ ] **B11** Update `docs/features.md` — section 7.16 Source and 7.21 Outlet: document the Instructions field.
+- [x] **B1** Add `prompt?: string | null` to `SourceStepConfig` in `src/shared/types.ts`.
+- [x] **B2** Add `prompt?: string | null` to `OutletStepConfig` in `src/shared/types.ts`.
+- [x] **B3** Update `src/main/services/source-runner.ts`: after fetch, if `step.prompt` is set, call `runAIStep` and use its output as `card.data`; verbatim fallback when absent. AI failures fail the run.
+- [x] **B4** Update `src/main/services/outlet-runner.ts`: if `step.prompt` is set, call `runAIStep` with `card.data` before dispatch; AI output replaces `card.data` for token resolution.
+- [x] **B5** `SourceDetailPanel.tsx` — Instructions textarea added to Config tab; auto-saves on blur.
+- [x] **B6** `OutletDetailPanel.tsx` — Instructions textarea added to Config tab; saved via Save button.
+- [x] **B7** Updated `resources/templates/source.step.json` to include `"prompt": null`.
+- [x] **B8** Updated `resources/templates/outlet.step.json` to include `"prompt": null`.
+- [x] **B9** 4 tests added to `source-runner.test.ts` covering AI output shaping, string wrapping, no-prompt fallback, and AI error failure.
+- [x] **B10** Updated `docs/data-model.md` — `prompt` field documented for Source and Outlet schemas.
+- [x] **B11** Updated `docs/features.md` — sections 7.16 and 7.21 document the Instructions field.
 
 ---
 
