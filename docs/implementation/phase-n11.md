@@ -160,12 +160,12 @@ A lightweight modal accessible from the top bar (or via keyboard shortcut `⌘/C
 
 #### Tasks
 
-- [ ] **E1** Add `QuickAIConsoleModal.tsx` in `src/renderer/components/ai/`.
-- [ ] **E2** Add `ai:query` IPC channel: accepts `{ prompt: string }`, spawns the active adapter, streams back `ai:query-chunk` events, then emits `ai:query-done` or `ai:query-error`.
-- [ ] **E3** Wire the modal open via a **Terminal** icon button in `TopBar.tsx` and the keyboard shortcut `⌘/Ctrl+Shift+A` in `useGlobalShortcuts`.
-- [ ] **E4** Add `ai:query`, `ai:query-chunk`, `ai:query-done`, `ai:query-error` to `IPC` in `ipc-channels.ts` and to the preload bridge.
-- [ ] **E5** Update `docs/features.md` — add section 7.22 "Quick AI Console".
-- [ ] **E6** Update `docs/user-flows.md` — add flow 6.23 "Quick AI Query".
+- [x] **E1** Add `QuickAIConsoleModal.tsx` in `src/renderer/components/ai/`.
+- [x] **E2** Add `ai:query` IPC channel: accepts `{ prompt: string }`, spawns the active adapter, streams back `ai:query-chunk` events, then emits `ai:query-done` or `ai:query-error`.
+- [x] **E3** Wire the modal open via a **Terminal** icon button in `TopBar.tsx` and the keyboard shortcut `⌘/Ctrl+Shift+A` in `useGlobalShortcuts`.
+- [x] **E4** Add `ai:query`, `ai:query-chunk`, `ai:query-done`, `ai:query-error` to `IPC` in `ipc-channels.ts` and to the preload bridge.
+- [x] **E5** Update `docs/features.md` — add section 7.23 "Quick AI Console" (7.22 was used for Project Settings).
+- [x] **E6** Update `docs/user-flows.md` — add flow 6.24 "Quick AI Query" (6.23 was used for Project Settings).
 
 ---
 

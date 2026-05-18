@@ -1,4 +1,4 @@
-import { Moon, Sun, Monitor, Settings as SettingsIcon, KeyRound } from 'lucide-react'
+import { Moon, Sun, Monitor, Settings as SettingsIcon, KeyRound, Terminal } from 'lucide-react'
 import { useThemeStore } from '../../stores/theme-store'
 import { useProjectStore } from '../../stores/project-store'
 import { useActiveRunsStore } from '../../stores/active-runs-store'
@@ -16,7 +16,11 @@ const THEME_ICON = {
   dark: Moon,
 }
 
-export default function TopBar() {
+interface Props {
+  onOpenAIConsole: () => void
+}
+
+export default function TopBar({ onOpenAIConsole }: Props) {
   const { theme, setTheme } = useThemeStore()
   const setScreen = useProjectStore((s) => s.setScreen)
   const setActive = useProjectStore((s) => s.setActive)
@@ -71,6 +75,18 @@ export default function TopBar() {
             </button>
           )}
           <QueueBadge />
+          <button
+            onClick={onOpenAIConsole}
+            title="Quick AI (Ctrl+Shift+A)"
+            className="
+              p-1.5 rounded-md
+              text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-100
+              hover:bg-black/[0.05] dark:hover:bg-white/[0.05]
+              transition-colors duration-150
+            "
+          >
+            <Terminal size={15} strokeWidth={1.75} />
+          </button>
           <button
             onClick={cycleTheme}
             title={`Theme: ${theme}`}

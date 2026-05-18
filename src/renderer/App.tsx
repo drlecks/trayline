@@ -15,6 +15,7 @@ import AdapterSetupScreen from './components/adapter/AdapterSetupScreen'
 import OnboardingTour from './components/onboarding/OnboardingTour'
 import ShortcutsDialog from './components/shortcuts/ShortcutsDialog'
 import CommandPalette from './components/shortcuts/CommandPalette'
+import QuickAIConsoleModal from './components/ai/QuickAIConsoleModal'
 import { useGlobalShortcuts } from './components/shortcuts/useGlobalShortcuts'
 import { useActiveRunsStore } from './stores/active-runs-store'
 
@@ -44,11 +45,13 @@ export default function App() {
   const [tourOpen, setTourOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  const [aiConsoleOpen, setAiConsoleOpen] = useState(false)
 
   useGlobalShortcuts({
     openSettings: () => setScreen('settings'),
     openPalette: () => setPaletteOpen(true),
     openShortcuts: () => setShortcutsOpen(true),
+    openAIConsole: () => setAiConsoleOpen(true),
   })
 
   // Initialize global active-runs subscription (runs until app unmounts)
@@ -172,7 +175,7 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-full">
-      <TopBar />
+      <TopBar onOpenAIConsole={() => setAiConsoleOpen(true)} />
       <main className="flex flex-1 overflow-hidden">
         {screen === 'splash' && (
           <div className="flex-1 overflow-y-auto py-12 flex">
@@ -205,6 +208,7 @@ export default function App() {
       <ProviderNotInstalledModal />
       <OnboardingTour open={tourOpen} onClose={closeTour} />
       <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
+      <QuickAIConsoleModal open={aiConsoleOpen} onOpenChange={setAiConsoleOpen} />
       <CommandPalette
         open={paletteOpen}
         onOpenChange={setPaletteOpen}

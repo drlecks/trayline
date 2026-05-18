@@ -129,4 +129,9 @@ export const IPC = {
     onCompleted: 'outlet:run-completed',
     onFailed:    'outlet:run-failed',
   },
+  ai: {
+    query:   'ai:query',
+    abort:   'ai:abort',
+    onChunk: 'ai:query-chunk',
+  },
 } as const

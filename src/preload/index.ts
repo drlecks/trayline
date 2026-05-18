@@ -314,6 +314,15 @@ const api = {
       return () => ipcRenderer.off(IPC.outlet.onFailed, listener)
     },
   },
+  ai: {
+    query: (prompt: string): Promise<void> => ipcRenderer.invoke(IPC.ai.query, prompt),
+    abort: (): void => ipcRenderer.send(IPC.ai.abort),
+    onChunk: (handler: (chunk: string) => void): (() => void) => {
+      const listener = (_e: unknown, chunk: string) => handler(chunk)
+      ipcRenderer.on(IPC.ai.onChunk, listener)
+      return () => ipcRenderer.off(IPC.ai.onChunk, listener)
+    },
+  },
   platform: process.platform as NodeJS.Platform,
 }
 

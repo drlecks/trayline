@@ -392,3 +392,36 @@ User edits Name and/or Description
 Clicking any step card in the left rail
   └── setSelectedStepId(id); showContextEditor = false; showProjectSettings = false
 ```
+
+---
+
+## 6.24 Quick AI Query (N11)
+
+```
+User presses Ctrl+Shift+A   ─OR─   clicks the Terminal icon in TopBar
+  └── setAiConsoleOpen(true) → <QuickAIConsoleModal open={true} />
+
+Modal opens (idle state):
+  ├── Prompt textarea (auto-focused, placeholder: "Ask anything…")
+  └── [Ask] button (disabled until textarea non-empty)
+
+User types prompt and presses [Ask] (or Ctrl+Enter):
+  └── status = 'running'; response area cleared
+  └── window.trayline.ai.query(prompt)
+        └── IPC: ai:query → handlers.ts
+              ├── Spawns active adapter in a temp directory
+              ├── Streams stdout → emits ai:query-chunk events to renderer
+              │     └── window.trayline.ai.onChunk(chunk) → appends to response text
+              └── On done → resolves; status = 'done'
+              └── On error → rejects; status = 'error', shows error message
+
+User can dismiss at any time:
+  ├── Clicks [×] or presses Escape → onOpenChange(false)
+  └── If status === 'running': window.trayline.ai.abort() → kills active session
+
+Response present:
+  └── [Copy] button copies response text to clipboard; shows "Copied" for 1.5 s
+```
+
+- Modal is stateless — no history persists between opens.
+- Each open is a fresh session; the previous response is not shown.

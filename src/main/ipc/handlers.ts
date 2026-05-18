@@ -18,8 +18,11 @@ import { notificationService } from '../services/notification-service'
 import { credentialService } from '../services/credential-service'
 import { outletRunner } from '../services/outlet-runner'
 import { join } from 'path'
+import os from 'os'
 import fs from 'fs/promises'
 import { fsService } from '../services/fs-service'
+import type { AISession } from '../ai-terminals/adapter'
+import { IPC } from '../../shared/ipc-channels'
 import type { BootstrapInfo, NotificationSettings, ProviderInstallSuggestion, ProviderReadyResult, ExportOptions, ImportSuccess, SourceStepConfig, Credential, OutletStepConfig } from '../../shared/types'
 import type { CardStatus } from '../../shared/card'
 
@@ -495,4 +498,58 @@ export function registerIpcHandlers(
   ipcMain.handle('outlet:list-runs', (_: unknown, project: string, workflow: string, stepId: string) =>
     outletRunner.listOutletRuns(project, workflow, stepId),
   )
+
+  // ── Quick AI Console ──────────────────────────────────────────────────────
+
+  let activeAiSession: AISession | null = null
+
+  ipcMain.handle(IPC.ai.query, async (event, prompt: string) => {
+    // Kill any stale session from a previous request
+    if (activeAiSession) {
+      await activeAiSession.kill().catch(() => {})
+      activeAiSession = null
+    }
+
+    const adapterId = settingsStore.get('defaultAdapterId') ?? 'claude-code'
+    const adapter = adapterRegistry.get(adapterId) ?? adapterRegistry.get('claude-code')
+    if (!adapter) throw new Error('No AI adapter available')
+
+    const tmpDir = await fs.mkdtemp(join(os.tmpdir(), 'trayline-ai-'))
+    const promptFile = join(tmpDir, 'process.md')
+    await fs.writeFile(promptFile, prompt, 'utf-8')
+
+    try {
+      const session = await adapter.spawn({
+        processFile: promptFile,
+        cardData: {},
+        contextPacks: [],
+        workingDir: tmpDir,
+        timeout: 120_000,
+      })
+      activeAiSession = session
+
+      // Stream chunks to renderer while session runs
+      void (async () => {
+        try {
+          for await (const chunk of session.stdout) {
+            if (!event.sender.isDestroyed()) {
+              event.sender.send(IPC.ai.onChunk, chunk)
+            }
+          }
+        } catch { /* ignore */ }
+      })()
+
+      await session.result()
+    } finally {
+      activeAiSession = null
+      await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {})
+    }
+  })
+
+  ipcMain.on(IPC.ai.abort, async () => {
+    if (activeAiSession) {
+      await activeAiSession.kill().catch(() => {})
+      activeAiSession = null
+    }
+  })
 }
