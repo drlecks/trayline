@@ -100,8 +100,6 @@ export default function App() {
       if (!installed) return  // AdapterSetupScreen takes over; onReady() will resume bootstrap
 
       await bootstrapRouting()
-      if (cancelled) return
-      if (!settings.onboardingComplete) setTourOpen(true)
     })()
     return () => { cancelled = true }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -123,7 +121,6 @@ export default function App() {
     const settings = await window.trayline.settings.get()
     setTheme(settings.theme)
     await bootstrapRouting()
-    if (!settings.onboardingComplete) setTourOpen(true)
   }
 
   // Allow other screens to re-trigger the tour (Help link in Settings).

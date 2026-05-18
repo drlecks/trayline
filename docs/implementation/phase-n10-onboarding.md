@@ -31,7 +31,7 @@ The core promise is "open the app, describe a task, have automation running in 1
 
 Update `docs/new-feature-revision.md`:
 
-- [ ] Reframe Gap 1 ("AI adapter barrier") from an open gap to a resolved design decision:
+- [x] Reframe Gap 1 ("AI adapter barrier") from an open gap to a resolved design decision:
   - Local AI with guided in-app model download IS the zero-setup path.
   - The one-time model download (~3–8 GB) is fully guided in the app, requires no terminal, no account, and no external site.
   - Claude Code is an opt-in power-user upgrade, clearly labelled as such. It is not required.
@@ -44,11 +44,11 @@ Update `docs/new-feature-revision.md`:
 
 In `AdapterSetupScreen.tsx`:
 
-- [ ] Reorder adapters so `local-llm` is always rendered first.
-- [ ] Add a **"Recommended · No subscription needed"** badge to the local-llm card.
-- [ ] Add a **"Power user · Requires Anthropic subscription"** note to the Claude Code card.
-- [ ] Update header copy from `"Trayline needs an AI to run your workflows."` to something like: `"Set up your AI. The local model works out of the box — just download it once."` (exact copy TBD).
-- [ ] No behaviour changes — only visual/copy changes and ordering.
+- [x] Reorder adapters so `local-llm` is always rendered first.
+- [x] Add a **"Recommended · No subscription needed"** badge to the local-llm card.
+- [x] Add a **"Power user · Requires Anthropic subscription"** note to the Claude Code card.
+- [x] Update header copy from `"Trayline needs an AI to run your workflows."` to `"Set up your AI. The local model works out of the box — download it once, use it forever, no account needed."`.
+- [x] No behaviour changes — only visual/copy changes and ordering.
 
 ---
 
@@ -194,16 +194,16 @@ Currently the "+ Add" button opens a type picker: HTTP / IMAP / SMTP.
 
 In `src/renderer/stores/project-store.ts`:
 
-- [ ] Add `justCreatedProject: string | null` state (default `null`).
-- [ ] Add `setJustCreatedProject(name: string | null)` action.
-- [ ] In `WorkflowAuthorScreen.tsx`: after `openProject()` is called from `PostGenBanner`, also call `setJustCreatedProject(outcome.project.name)`.
+- [x] Add `justCreatedProject: string | null` state (default `null`).
+- [x] Add `setJustCreatedProject(name: string | null)` action.
+- [x] In `WorkflowAuthorScreen.tsx`: after `openProject()` is called from `PostGenBanner`, also call `setJustCreatedProject(outcome.project.name)`.
 
 ### 4b. `FirstProjectGuide` component
 
 Create `src/renderer/components/onboarding/FirstProjectGuide.tsx`:
 
-- [ ] Props: `{ hasSourceStep: boolean; sourceStepId?: string; firstTrayId?: string; onDismiss: () => void; onTour: () => void }`
-- [ ] Renders as the right-panel content when no step is selected and the project is fresh.
+- [x] Props: `{ hasSourceStep: boolean; sourceStepId?: string; firstTrayId?: string; onDismiss: () => void; onTour: () => void }`
+- [x] Renders as the right-panel content when no step is selected and the project is fresh.
 - [ ] **Layout:**
   ```
   ┌────────────────────────────────────────────────────────────────┐
@@ -249,30 +249,30 @@ Create `src/renderer/components/onboarding/FirstProjectGuide.tsx`:
 
 ### 4c. Wire `FirstProjectGuide` into `ProjectScreen.tsx`
 
-- [ ] Import `FirstProjectGuide`.
-- [ ] In the right panel: if `selectedStepId === null` and `active.name === justCreatedProject`:
+- [x] Import `FirstProjectGuide`.
+- [x] In the right panel: if `selectedStepId === null` and `active.name === justCreatedProject`:
   - Render `<FirstProjectGuide ... />` instead of the current empty-state placeholder.
-- [ ] `onDismiss` → `setJustCreatedProject(null)` → guide disappears, right panel shows normal empty state.
-- [ ] `onTour` → set `tourOpen = true` in `App.tsx` via a callback or store flag (see 4d).
-- [ ] When the user clicks any step in the left rail (`setSelectedStepId` is called), also call `setJustCreatedProject(null)` to auto-dismiss the guide.
+- [x] `onDismiss` → `setJustCreatedProject(null)` → guide disappears, right panel shows normal empty state.
+- [x] `onTour` → dispatches `window.dispatchEvent(new Event('trayline:open-tour'))` (reuses existing App.tsx event listener).
+- [x] When the user selects any step (`setSelectedStepId`), auto-clears `justCreatedProject` via store action.
 
 ### 4d. Refactor `OnboardingTour` trigger
 
 Currently the tour auto-fires on app boot when `!settings.onboardingComplete`.
 
-- [ ] **Remove** the auto-trigger from `App.tsx` boot sequence.
-- [ ] The tour is now triggered only:
+- [x] **Remove** the auto-trigger from `App.tsx` boot sequence (both on initial load and `handleAdapterReady`).
+- [x] The tour is now triggered only via `window.dispatchEvent(new Event('trayline:open-tour'))`:
   - From `FirstProjectGuide`'s "Take a quick tour" button.
-  - From **Settings → Help → Run onboarding tour** (already present — no change needed).
-- [ ] `settings.onboardingComplete` is still set to `true` when the tour is closed (preserves the "don't show again" behaviour for the Settings trigger).
-- [ ] Add a `triggerTour` action to the project store (or a simple state prop in `App.tsx`) that `FirstProjectGuide` can call.
+  - From **Settings → Help → Run onboarding tour** (existing listener unchanged).
+- [x] `settings.onboardingComplete` is still set to `true` when the tour is closed.
+- [x] No new store action needed — reuses the existing `trayline:open-tour` custom event.
 
 ### 4e. Update `OnboardingTour` content
 
 The existing tour steps assume the user is in a project (left rail, detail panel). Now that the tour only fires from inside a project, the steps are always contextually valid. Minor copy updates only:
 
-- [ ] Step 5 ("You're ready"): remove the mention of context packs (that feature is advanced; better covered in docs). Replace with: *"That's it. Describe a new workflow, add cards, and let the workers do the rest. Revisit this tour from Settings → Help anytime."*
-- [ ] No structural changes to the tour component.
+- [x] Step 5 ("You're ready"): removed context packs mention; updated to: *"That's it. Describe a new workflow, add cards, and let the workers do the rest. Re-run this tour from Settings → Help anytime."*
+- [x] No structural changes to the tour component.
 
 ---
 
