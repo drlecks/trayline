@@ -164,6 +164,14 @@ Consistent set per concept:
 
 ---
 
+## N11 UI Patterns
+
+**Quick AI Console** — a `<Dialog>` modal, not a drawer. Fixed width (`max-w-xl`), centered. Prompt textarea auto-focuses on open. Response renders in a `pre` / `font-mono` block with `whitespace-pre-wrap` so streaming line breaks are preserved. A **Copy** button appears only when a response is present. The modal header is minimal: "Quick AI" label + close `×`. No history, no conversation threading — it is intentionally ephemeral.
+
+**Project Settings Panel** — uses the same right-canvas slot as step detail views. It is opened by a button in the left rail footer (same visual weight as the "Context files" button). The panel has a single `<form>` with Name (text input) and Description (resizable textarea). Save behavior: atomic rename on disk via IPC, then optimistic store update + refreshProjects. A transient "Saved ✓" confirmation replaces the Save button label for 2 seconds.
+
+---
+
 ## Pitch / Brand Aesthetic (for marketing)
 
 From the pitch document:

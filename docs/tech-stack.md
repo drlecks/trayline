@@ -176,3 +176,15 @@ The Settings screen surfaces a Provider list (sourced from `adapterRegistry.list
 The footer shows the active selection as `Provider · Model · Effort · 5h: used/limit · Weekly: used/limit`. Adapters that don't expose `getUsage()` drop the usage segments instead of rendering placeholders. Footer values refresh whenever a worker run completes (the main process broadcasts `adapters:onUsageUpdate`) and via a manual refresh in Settings.
 
 **Claude Code** is the default and currently only production adapter. The architecture supports any CLI agent from day one — adding a new adapter is a single file plus a registry entry, no engine changes.
+
+### Quick AI Console IPC channels
+
+The Quick AI Console is a lightweight one-shot query modal that fires outside the workflow engine. It uses a dedicated IPC surface:
+
+| Channel | Direction | Description |
+|---|---|---|
+| `ai:query` | invoke (renderer → main) | Spawn the active adapter with the given prompt string. Streams `ai:query-chunk` events to the renderer until done. Resolves when the session exits. |
+| `ai:abort` | send (renderer → main) | Kill any in-flight Quick AI session immediately. |
+| `ai:query-chunk` | push (main → renderer) | One stdout chunk from the active session, forwarded in real time. |
+
+The handler in `src/main/ipc/handlers.ts` spawns the adapter into a temp directory, iterates its stdout async iterator, and broadcasts each chunk. On close the temp directory is cleaned up. There is at most one Quick AI session alive at a time; starting a new query while one is running first kills the old one.
