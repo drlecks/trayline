@@ -18,10 +18,11 @@ import fs from 'fs/promises'
 import { BrowserWindow } from 'electron'
 import { fsService, Paths } from './fs-service'
 import { projectService } from './project-service'
+import { credentialService } from './credential-service'
 import { auditDb } from './audit-db'
 import { adapterRegistry } from '../ai-terminals/registry'
 import { IPC } from '../../shared/ipc-channels'
-import type { SourceStepConfig, SourceCounters, SeenIdsEntry, SourceRunMeta, SourceState, SourceRunEvent } from '../../shared/types'
+import type { SourceStepConfig, SourceCounters, SeenIdsEntry, SourceRunMeta, SourceState, SourceRunEvent, HttpCredential, ImapCredential } from '../../shared/types'
 import type { Card } from '../../shared/card'
 
 // ── Broadcast ─────────────────────────────────────────────────────────────────
@@ -191,6 +192,43 @@ async function runSourceInner({ project, workflow, stepId, stepConfig }: RunSour
     return
   }
 
+  // ── Channel fetch (if configured) ──────────────────────────────────────────
+  let prefetchedSection = ''
+  if (stepConfig.channel) {
+    const channel = stepConfig.channel
+    const credential = await credentialService.get(channel.credential_id)
+    if (!credential) {
+      const err = `Credential not found: ${channel.credential_id}`
+      await failRun({ project, workflow, stepId, runId, stateDir, runDir, startedAt, meta, error: err })
+      return
+    }
+
+    try {
+      if (channel.type === 'http_get') {
+        const { fetchHttp } = await import('./http-channel')
+        const counters = await readCounters(stateDir)
+        const lastRunAt = counters.last_run_at ?? ''
+        const fetched = await fetchHttp(credential as HttpCredential, channel, { last_run_at: lastRunAt })
+        prefetchedSection = `\n\n## Fetched data\n\n${fetched}\n`
+      } else if (channel.type === 'imap') {
+        const { fetchEmails } = await import('./imap-channel')
+        const emails = await fetchEmails(credential as ImapCredential, channel)
+        prefetchedSection = `\n\n## Fetched data\n\n${JSON.stringify(emails, null, 2)}\n`
+      }
+    } catch (err) {
+      const error = `Channel fetch failed: ${err instanceof Error ? err.message : String(err)}`
+      await failRun({ project, workflow, stepId, runId, stateDir, runDir, startedAt, meta, error })
+      return
+    }
+  }
+
+  // Write a per-run instruction file that includes fetched data when present
+  const runtimeInstructionFile = join(runDir, 'source-with-data.md')
+  if (prefetchedSection) {
+    const sourceContent = await fs.readFile(instructionFile, 'utf-8')
+    await fs.writeFile(runtimeInstructionFile, sourceContent + prefetchedSection, 'utf-8')
+  }
+
   const timeoutMs = (stepConfig.execution.timeout_seconds ?? 60) * 1000
 
   let rawOutput = ''
@@ -198,7 +236,7 @@ async function runSourceInner({ project, workflow, stepId, stepConfig }: RunSour
 
   try {
     const session = await adapter.spawn({
-      processFile: instructionFile,
+      processFile: prefetchedSection ? runtimeInstructionFile : instructionFile,
       cardData: {},
       contextPacks: [],
       workingDir: runDir,

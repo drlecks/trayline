@@ -2,14 +2,12 @@ import { useEffect, useState } from 'react'
 import { Folder, Sparkles, FolderOpen, Package } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useProjectStore } from '@/stores/project-store'
-import ImportSecurityAuditDialog from '../projects/ImportSecurityAuditDialog'
-import type { BootstrapInfo, ImportNeedsReview } from '../../../shared/types'
+import type { BootstrapInfo } from '../../../shared/types'
 
 export default function WelcomeSplash() {
   const [info, setInfo] = useState<BootstrapInfo | null>(null)
   const [importing, setImporting] = useState(false)
   const [openingExample, setOpeningExample] = useState(false)
-  const [importAudit, setImportAudit] = useState<ImportNeedsReview | null>(null)
   const setScreen = useProjectStore((s) => s.setScreen)
   const setActive = useProjectStore((s) => s.setActive)
   const refreshProjects = useProjectStore((s) => s.refreshProjects)
@@ -29,11 +27,7 @@ export default function WelcomeSplash() {
       const result = await window.trayline.project.import()
       if ('canceled' in result) return
       await refreshProjects()
-      if (result.ok === 'needs_review') {
-        setImportAudit(result)
-      } else {
-        await openProject(result.projectName)
-      }
+      await openProject(result.projectName)
     } catch (e) {
       alert(e instanceof Error ? e.message : String(e))
     } finally {
@@ -52,18 +46,6 @@ export default function WelcomeSplash() {
     } finally {
       setOpeningExample(false)
     }
-  }
-
-  async function handleAuditCommit(token: string) {
-    const committed = await window.trayline.project.importCommit(token)
-    setImportAudit(null)
-    await refreshProjects()
-    await openProject(committed.projectName)
-  }
-
-  function handleAuditAbort(token: string) {
-    void window.trayline.project.importAbort(token)
-    setImportAudit(null)
   }
 
   return (
@@ -132,19 +114,6 @@ export default function WelcomeSplash() {
             </div>
           </div>
         </div>
-      )}
-
-      {importAudit && (
-        <ImportSecurityAuditDialog
-          token={importAudit.token}
-          projectName={importAudit.projectName}
-          securityFindings={importAudit.securityFindings}
-          projectSummary={importAudit.projectSummary}
-          open={!!importAudit}
-          onOpenChange={(o) => { if (!o) handleAuditAbort(importAudit.token) }}
-          onCommit={handleAuditCommit}
-          onAbort={handleAuditAbort}
-        />
       )}
 
     </div>

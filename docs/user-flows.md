@@ -254,6 +254,96 @@ Triggered automatically by the cron scheduler, or manually via **Run now**:
 
 ---
 
+## 6.18 Adding a Credential
+
+```
+Top bar → Credentials button (KeyRound icon)
+  └── CredentialsScreen — empty state or list
+        └── [+ Add] → type picker: HTTP / IMAP / SMTP
+              ├── HTTP form → Name, Base URL, Timeout, Headers
+              │     └── [Test connection] → inline ✓ or ✗ with error
+              │     └── [Save] → credential.json written; passwords in keytar
+              ├── IMAP form → Name, Host, Port, Secure, Username, Password
+              │     └── [Test connection] → opens IMAP connection
+              │     └── [Save]
+              └── SMTP form → Name, Host, Port, Secure, Username, Password,
+                              From name, From address
+                    └── [Test connection] → SMTP verify
+                    └── [Save]
+```
+
+---
+
+## 6.19 Configuring a Source Channel
+
+After adding a Credential, the user can assign it to a Source step:
+
+```
+ProjectScreen → select Source step
+  └── Source detail panel → Config tab → Data source section
+        ├── "AI fetches data (default)" — no change from pre-N9
+        ├── "HTTP GET" selected
+        │     ├── Credential selector (HTTP credentials only)
+        │     └── URL path field — appended to credential base URL
+        │           Hint: "Use {{last_run_at}} for incremental fetches"
+        └── "IMAP inbox" selected
+              ├── Credential selector (IMAP credentials only)
+              ├── Folder (default: INBOX), Max messages, Unseen only toggle
+              └── Optional Subject / From filters
+  └── [Save] — writes channel block to step.json
+  └── [Run now] — pre-fetches data, spawns AI, creates cards
+```
+
+---
+
+## 6.20 Adding and Configuring an Outlet Step
+
+```
+ProjectScreen → + Add step (bottom of left rail)
+  └── Step type picker → Outlet
+        └── Scaffold creates step.json + runs/ folder
+              (no cards/ — outlet consumes from previous tray)
+
+Select Outlet step → OutletDetailPanel → Config tab
+  ├── Channel type selector: SMTP email / HTTP POST
+  ├── Credential selector (filters to matching type)
+  │     └── If empty: link to Credentials screen
+  ├── Template fields (To/Subject/Body for SMTP; URL/Method/Body for HTTP POST)
+  │     All fields support {{card.data.*}} tokens
+  └── [Save]
+```
+
+---
+
+## 6.21 An Outlet Runs
+
+Triggered automatically when a card arrives in the Outlet's preceding tray's `ready/` folder (watched by the watcher service, same as workers):
+
+```
+Card arrives in prev-tray/cards/ready/card-id.json
+  └── watcher fires → outletRunner.runOutlet()
+        ├── Write run meta: status=running
+        ├── Emit outlet:run-started (left rail shows "Sending…" pulse)
+        ├── Load card from ready/
+        ├── Load credential from credentials/<id>/
+        ├── Resolve {{card.data.*}} tokens in channel config
+        ├── Dispatch:
+        │     ├── smtp → nodemailer transport.sendMail()
+        │     └── http_post → fetch POST to base_url + url_path
+        │
+        ├── Success path:
+        │     ├── Archive card to prev-tray/cards/archived/
+        │     ├── Write meta: status=completed, ended_at
+        │     └── Emit outlet:run-completed (left rail shows "Sent ✓")
+        │
+        └── Failure path:
+              ├── Write meta: status=failed, error
+              ├── Move card to 99-errors/cards/ready/
+              └── Emit outlet:run-failed (left rail shows "⚠ Failed")
+```
+
+---
+
 ## 6.17 First Launch — Download Local Model
 
 When the user selects the **local-llm** adapter from the `AdapterSetupScreen` and no model has been downloaded yet:

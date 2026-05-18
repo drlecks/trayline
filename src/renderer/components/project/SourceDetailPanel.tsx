@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label'
 import SchedulePicker from '@/components/shared/SchedulePicker'
 import { useProjectStore } from '@/stores/project-store'
 import { useProviderGuard } from '@/stores/provider-guard-store'
-import type { StepMeta, SourceState, SourceRunMeta, SourceRunEvent, SourceStepConfig } from '../../../shared/types'
+import type { StepMeta, SourceState, SourceRunMeta, SourceRunEvent, SourceStepConfig, CredentialSummary } from '../../../shared/types'
 
 type Tab = 'source' | 'config' | 'runs'
 
@@ -321,12 +321,14 @@ function SourceConfigTab({
 }) {
   const refreshSteps = useProjectStore((s) => s.refreshSteps)
   const setSelectedStepId = useProjectStore((s) => s.setSelectedStepId)
+  const setScreen = useProjectStore((s) => s.setScreen)
   const [config, setConfig] = useState<Partial<SourceStepConfig>>({})
   const [loaded, setLoaded] = useState(false)
   const [saving, setSaving] = useState(false)
 
   // Adapters
   const [installedAdapters, setInstalledAdapters] = useState<{ id: string; displayName: string }[]>([])
+  const [credentials, setCredentials] = useState<CredentialSummary[]>([])
 
   useEffect(() => {
     let cancelled = false
@@ -340,6 +342,7 @@ function SourceConfigTab({
       }
       setLoaded(true)
       void window.trayline.adapters.list().then(setInstalledAdapters)
+      void window.trayline.credential.list().then(setCredentials)
     })()
     return () => { cancelled = true }
   }, [project, workflow, step.id])
@@ -483,6 +486,135 @@ function SourceConfigTab({
             className="h-8 text-sm"
           />
         </div>
+      </div>
+
+      {/* Data source channel */}
+      <div className="flex flex-col gap-3 rounded-md border border-neutral-200 dark:border-neutral-800 p-4">
+        <div className="text-[11px] uppercase tracking-wider text-neutral-400">Data source</div>
+
+        <div className="flex flex-col gap-1.5">
+          <Label className="text-xs">Channel</Label>
+          <select
+            value={config.channel?.type ?? 'ai'}
+            onChange={(e) => {
+              const t = e.target.value
+              if (t === 'ai') {
+                void save({ channel: null })
+              } else if (t === 'http_get') {
+                void save({ channel: { type: 'http_get', credential_id: '', url_path: '', response_path: '' } })
+              } else if (t === 'imap') {
+                void save({ channel: { type: 'imap', credential_id: '', folder: 'INBOX', unseen_only: true, max_messages: 50 } })
+              }
+            }}
+            className="h-8 w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-2 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-300 dark:focus:ring-neutral-700"
+          >
+            <option value="ai">AI fetches data (default)</option>
+            <option value="http_get">HTTP GET</option>
+            <option value="imap">IMAP inbox</option>
+          </select>
+        </div>
+
+        {config.channel?.type === 'http_get' && (
+          <>
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs">HTTP credential</Label>
+              <select
+                value={config.channel.credential_id}
+                onChange={(e) => void save({ channel: { ...config.channel, credential_id: e.target.value } })}
+                className="h-8 w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-2 text-sm"
+              >
+                <option value="">— Select credential —</option>
+                {credentials.filter((c) => c.type === 'http').map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+              {credentials.filter((c) => c.type === 'http').length === 0 && (
+                <p className="text-xs text-neutral-400">
+                  No HTTP credentials —{' '}
+                  <button className="text-emerald-600 hover:underline" onClick={() => setScreen('credentials')}>add one</button>
+                </p>
+              )}
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs">URL path</Label>
+              <Input
+                defaultValue={config.channel.url_path}
+                onBlur={(e) => void save({ channel: { ...config.channel, url_path: e.target.value } })}
+                className="h-8 text-sm font-mono"
+                placeholder="/endpoint?since={{last_run_at}}"
+              />
+              <p className="text-xs text-neutral-500">Appended to the credential's base URL. Use <code className="font-mono">{'{{last_run_at}}'}</code> for incremental fetches.</p>
+            </div>
+          </>
+        )}
+
+        {config.channel?.type === 'imap' && (
+          <>
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs">IMAP credential</Label>
+              <select
+                value={config.channel.credential_id}
+                onChange={(e) => void save({ channel: { ...config.channel, credential_id: e.target.value } })}
+                className="h-8 w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-2 text-sm"
+              >
+                <option value="">— Select credential —</option>
+                {credentials.filter((c) => c.type === 'imap').map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="flex flex-col gap-1.5 flex-1">
+                <Label className="text-xs">Folder</Label>
+                <Input
+                  defaultValue={config.channel.folder ?? 'INBOX'}
+                  onBlur={(e) => void save({ channel: { ...config.channel, folder: e.target.value } })}
+                  className="h-8 text-sm"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5 w-28">
+                <Label className="text-xs">Max messages</Label>
+                <Input
+                  type="number"
+                  defaultValue={config.channel.max_messages ?? 50}
+                  onBlur={(e) => {
+                    const n = parseInt(e.target.value, 10)
+                    if (!isNaN(n) && n > 0) void save({ channel: { ...config.channel, max_messages: n } })
+                  }}
+                  className="h-8 text-sm"
+                />
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="unseen-only"
+                checked={config.channel.unseen_only ?? true}
+                onChange={(e) => void save({ channel: { ...config.channel, unseen_only: e.target.checked } })}
+                className="rounded"
+              />
+              <label htmlFor="unseen-only" className="text-xs">Unread messages only</label>
+            </div>
+            <div className="flex gap-3">
+              <div className="flex flex-col gap-1.5 flex-1">
+                <Label className="text-xs">Subject contains (optional)</Label>
+                <Input
+                  defaultValue={config.channel.subject_contains ?? ''}
+                  onBlur={(e) => void save({ channel: { ...config.channel, subject_contains: e.target.value } })}
+                  className="h-8 text-sm"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5 flex-1">
+                <Label className="text-xs">From contains (optional)</Label>
+                <Input
+                  defaultValue={config.channel.from_contains ?? ''}
+                  onBlur={(e) => void save({ channel: { ...config.channel, from_contains: e.target.value } })}
+                  className="h-8 text-sm"
+                />
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       <div className="flex items-center justify-between pt-2">

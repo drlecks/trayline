@@ -32,7 +32,9 @@
 - **archiver / adm-zip** — zip-based project import/export (write / read)
 - **node-cron** — scheduler for workers that poll on an interval
 - **fast-glob** — folder scanning
-- **keytar** — OS keychain access (Keychain on macOS, Credential Manager on Windows, libsecret on Linux); used by the Credentials store (N9+)
+- **keytar** — OS keychain access (Keychain on macOS, Credential Manager on Windows, libsecret on Linux); used by the Credentials store to hold passwords for HTTP, IMAP, and SMTP credentials
+- **imapflow** — modern IMAP client used by the Source step IMAP channel to fetch emails; promise-based, handles search, seen-flag marking, and clean disconnection
+- **nodemailer** — SMTP email sending used by the Outlet step SMTP channel
 - **Electron.Notification** (built-in) — OS push notifications when cards need review; guarded by `Notification.isSupported()`
 - **app.setBadgeCount / BrowserWindow.setOverlayIcon** (built-in) — dock/taskbar badge showing pending-review count; SVG-drawn overlay on Windows, native badge count on macOS and Linux
 
@@ -45,6 +47,23 @@
 - **Isolation** — `vitest.setup.ts` stubs the `electron` module and points `fs-service.Paths` at a freshly created tmp directory per test run, so tests never touch a developer's real `~/Documents/Trayline`.
 - **Mocking external systems** — use `vi.mock` for libraries like `node-cron` and `chokidar`, and `vi.stubGlobal('fetch', ...)` for HTTP. Tests must not depend on real timers or the network.
 - **What must have tests** — see the **Testing Policy** section of `CLAUDE.md`. In short: every non-trivial main-process service, every adapter, every rule-encoding shared utility, every data-integrity path, and every bug fix on those paths.
+
+---
+
+## Credentials & Channel I/O
+
+Trayline has a global **Credentials store** (`~/Documents/Trayline/credentials/`) that holds named auth configs for HTTP, IMAP, and SMTP. Non-secret fields (host, port, username, headers, base URL) are written as JSON. Passwords and API keys are stored in the OS keychain via keytar, never on disk.
+
+Three channel service files implement the I/O:
+
+| File | Purpose |
+|---|---|
+| `src/main/services/credential-service.ts` | CRUD for credentials, keytar read/write, test-connection dispatch |
+| `src/main/services/http-channel.ts` | HTTP GET (`fetchHttp`) and HTTP POST (`postHttp`) with token resolution and secret header injection |
+| `src/main/services/imap-channel.ts` | IMAP fetch (`fetchEmails`) via imapflow with seen-flag handling |
+| `src/main/services/smtp-channel.ts` | SMTP send (`sendEmail`) via nodemailer; auto-detects HTML vs plain text |
+
+Source steps use `fetchHttp` / `fetchEmails` to pre-fetch data before spawning the AI. Outlet steps use `postHttp` / `sendEmail` to dispatch card data after token resolution, with no AI involved.
 
 ---
 

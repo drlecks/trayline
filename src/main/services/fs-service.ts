@@ -9,6 +9,7 @@ export const Paths = {
   root: TRAYLINE_ROOT,
   appData: join(TRAYLINE_ROOT, 'app-data'),
   projects: join(TRAYLINE_ROOT, 'projects'),
+  credentials: join(TRAYLINE_ROOT, 'credentials'),
 } as const
 
 async function ensureDir(path: string) {
@@ -18,6 +19,7 @@ async function ensureDir(path: string) {
 async function bootstrap() {
   await ensureDir(Paths.appData)
   await ensureDir(Paths.projects)
+  await ensureDir(Paths.credentials)
 }
 
 async function readJson<T>(path: string): Promise<T> {
