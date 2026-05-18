@@ -99,7 +99,7 @@ Each task corresponds to a phase file in this folder. Check off tasks as they ar
 
 ## N10 Phases (Onboarding & Accessibility)
 
-- [ ] [Phase N10 — Onboarding & Accessibility](./phase-n10-onboarding.md)
+- [x] [Phase N10 — Onboarding & Accessibility](./phase-n10-onboarding.md)
 
 ---
 
