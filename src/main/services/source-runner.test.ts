@@ -402,6 +402,102 @@ describe('sourceRunner — prompt (AI processing)', () => {
   })
 })
 
+describe('sourceRunner — auto-forward to next tray', () => {
+  async function setupSourceWithNextTray(
+    project: string,
+    workflow: string,
+    sourceId: string,
+    trayId: string,
+    sourceCfg?: SourceStepConfig,
+  ) {
+    const cfg = sourceCfg ?? makeHttpConfig({ id: sourceId })
+    const stepDir = join(Paths.projects, project, 'workflows', workflow, 'steps', sourceId)
+    await fs.mkdir(join(stepDir, 'state'), { recursive: true })
+    await fs.mkdir(join(stepDir, 'cards', 'ready'), { recursive: true })
+    await fs.mkdir(join(stepDir, 'runs'), { recursive: true })
+    await writeJson(join(stepDir, 'step.json'), cfg)
+    await writeJson(join(stepDir, 'state', 'counters.json'), { runs_total: 0, items_found: 0, items_new: 0, last_run_at: null })
+
+    const trayDir = join(Paths.projects, project, 'workflows', workflow, 'steps', trayId)
+    await fs.mkdir(join(trayDir, 'cards', 'ready'), { recursive: true })
+    await writeJson(join(trayDir, 'step.json'), { id: trayId, kind: 'tray', name: 'Intake', approval_mode: 'manual' })
+
+    await writeJson(join(Paths.projects, project, 'workflows', workflow, 'workflow.json'), {
+      id: workflow, name: workflow, display_name: workflow, step_ids: [sourceId, trayId],
+    })
+    await writeJson(join(Paths.projects, project, 'project.json'), {
+      id: project, name: project, display_name: project, description: '', created_at: new Date().toISOString(),
+    })
+  }
+
+  it('HTTP GET: card lands in next tray ready/, not source ready/', async () => {
+    const project = `sr-fwd-http-${Date.now()}`
+    const sourceId = '00-source'
+    const trayId = '01-intake'
+    await setHttpBody('forwarded data')
+    await setupSourceWithNextTray(project, 'wf', sourceId, trayId)
+
+    await sourceRunner.runSource({ project, workflow: 'wf', stepId: sourceId, stepConfig: makeHttpConfig({ id: sourceId }) })
+
+    const trayReady = join(Paths.projects, project, 'workflows', 'wf', 'steps', trayId, 'cards', 'ready')
+    const sourceReady = join(Paths.projects, project, 'workflows', 'wf', 'steps', sourceId, 'cards', 'ready')
+
+    expect((await fs.readdir(trayReady)).filter((f) => f.endsWith('.json'))).toHaveLength(1)
+    expect((await fs.readdir(sourceReady)).filter((f) => f.endsWith('.json'))).toHaveLength(0)
+  })
+
+  it('HTTP GET: forwarded card history includes marked_ready by system', async () => {
+    const project = `sr-fwd-hist-${Date.now()}`
+    const sourceId = '00-source'
+    const trayId = '01-intake'
+    await setHttpBody('test data')
+    await setupSourceWithNextTray(project, 'wf', sourceId, trayId)
+
+    await sourceRunner.runSource({ project, workflow: 'wf', stepId: sourceId, stepConfig: makeHttpConfig({ id: sourceId }) })
+
+    const trayReady = join(Paths.projects, project, 'workflows', 'wf', 'steps', trayId, 'cards', 'ready')
+    const files = (await fs.readdir(trayReady)).filter((f) => f.endsWith('.json'))
+    const card = await readJson<{ history: Array<{ event: string; by: string; step: string }> }>(join(trayReady, files[0]))
+
+    expect(card.history).toHaveLength(2)
+    expect(card.history[0].event).toBe('created')
+    expect(card.history[1].event).toBe('marked_ready')
+    expect(card.history[1].by).toBe('system')
+    expect(card.history[1].step).toBe(trayId)
+  })
+
+  it('IMAP: all new cards land in next tray ready/', async () => {
+    const project = `sr-fwd-imap-${Date.now()}`
+    const sourceId = '00-source'
+    const trayId = '01-intake'
+    await setImapEmails([
+      { message_id: 'msg-a', subject: 'Alpha' },
+      { message_id: 'msg-b', subject: 'Beta' },
+    ])
+    await setupSourceWithNextTray(project, 'wf', sourceId, trayId, makeImapConfig({ id: sourceId }))
+
+    await sourceRunner.runSource({ project, workflow: 'wf', stepId: sourceId, stepConfig: makeImapConfig({ id: sourceId }) })
+
+    const trayReady = join(Paths.projects, project, 'workflows', 'wf', 'steps', trayId, 'cards', 'ready')
+    const sourceReady = join(Paths.projects, project, 'workflows', 'wf', 'steps', sourceId, 'cards', 'ready')
+
+    expect((await fs.readdir(trayReady)).filter((f) => f.endsWith('.json'))).toHaveLength(2)
+    expect((await fs.readdir(sourceReady)).filter((f) => f.endsWith('.json'))).toHaveLength(0)
+  })
+
+  it('falls back to source ready/ when next step is not a tray', async () => {
+    const project = `sr-fwd-fallback-${Date.now()}`
+    const stepId = '00-source'
+    await setHttpBody('data')
+    await setupSourceStep(project, 'wf', stepId)
+
+    await sourceRunner.runSource({ project, workflow: 'wf', stepId, stepConfig: makeHttpConfig() })
+
+    const sourceReady = join(Paths.projects, project, 'workflows', 'wf', 'steps', stepId, 'cards', 'ready')
+    expect((await fs.readdir(sourceReady)).filter((f) => f.endsWith('.json'))).toHaveLength(1)
+  })
+})
+
 describe('sourceRunner.listRuns', () => {
   it('returns runs sorted newest first', async () => {
     const project = `sr-list-${Date.now()}`

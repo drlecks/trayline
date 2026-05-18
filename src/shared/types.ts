@@ -219,6 +219,10 @@ export interface OutletStepConfig {
   description?: string
   color?: string
   icon?: string
+  trigger?: {
+    mode: 'on_ready' | 'scheduled' | 'manual'
+    schedule_cron?: string | null
+  }
   channel: OutletChannel
   on_failure: 'send_to_errors'
   prompt?: string | null

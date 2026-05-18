@@ -23,7 +23,7 @@ import { auditDb } from './audit-db'
 import { IPC } from '../../shared/ipc-channels'
 import { runAIStep } from './ai-step-helper'
 import type { SourceStepConfig, SourceCounters, SeenIdsEntry, SourceRunMeta, SourceState, SourceRunEvent, HttpCredential, ImapCredential, HttpErrorDetail } from '../../shared/types'
-import type { Card } from '../../shared/card'
+import type { Card, CardHistoryEntry } from '../../shared/card'
 
 // ── Broadcast ─────────────────────────────────────────────────────────────────
 
@@ -92,43 +92,45 @@ async function readCounters(stateDir: string): Promise<SourceCounters> {
   try { return await fsService.readJson<SourceCounters>(p) } catch { return defaults }
 }
 
-// ── Next-step routing ─────────────────────────────────────────────────────────
-
-interface NextStepMeta {
-  stepId: string
-  kind: string
-  approval_mode?: string
-}
-
-async function readNextStep(project: string, workflow: string, sourceStepId: string): Promise<NextStepMeta | null> {
-  const wfPath = join(projectService.paths.workflowDir(project, workflow), 'workflow.json')
-  let wf: { step_ids: string[] }
-  try { wf = await fsService.readJson<{ step_ids: string[] }>(wfPath) } catch { return null }
-  const idx = wf.step_ids.indexOf(sourceStepId)
-  if (idx === -1 || idx >= wf.step_ids.length - 1) return null
-  const nextId = wf.step_ids[idx + 1]
-  if (nextId === '99-errors') return null
-  try {
-    const cfg = await fsService.readJson<{ kind: string; approval_mode?: string }>(
-      join(projectService.paths.stepDir(project, workflow, nextId), 'step.json'),
-    )
-    return { stepId: nextId, kind: cfg.kind, approval_mode: cfg.approval_mode }
-  } catch {
-    return null
-  }
-}
-
-function targetCardStatus(next: NextStepMeta): 'ready' | 'pending' {
-  if (next.kind === 'worker') return 'ready'
-  if (next.kind === 'tray' && next.approval_mode === 'auto') return 'ready'
-  return 'pending'
-}
-
 function pruneSeenIds(entries: SeenIdsEntry[], maxMemory: number): SeenIdsEntry[] {
   if (entries.length <= maxMemory) return entries
   // Sort oldest first, drop the oldest entries
   const sorted = [...entries].sort((a, b) => a.seen_at.localeCompare(b.seen_at))
   return sorted.slice(sorted.length - maxMemory)
+}
+
+// If the step immediately after the source in the workflow is a tray, write produced
+// cards directly to that tray's ready/ folder so they bypass the pending review queue.
+// Falls back to the source step's own ready/ when the next step is a worker, outlet,
+// 99-errors, or when the workflow/step file cannot be read.
+async function resolveCardOutputDir(
+  project: string,
+  workflow: string,
+  sourceStepId: string,
+): Promise<{ dir: string; autoForwarded: boolean; forwardedToStepId: string | null }> {
+  const fallback = {
+    dir: join(projectService.paths.stepDir(project, workflow, sourceStepId), 'cards', 'ready'),
+    autoForwarded: false,
+    forwardedToStepId: null,
+  }
+  try {
+    const wf = await fsService.readJson<{ step_ids: string[] }>(
+      join(projectService.paths.workflowDir(project, workflow), 'workflow.json'),
+    )
+    const idx = wf.step_ids.indexOf(sourceStepId)
+    if (idx === -1 || idx >= wf.step_ids.length - 1) return fallback
+    const nextStepId = wf.step_ids[idx + 1]
+    const nextStepDir = projectService.paths.stepDir(project, workflow, nextStepId)
+    const nextStep = await fsService.readJson<{ kind: string }>(join(nextStepDir, 'step.json'))
+    if (nextStep.kind === 'tray') {
+      return {
+        dir: join(nextStepDir, 'cards', 'ready'),
+        autoForwarded: true,
+        forwardedToStepId: nextStepId,
+      }
+    }
+  } catch { /* fall through */ }
+  return fallback
 }
 
 function nextRunId(existing: string[]): string {
@@ -214,8 +216,8 @@ async function runSourceInner({ project, workflow, stepId, stepConfig }: RunSour
     return
   }
 
-  const readyDir = join(stepDir, 'cards', 'ready')
-  await fs.mkdir(readyDir, { recursive: true })
+  const { dir: cardOutputDir, autoForwarded, forwardedToStepId } = await resolveCardOutputDir(project, workflow, stepId)
+  await fs.mkdir(cardOutputDir, { recursive: true })
   const now = new Date().toISOString()
 
   // ── HTTP GET: one fetch → one card (full response text as card.data.body) ──
@@ -254,18 +256,22 @@ async function runSourceInner({ project, workflow, stepId, stepConfig }: RunSour
       }
     }
 
-    const cardId = await nextCardId(project, workflow, stepId, 1)
+    const cardId = await nextCardId(project, workflow, autoForwarded && forwardedToStepId ? forwardedToStepId : stepId, 1)
     auditDb.insert({
       project_id: project, workflow_id: workflow, step_id: stepId, card_id: cardId,
       event: 'source_item_new', actor: 'system',
       details_json: JSON.stringify({ card_id: cardId, run_id: runId }),
     })
+    const cardHistory: CardHistoryEntry[] = [{ at: now, step: stepId, event: 'created', by: 'system' }]
+    if (autoForwarded && forwardedToStepId) {
+      cardHistory.push({ at: now, step: forwardedToStepId, event: 'marked_ready', by: 'system' })
+    }
     const card: Card = {
       id: cardId, created_at: now, created_by: 'source', source_step: stepId,
-      data: cardData,
-      history: [{ at: now, step: stepId, event: 'created', by: 'system' }],
+      data: cardData as Record<string, unknown>,
+      history: cardHistory,
     }
-    await fsService.writeJsonAtomic(join(readyDir, `${cardId}.json`), card)
+    await fsService.writeJsonAtomic(join(cardOutputDir, `${cardId}.json`), card)
 
     const endedAt = new Date().toISOString()
     const elapsedMs = Date.parse(endedAt) - Date.parse(startedAt)
@@ -338,7 +344,7 @@ async function runSourceInner({ project, workflow, stepId, stepConfig }: RunSour
     for (let i = 0; i < cardsToCreate.length; i++) {
       const item = cardsToCreate[i]
       const itemId = String(item[dedupKey] ?? '')
-      const cardId = await nextCardId(project, workflow, stepId, i + 1)
+      const cardId = await nextCardId(project, workflow, autoForwarded && forwardedToStepId ? forwardedToStepId : stepId, i + 1)
 
       let cardData: object = item
       if (stepConfig.prompt) {
@@ -358,12 +364,16 @@ async function runSourceInner({ project, workflow, stepId, stepConfig }: RunSour
         event: 'source_item_new', actor: 'system',
         details_json: JSON.stringify({ item_id: itemId, card_id: cardId, run_id: runId }),
       })
+      const cardHistory: CardHistoryEntry[] = [{ at: now, step: stepId, event: 'created', by: 'system' }]
+      if (autoForwarded && forwardedToStepId) {
+        cardHistory.push({ at: now, step: forwardedToStepId, event: 'marked_ready', by: 'system' })
+      }
       const card: Card = {
         id: cardId, created_at: now, created_by: 'source', source_step: stepId,
-        data: cardData,
-        history: [{ at: now, step: stepId, event: 'created', by: 'system' }],
+        data: cardData as Record<string, unknown>,
+        history: cardHistory,
       }
-      await fsService.writeJsonAtomic(join(readyDir, `${cardId}.json`), card)
+      await fsService.writeJsonAtomic(join(cardOutputDir, `${cardId}.json`), card)
     }
 
     const nextSeen: SeenIdsEntry[] = [

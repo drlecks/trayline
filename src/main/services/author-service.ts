@@ -120,6 +120,22 @@ function isWorkflowPlan(value: unknown): value is WorkflowPlan {
   return true
 }
 
+function validateWorkerPlacement(plan: WorkflowPlan): string | null {
+  const steps = plan.workflow.steps
+  for (let i = 0; i < steps.length; i++) {
+    if (steps[i].kind !== 'worker') continue
+    const prev = steps[i - 1]
+    const next = steps[i + 1]
+    if (!prev || prev.kind !== 'tray') {
+      return `Worker "${steps[i].name}" must be immediately preceded by a tray step (found: ${prev ? prev.kind : 'nothing'}). Add a tray before this worker.`
+    }
+    if (!next || next.kind !== 'tray') {
+      return `Worker "${steps[i].name}" must be immediately followed by a tray step (found: ${next ? next.kind : 'nothing'}). Add a tray after this worker.`
+    }
+  }
+  return null
+}
+
 async function generate(description: string, opts: { adapterId?: string } = {}): Promise<AuthorOutcome> {
   const adapterId = opts.adapterId ?? settingsStore.get('defaultAdapterId') ?? 'claude-code'
   const adapter = adapterRegistry.get(adapterId)
@@ -193,6 +209,16 @@ async function generate(description: string, opts: { adapterId?: string } = {}):
         ok: false,
         reason: 'invalid_plan',
         message: 'The returned JSON did not match the expected workflow plan shape.',
+        raw: JSON.stringify(parsed, null, 2),
+      }
+    }
+
+    const placementError = validateWorkerPlacement(parsed)
+    if (placementError) {
+      return {
+        ok: false,
+        reason: 'invalid_plan',
+        message: placementError,
         raw: JSON.stringify(parsed, null, 2),
       }
     }
