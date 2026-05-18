@@ -1,0 +1,16 @@
+{
+  "id": "{{id}}",
+  "kind": "outlet",
+  "name": "{{name}}",
+  "description": "{{description}}",
+  "color": "#8B5CF6",
+  "icon": "send",
+  "channel": {
+    "type": "smtp",
+    "credential_id": "",
+    "to": "",
+    "subject": "",
+    "body": "{{card.data}}"
+  },
+  "on_failure": "send_to_errors"
+}

@@ -13,6 +13,10 @@ Everything is files. SQLite is just a fast index built from those files.
 │   ├── settings.json               # User prefs (theme, default adapter, last opened project, etc.)
 │   └── audit.db                    # SQLite — searchable index of all runs
 │
+├── credentials/
+│   └── <id>/
+│       └── credential.json         # Type + non-secret config fields (passwords in OS keychain)
+│
 └── projects/
     └── client-onboarding/
         ├── project.json
@@ -134,17 +138,73 @@ Cards live in three subfolders: `pending/`, `ready/`, `archived/`.
 
 When `batch_mode` is `true`, the worker receives all cards currently in the previous step's `ready/` folder as a JSON array (up to `batch_max` items, default unlimited). It produces **one** output card. All source cards are archived after the batch run completes successfully. `batch_mode` is mutually exclusive with `trigger.mode: "on_ready"` — a batch worker must use `scheduled` or `manual` trigger.
 
+### Credentials (`credentials/<id>/credential.json`)
+
+Credentials are global (not per-project) and hold non-secret auth config. Passwords and API keys are **never** written to disk — they live in the OS keychain via keytar: `service = 'trayline-credential-<id>'`, `account = '<field-name>'`.
+
+**HTTP credential:**
+```json
+{
+  "id": "github-api",
+  "type": "http",
+  "name": "GitHub API",
+  "base_url": "https://api.github.com",
+  "headers": [
+    { "name": "Accept", "value": "application/vnd.github.v3+json" },
+    { "name": "Authorization", "value": "{{secret:token}}" }
+  ],
+  "timeout_ms": 15000
+}
+```
+Header values of the form `{{secret:key_name}}` are resolved from keytar at execution time and never reach the renderer.
+
+**IMAP credential:**
+```json
+{
+  "id": "gmail-inbox",
+  "type": "imap",
+  "name": "Gmail Inbox",
+  "host": "imap.gmail.com",
+  "port": 993,
+  "secure": true,
+  "username": "user@gmail.com"
+}
+```
+Password stored in keytar as `account='password'`.
+
+**SMTP credential:**
+```json
+{
+  "id": "gmail-smtp",
+  "type": "smtp",
+  "name": "Gmail SMTP",
+  "host": "smtp.gmail.com",
+  "port": 587,
+  "secure": false,
+  "username": "user@gmail.com",
+  "from_name": "Alex",
+  "from_address": "user@gmail.com"
+}
+```
+Password stored in keytar as `account='password'`.
+
 ### Source `step.json`
 
 ```json
 {
   "id": "00-source",
   "kind": "source",
-  "name": "Instagram Comments",
-  "description": "Polls for new comments every 5 minutes",
+  "name": "GitHub Issues",
+  "description": "Polls for new issues every hour",
   "icon": "rss",
   "color": "#4CB87E",
-  "schedule_cron": "*/5 * * * *",
+  "channel": {
+    "type": "http_get",
+    "credential_id": "github-api",
+    "url_path": "/repos/owner/repo/issues?state=open&since={{last_run_at}}",
+    "response_path": ""
+  },
+  "schedule_cron": "0 * * * *",
   "dedup": {
     "key": "id",
     "max_memory": 10000,
@@ -159,9 +219,29 @@ When `batch_mode` is `true`, the worker receives all cards currently in the prev
 }
 ```
 
+The optional `channel` block assigns a pre-fetch data source to the step. When present, the runner fetches data before spawning the AI and prepends a `## Fetched data` section to the prompt. When absent, the AI fetches data itself (requires Claude Code or equivalent).
+
+**IMAP channel variant:**
+```json
+{
+  "channel": {
+    "type": "imap",
+    "credential_id": "gmail-inbox",
+    "folder": "INBOX",
+    "unseen_only": true,
+    "max_messages": 50,
+    "subject_contains": "",
+    "from_contains": ""
+  }
+}
+```
+
+`{{last_run_at}}` is a built-in token resolved to the ISO timestamp of the last successful run (from `state/counters.json`), or empty string on first run.
+
 | Field | Meaning |
 |---|---|
 | `kind` | Always `"source"` |
+| `channel` | Optional data-source channel (HTTP GET or IMAP). When absent, AI fetches data itself. |
 | `schedule_cron` | Standard cron expression for how often the source runs |
 | `dedup.key` | The field name in each AI-returned JSON item used as the unique identifier |
 | `dedup.max_memory` | Maximum number of IDs stored in `seen-ids.json`; oldest entries pruned when exceeded |
@@ -190,6 +270,56 @@ When `batch_mode` is `true`, the worker receives all cards currently in the prev
 A Source step is always the **first** step in a workflow (`00-<slug>`). It has no preceding step to read cards from — it generates cards by polling the world.
 
 **Atomic write protocol for `seen-ids.json`:** Write to `seen-ids.json.tmp` first, then rename to `seen-ids.json`. On app launch, any leftover `.tmp` file is discarded (the last complete `seen-ids.json` remains authoritative).
+
+### Outlet `step.json`
+
+```json
+{
+  "id": "05-send-report",
+  "kind": "outlet",
+  "name": "Send Report Email",
+  "description": "Emails the processed report to the client",
+  "color": "#8B5CF6",
+  "icon": "send",
+  "channel": {
+    "type": "smtp",
+    "credential_id": "gmail-smtp",
+    "to": "{{card.data.client_email}}",
+    "subject": "{{card.data.subject}}",
+    "body": "{{card.data.content}}"
+  },
+  "on_failure": "send_to_errors"
+}
+```
+
+**HTTP POST channel variant:**
+```json
+{
+  "channel": {
+    "type": "http_post",
+    "credential_id": "freshdesk-api",
+    "url_path": "/tickets/{{card.data.ticket_id}}",
+    "method": "POST",
+    "body": "{ \"status\": 2, \"reply\": {{card.data.reply | json}} }"
+  }
+}
+```
+
+**Template tokens** in `to`, `subject`, `body`, and `url_path`:
+- `{{card.data.field}}` — the value of a specific field from the card's data
+- `{{card.data}}` — the full card data object as pretty-printed JSON
+- `{{card.data | json}}` — the full card data object as a compact JSON string (useful inside a JSON body)
+
+**Outlet step folder structure:**
+```
+05-send-report/
+├── step.json
+└── runs/
+    └── run_YYYY-MM-DD_NNN/
+        └── meta.json   # { run_id, status, started_at, ended_at, card_id, channel_type, error? }
+```
+
+An Outlet has no `cards/` subfolder — it consumes cards from the tray above it and archives them after a successful dispatch. On failure the card moves to `99-errors/`, exactly like a failed worker.
 
 ### App settings (`app-data/settings.json`)
 

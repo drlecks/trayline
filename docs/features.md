@@ -295,6 +295,30 @@ Two tabs: **Source** and **Config**.
 
 **Pause schedule** suspends the cron without deleting the step. The left rail card shows `⏸ Paused`.
 
+**Data source section** — below the Execution block, a channel selector lets the user choose how data is fetched:
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│  Data source                                                 │
+│  ○ AI fetches data (default — requires Claude Code)          │
+│  ○ HTTP GET      ○ IMAP inbox                                │
+│                                                              │
+│  [HTTP GET selected]                                         │
+│  Credential   [GitHub API ▼]  (HTTP credentials only)        │
+│  URL path     [/repos/owner/repo/issues?since={{last_run_at}}]│
+│               Appended to credential base URL.               │
+│               Use {{last_run_at}} for incremental fetches.   │
+│                                                              │
+│  [IMAP selected]                                             │
+│  Credential   [Gmail Inbox ▼]  (IMAP credentials only)       │
+│  Folder       [INBOX]                                        │
+│  Max messages [50]    [☑] Unseen only                        │
+│  Subject contains  [______]   From contains  [______]        │
+└──────────────────────────────────────────────────────────────┘
+```
+
+When a channel is configured, the runner pre-fetches data before the AI run and prepends it as `## Fetched data` in the prompt. The AI then parses and structures it; `source.md` should instruct the AI on the expected format. When no channel is configured, the AI fetches data itself (existing behaviour).
+
 ### Run History
 
 A **Runs** sub-tab (inside the Config tab, or a third top-level tab) shows a table of past source runs:
@@ -402,6 +426,97 @@ A one-time guided tour that runs the first time the user launches the app. Imple
 - The tour reads `data-tour="..."` attributes on key DOM regions (`topbar`, `left-rail`, `detail-panel`) so its position adapts to the current screen.
 - "Skip tour" and the final "Done" button both flip `settings.onboardingComplete` to `true`. The tour will not auto-launch again.
 - A **Run onboarding tour** button under **Settings → Help** re-triggers it whenever the user wants a refresher.
+
+---
+
+## 7.20 Credentials Screen
+
+Accessible from the **Credentials** button (KeyRound icon) in the top bar.
+
+Lists all saved credentials with type badge, name, and action buttons:
+
+| Badge color | Type |
+|---|---|
+| Blue | HTTP |
+| Indigo | IMAP |
+| Violet | SMTP |
+
+Actions on each row: **Test** (inline ✓/✗), **Edit** (opens form pre-populated), **Delete** (confirmation: "This will also delete stored passwords.").
+
+**Add credential** button (+ icon, top right) opens a type picker: HTTP / IMAP / SMTP, then the matching form:
+
+**HTTP form:** Name, Base URL, Timeout (ms, default 15000). Headers table — name + value rows, Add/Remove. Values matching `{{secret:...}}` switch to a masked input and are stored via keytar rather than in the JSON file.
+
+**IMAP form:** Name, Host, Port (default 993), Secure toggle (on by default), Username, Password (masked — stored in keytar, never shown again after save).
+
+**SMTP form:** Name, Host, Port (default 587), Secure toggle (off by default), Username, Password (masked), From name, From address.
+
+All forms include a **Test connection** button that calls `credential:test-connection` and shows the result inline before saving.
+
+Empty state: *"No credentials yet. Add one to connect your workflows to external services."*
+
+---
+
+## 7.21 Outlet Step
+
+### Left Rail Card
+
+```
+┌────────────┐
+│ ✈ Send Report │   ← name, Send icon, purple strip
+│ smtp        │   ← channel type badge
+└────────────┘
+```
+
+Status states:
+
+| State | Display |
+|---|---|
+| Idle | Outlet name + channel type badge |
+| Running | `→ Sending…` — animated purple pulse on icon |
+| Done | `✓ Sent 2m ago` — green, fades after 30s |
+| Failed | `⚠ Failed` — red triangle, dashed border |
+
+### Outlet Detail Panel (Right Canvas)
+
+Two tabs: **Config** and **Runs**.
+
+**Config tab:**
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│  Channel type    [SMTP email]  [HTTP POST]                    │
+│                                                              │
+│  Credential      [Gmail SMTP ▼]                              │
+│  (Only SMTP credentials shown when SMTP type selected)       │
+│                                                              │
+│  [SMTP fields]                                               │
+│  To         [{{card.data.email}}                ]            │
+│  Subject    [{{card.data.subject}}              ]            │
+│  Body       [{{card.data}}                      ]            │
+│                                                              │
+│  [HTTP POST fields]                                          │
+│  URL path   [/api/notify/{{card.data.id}}       ]            │
+│  Method     [POST ▼]                                         │
+│  Body       [{"data": {{card.data | json}}}     ]            │
+│                                                              │
+│  Available tokens:                                           │
+│  {{card.data.field}}  — specific field value                 │
+│  {{card.data}}        — full card as pretty JSON             │
+│  {{card.data | json}} — full card as compact JSON string     │
+│                                                              │
+│  [Save]                                                      │
+└──────────────────────────────────────────────────────────────┘
+```
+
+**Runs tab:** table of past outlet runs:
+
+| Column | Content |
+|---|---|
+| Time | When the run fired |
+| Card | Card ID (truncated) |
+| Channel | smtp / http_post |
+| Status | ✓ Completed / ✗ Failed + error preview |
 
 ---
 

@@ -9,6 +9,7 @@ import WorkflowAuthorScreen from './components/author/WorkflowAuthorScreen'
 import ProjectListScreen from './components/projects/ProjectListScreen'
 import ProjectScreen from './components/project/ProjectScreen'
 import SettingsScreen from './components/settings/SettingsScreen'
+import CredentialsScreen from './components/credentials/CredentialsScreen'
 import ProviderNotInstalledModal from './components/layout/ProviderNotInstalledModal'
 import AdapterSetupScreen from './components/adapter/AdapterSetupScreen'
 import OnboardingTour from './components/onboarding/OnboardingTour'
@@ -195,6 +196,11 @@ export default function App() {
         {screen === 'settings' && (
           <div className="flex-1 overflow-y-auto">
             <SettingsScreen />
+          </div>
+        )}
+        {screen === 'credentials' && (
+          <div className="flex-1 overflow-y-auto flex">
+            <CredentialsScreen />
           </div>
         )}
       </main>

@@ -25,6 +25,11 @@ import type {
   SourceState,
   SourceRunMeta,
   SourceRunEvent,
+  Credential,
+  CredentialSummary,
+  OutletStepConfig,
+  OutletRunMeta,
+  OutletRunEvent,
 } from '../shared/types'
 import type { Card, CardStatus, CardCounts } from '../shared/card'
 import type { QueueEntry } from '../shared/queue'
@@ -302,6 +307,37 @@ const api = {
       const listener = (_e: unknown, payload: { modelId: string; error: string }) => handler(payload)
       ipcRenderer.on(IPC.localModel.onDownloadError, listener)
       return () => ipcRenderer.off(IPC.localModel.onDownloadError, listener)
+    },
+  },
+  credential: {
+    list: (): Promise<CredentialSummary[]> => ipcRenderer.invoke(IPC.credential.list),
+    get: (id: string): Promise<Credential | null> => ipcRenderer.invoke(IPC.credential.get, id),
+    save: (credential: Credential): Promise<void> => ipcRenderer.invoke(IPC.credential.save, credential),
+    delete: (id: string): Promise<void> => ipcRenderer.invoke(IPC.credential.delete, id),
+    saveSecret: (credentialId: string, account: string, value: string): Promise<void> =>
+      ipcRenderer.invoke(IPC.credential.saveSecret, credentialId, account, value),
+    testConnection: (id: string): Promise<{ ok: boolean; error?: string }> =>
+      ipcRenderer.invoke(IPC.credential.testConnection, id),
+  },
+  outlet: {
+    runNow: (project: string, workflow: string, stepId: string, cardId: string, prevStepId: string, config: OutletStepConfig): Promise<void> =>
+      ipcRenderer.invoke(IPC.outlet.runNow, project, workflow, stepId, cardId, prevStepId, config),
+    listRuns: (project: string, workflow: string, stepId: string): Promise<OutletRunMeta[]> =>
+      ipcRenderer.invoke(IPC.outlet.listRuns, project, workflow, stepId),
+    onStarted: (handler: (event: OutletRunEvent) => void): (() => void) => {
+      const listener = (_e: unknown, ev: OutletRunEvent) => handler(ev)
+      ipcRenderer.on(IPC.outlet.onStarted, listener)
+      return () => ipcRenderer.off(IPC.outlet.onStarted, listener)
+    },
+    onCompleted: (handler: (event: OutletRunEvent) => void): (() => void) => {
+      const listener = (_e: unknown, ev: OutletRunEvent) => handler(ev)
+      ipcRenderer.on(IPC.outlet.onCompleted, listener)
+      return () => ipcRenderer.off(IPC.outlet.onCompleted, listener)
+    },
+    onFailed: (handler: (event: OutletRunEvent) => void): (() => void) => {
+      const listener = (_e: unknown, ev: OutletRunEvent) => handler(ev)
+      ipcRenderer.on(IPC.outlet.onFailed, listener)
+      return () => ipcRenderer.off(IPC.outlet.onFailed, listener)
     },
   },
   platform: process.platform as NodeJS.Platform,

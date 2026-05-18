@@ -1,10 +1,9 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { AlertTriangle, Plus, Trash2, Upload, Download, PauseCircle, PlayCircle } from 'lucide-react'
 import { useProjectStore } from '@/stores/project-store'
-import type { ProjectMeta, ProjectStatus, ImportNeedsReview, ProjectLiveStats, ProjectReadiness } from '../../../shared/types'
+import type { ProjectMeta, ProjectStatus, ProjectLiveStats, ProjectReadiness } from '../../../shared/types'
 import GlobalActivityBar from './GlobalActivityBar'
 import ExportProjectDialog from './ExportProjectDialog'
-import ImportSecurityAuditDialog from './ImportSecurityAuditDialog'
 import iconUrl from '../../../../resources/icon-128.png'
 
 function formatRelative(iso: string): string {
@@ -33,7 +32,6 @@ export default function ProjectListScreen() {
   const refreshProjects = useProjectStore((s) => s.refreshProjects)
 
   const [exportTarget, setExportTarget] = useState<ProjectMeta | null>(null)
-  const [importAudit, setImportAudit] = useState<ImportNeedsReview | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
   const [importing, setImporting] = useState(false)
   const [bulkToggling, setBulkToggling] = useState(false)
@@ -159,25 +157,11 @@ export default function ProjectListScreen() {
       const result = await window.trayline.project.import()
       if ('canceled' in result) return
       await refreshProjects()
-      if (result.ok === 'needs_review') {
-        setImportAudit(result)
-      }
     } catch (e) {
       setImportError(e instanceof Error ? e.message : String(e))
     } finally {
       setImporting(false)
     }
-  }
-
-  async function handleAuditCommit(token: string) {
-    await window.trayline.project.importCommit(token)
-    setImportAudit(null)
-    await refreshProjects()
-  }
-
-  function handleAuditAbort(token: string) {
-    void window.trayline.project.importAbort(token)
-    setImportAudit(null)
   }
 
   const anyActive = all.some((p) => pillData[p.name]?.mounted ?? p.status === 'active')
@@ -392,19 +376,6 @@ export default function ProjectListScreen() {
           displayName={exportTarget.display_name}
           open={!!exportTarget}
           onOpenChange={(o) => { if (!o) setExportTarget(null) }}
-        />
-      )}
-
-      {importAudit && (
-        <ImportSecurityAuditDialog
-          token={importAudit.token}
-          projectName={importAudit.projectName}
-          securityFindings={importAudit.securityFindings}
-          projectSummary={importAudit.projectSummary}
-          open={!!importAudit}
-          onOpenChange={(o) => { if (!o) handleAuditAbort(importAudit.token) }}
-          onCommit={handleAuditCommit}
-          onAbort={handleAuditAbort}
         />
       )}
 
