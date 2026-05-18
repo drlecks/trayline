@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Inbox, Cpu, AlertTriangle, RefreshCw, Plus, FileText, ChevronDown, ChevronRight, Rss, Layers } from 'lucide-react'
+import { Inbox, Cpu, AlertTriangle, RefreshCw, Plus, FileText, ChevronDown, ChevronRight, Rss, Layers, Send } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useProjectStore } from '@/stores/project-store'
 import AddTrayDialog from './AddTrayDialog'
@@ -9,6 +9,7 @@ import AddStepDialog from './AddStepDialog'
 import TrayDetailPanel from './TrayDetailPanel'
 import WorkerDetailPanel from './WorkerDetailPanel'
 import SourceDetailPanel from './SourceDetailPanel'
+import OutletDetailPanel from './OutletDetailPanel'
 import ContextPackEditor from './ContextPackEditor'
 import type { StepMeta, SourceRunEvent } from '../../../shared/types'
 import type { CardCounts } from '../../../shared/card'
@@ -119,7 +120,9 @@ export default function ProjectScreen() {
                 ? <WorkerDetailPanel step={selectedStep} />
                 : selectedStep.kind === 'source'
                   ? <SourceDetailPanel step={selectedStep} />
-                  : <TrayDetailPanel step={selectedStep} />)
+                  : selectedStep.kind === 'outlet'
+                    ? <OutletDetailPanel step={selectedStep} />
+                    : <TrayDetailPanel step={selectedStep} />)
             : (
               <div className="h-full flex items-center justify-center text-sm text-neutral-400 dark:text-neutral-600">
                 Select a step on the left to see details
@@ -259,9 +262,11 @@ function StepCard({ step, selected, onClick }: { step: StepMeta; selected: boole
   const isBatch = step.kind === 'worker' && !!(step.raw as { batch_mode?: boolean }).batch_mode
   const Icon = step.kind === 'source'
     ? Rss
-    : step.kind === 'tray'
-      ? (step.id === '99-errors' ? AlertTriangle : Inbox)
-      : isBatch ? Layers : Cpu
+    : step.kind === 'outlet'
+      ? Send
+      : step.kind === 'tray'
+        ? (step.id === '99-errors' ? AlertTriangle : Inbox)
+        : isBatch ? Layers : Cpu
   const isError = step.id === '99-errors'
 
   const [counts, setCounts] = useState<CardCounts | null>(null)
@@ -269,6 +274,7 @@ function StepCard({ step, selected, onClick }: { step: StepMeta; selected: boole
   const [lastBatchCount, setLastBatchCount] = useState<number | null>(null)
   const [sourceRunning, setSourceRunning] = useState(false)
   const [sourceCardCount, setSourceCardCount] = useState<number | null>(null)
+  const [outletStatus, setOutletStatus] = useState<'idle' | 'running' | 'done' | 'failed'>('idle')
   const active = useProjectStore((s) => s.active)
   const workflow = useProjectStore((s) => s.workflow)
 
@@ -300,6 +306,25 @@ function StepCard({ step, selected, onClick }: { step: StepMeta; selected: boole
       }
     })
     return () => { cancelled = true; off() }
+  }, [active, workflow, step.id, step.kind])
+
+  // Outlet: listen for run events
+  useEffect(() => {
+    if (!active || !workflow || step.kind !== 'outlet') return
+    const offStarted = window.trayline.outlet.onStarted((ev) => {
+      if (ev.stepId !== step.id) return
+      setOutletStatus('running')
+    })
+    const offCompleted = window.trayline.outlet.onCompleted((ev) => {
+      if (ev.stepId !== step.id) return
+      setOutletStatus('done')
+      setTimeout(() => setOutletStatus('idle'), 30000)
+    })
+    const offFailed = window.trayline.outlet.onFailed((ev) => {
+      if (ev.stepId !== step.id) return
+      setOutletStatus('failed')
+    })
+    return () => { offStarted(); offCompleted(); offFailed() }
   }, [active, workflow, step.id, step.kind])
 
   // Source: poll card count + listen for run events
@@ -337,6 +362,14 @@ function StepCard({ step, selected, onClick }: { step: StepMeta; selected: boole
         tint: 'bg-worker-light/50 dark:bg-violet-950/15',
         ring: 'ring-worker/40',
         label: 'Worker',
+      }
+    : step.kind === 'outlet'
+    ? {
+        strip: 'bg-violet-500',
+        stripText: 'text-white',
+        tint: 'bg-violet-50/50 dark:bg-violet-950/15',
+        ring: 'ring-violet-400/40',
+        label: 'Outlet',
       }
     : step.kind === 'source'
     ? {
@@ -398,6 +431,21 @@ function StepCard({ step, selected, onClick }: { step: StepMeta; selected: boole
               {step.kind === 'source' && !sourceRunning && sourceCardCount !== null && sourceCardCount > 0 && (
                 <span>· {sourceCardCount} ready</span>
               )}
+              {step.kind === 'outlet' && outletStatus === 'running' && (
+                <span className="text-[10px] font-medium px-1.5 py-0 rounded-full bg-violet-100 text-violet-800 dark:bg-violet-950/60 dark:text-violet-300 animate-pulse">
+                  Sending…
+                </span>
+              )}
+              {step.kind === 'outlet' && outletStatus === 'done' && (
+                <span className="text-[10px] font-medium px-1.5 py-0 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+                  Sent
+                </span>
+              )}
+              {step.kind === 'outlet' && outletStatus === 'failed' && (
+                <span className="text-[10px] font-medium px-1.5 py-0 rounded-full bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300">
+                  Failed
+                </span>
+              )}
             </div>
           </div>
           {counts && counts.pending > 0 && step.kind === 'tray' && !isError && (
@@ -408,6 +456,12 @@ function StepCard({ step, selected, onClick }: { step: StepMeta; selected: boole
           {step.kind === 'worker' && <WorkerStatusBubble status={workerStatus} />}
           {step.kind === 'source' && sourceRunning && (
             <span className="shrink-0 inline-block w-[11px] h-[11px] mt-1 rounded-full bg-emerald-500 animate-pulse" />
+          )}
+          {step.kind === 'outlet' && outletStatus === 'running' && (
+            <span className="shrink-0 inline-block w-[11px] h-[11px] mt-1 rounded-full bg-violet-500 animate-pulse" />
+          )}
+          {step.kind === 'outlet' && outletStatus === 'failed' && (
+            <span className="shrink-0 inline-block w-[11px] h-[11px] mt-1 rounded-full bg-red-500" />
           )}
         </div>
       </div>

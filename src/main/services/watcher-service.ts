@@ -8,6 +8,8 @@ import { watch as chokidarWatch, type FSWatcher } from 'chokidar'
 import { projectService } from './project-service'
 import { fsService } from './fs-service'
 import { workerRunner } from './worker-runner'
+import { outletRunner } from './outlet-runner'
+import type { OutletStepConfig } from '../../shared/types'
 
 interface WorkflowJson {
   step_ids: string[]
@@ -15,7 +17,7 @@ interface WorkflowJson {
 
 interface StepJson {
   id: string
-  kind: 'tray' | 'worker'
+  kind: 'tray' | 'worker' | 'outlet'
   trigger?: { mode?: 'on_ready' | 'scheduled' | 'manual' }
 }
 
@@ -55,33 +57,56 @@ async function mountWorkflow(project: string, workflow: string): Promise<void> {
     const stepJson = await readJsonSafe<StepJson>(
       join(projectService.paths.stepDir(project, workflow, stepId), 'step.json'),
     )
-    if (!stepJson || stepJson.kind !== 'worker') continue
-    if ((stepJson.trigger?.mode ?? 'on_ready') !== 'on_ready') continue
-
+    if (!stepJson) continue
     const prevId = i > 0 ? wf.step_ids[i - 1] : null
-    if (!prevId) continue
-    const readyDir = join(projectService.paths.stepDir(project, workflow, prevId), 'cards', 'ready')
-    if (!(await pathExists(readyDir))) {
-      await fs.mkdir(readyDir, { recursive: true })
-    }
 
-    const watcher = chokidarWatch(readyDir, {
-      ignoreInitial: true,
-      depth: 0,
-      awaitWriteFinish: { stabilityThreshold: 300 },
-    })
-    watcher.on('add', (filePath) => {
-      const name = basename(filePath)
-      if (!name.endsWith('.json') || name.endsWith('.tmp')) return
-      const cardId = name.replace(/\.json$/, '')
-      void workerRunner.triggerRun({ project, workflow, stepId, cardId }).catch((err) => {
-        // Swallow — the failure is recorded in audit log + run meta.
-        // Log to stderr in dev so the developer can see it.
-        // eslint-disable-next-line no-console
-        console.error(`[watcher] triggerRun failed for ${cardId}:`, err)
+    if (stepJson.kind === 'worker') {
+      if ((stepJson.trigger?.mode ?? 'on_ready') !== 'on_ready') continue
+      if (!prevId) continue
+      const readyDir = join(projectService.paths.stepDir(project, workflow, prevId), 'cards', 'ready')
+      if (!(await pathExists(readyDir))) {
+        await fs.mkdir(readyDir, { recursive: true })
+      }
+      const watcher = chokidarWatch(readyDir, {
+        ignoreInitial: true,
+        depth: 0,
+        awaitWriteFinish: { stabilityThreshold: 300 },
       })
-    })
-    watchers.push(watcher)
+      watcher.on('add', (filePath) => {
+        const name = basename(filePath)
+        if (!name.endsWith('.json') || name.endsWith('.tmp')) return
+        const cardId = name.replace(/\.json$/, '')
+        void workerRunner.triggerRun({ project, workflow, stepId, cardId }).catch((err) => {
+          // eslint-disable-next-line no-console
+          console.error(`[watcher] triggerRun failed for ${cardId}:`, err)
+        })
+      })
+      watchers.push(watcher)
+    } else if (stepJson.kind === 'outlet') {
+      if (!prevId) continue
+      const readyDir = join(projectService.paths.stepDir(project, workflow, prevId), 'cards', 'ready')
+      if (!(await pathExists(readyDir))) {
+        await fs.mkdir(readyDir, { recursive: true })
+      }
+      const outletConfig = stepJson as unknown as OutletStepConfig
+      const watcher = chokidarWatch(readyDir, {
+        ignoreInitial: true,
+        depth: 0,
+        awaitWriteFinish: { stabilityThreshold: 300 },
+      })
+      watcher.on('add', (filePath) => {
+        const name = basename(filePath)
+        if (!name.endsWith('.json') || name.endsWith('.tmp')) return
+        const cardId = name.replace(/\.json$/, '')
+        void outletRunner.runOutlet(project, workflow, stepId, outletConfig, cardId, prevId).catch((err) => {
+          // eslint-disable-next-line no-console
+          console.error(`[watcher] outlet run failed for ${cardId}:`, err)
+        })
+      })
+      watchers.push(watcher)
+    } else {
+      continue
+    }
   }
 
   mounted.set(k, { project, workflow, watchers })

@@ -123,4 +123,19 @@ export const IPC = {
     onDownloadComplete: 'local-model:download-complete',
     onDownloadError: 'local-model:download-error',
   },
+  credential: {
+    list:           'credential:list',
+    get:            'credential:get',
+    save:           'credential:save',
+    delete:         'credential:delete',
+    saveSecret:     'credential:save-secret',
+    testConnection: 'credential:test-connection',
+  },
+  outlet: {
+    runNow:      'outlet:run-now',
+    listRuns:    'outlet:list-runs',
+    onStarted:   'outlet:run-started',
+    onCompleted: 'outlet:run-completed',
+    onFailed:    'outlet:run-failed',
+  },
 } as const

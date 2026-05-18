@@ -67,6 +67,7 @@ Step cards in the left rail are split into two visual zones:
    - Source → green (`#3FA86E`)
    - Tray → blue (`#3F7CE0`)
    - Worker → violet (`#6E50D8`)
+   - Outlet → purple (`#8B5CF6`) — `Send` icon; status states: Idle, Sending… (animated), Sent (green, fades), Failed (red)
    - Error tray → red (`#CC3338`)
 2. **Content area** — the remainder of the card. White background with a soft type-tinted wash, holding the step name, type label, card count, and any status pill/bubble.
 
@@ -104,12 +105,13 @@ Typography: 11 px monospace (JetBrains Mono), tabular numerals so digits don't r
 ## Color Discipline
 
 - One accent color per project, set in project settings (default soft blue)
-- Sources = green family / Trays = blue family / Workers = violet family / Errors = red
+- Sources = green family / Trays = blue family / Workers = violet family / Outlets = purple / Errors = red
 - Amber, red, and green are **reserved for live status signalling** (running / failed / done) and never used as a type identity color — workers therefore use violet, not orange.
 - Each type has three tokens in `tailwind.config.ts`: `DEFAULT` (mid-saturation, used for icons-on-light), `light` (soft wash for tinted backgrounds), and `strip` (full-saturation, used for the rail step card's left strip and panel header icon tiles).
   - Source: `#4CB87E` / `#E8F6EE` / `#3FA86E`
   - Tray: `#4F8EF7` / `#EBF2FE` / `#3F7CE0`
   - Worker: `#8B6FE8` / `#F0EBFB` / `#6E50D8`
+  - Outlet: `#A078F0` / `#F3EFFE` / `#8B5CF6`
   - Error: `#E5484D` / `#FDECEC` / `#CC3338`
 - Background: `#FAFAF9` (warm off-white) light mode / `#0F0F0F` dark mode
 - Minimum 24px around content blocks
@@ -134,6 +136,7 @@ Consistent set per concept:
 - `rss` — sources (the "data coming in from the world" metaphor)
 - `inbox` — trays
 - `cpu` — workers
+- `send` — outlets (the "sending out to the world" metaphor)
 - `alert-triangle` — errors
 - `clock` — scheduled
 - `user` — human review

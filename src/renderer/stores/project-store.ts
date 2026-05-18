@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { ProjectMeta, StepMeta, WorkflowMeta } from '../../shared/types'
 
-type Screen = 'splash' | 'projectList' | 'author' | 'project' | 'settings'
+type Screen = 'splash' | 'projectList' | 'author' | 'project' | 'settings' | 'credentials'
 
 interface ProjectStoreState {
   /** The project currently open in the right canvas, or null on the splash. */
