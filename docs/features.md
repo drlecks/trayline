@@ -367,47 +367,6 @@ The `process.md` instructs the AI how to synthesise the array into one output.
 
 ---
 
-## 7.18 Local AI Model — Download & Management
-
-When the **local-llm** adapter is registered, several UI surfaces expose model management.
-
-### AdapterSetupScreen — local-llm card
-
-The `AdapterSetupScreen` (shown when no adapter is ready at startup) renders one card per registered production adapter. The local-llm card diverges from the standard card in three ways:
-
-1. **No "Install guide" link** — there is no external install; the model is downloaded inside the app.
-2. **"Download local model" button** — opens the `ModelDownloadModal`. Only shown when no model has been downloaded yet.
-3. **"Check again" button** — shown instead when a model is already downloaded. Triggers `adapter.recheck()` to update readiness without re-downloading.
-
-### ModelDownloadModal
-
-A four-state dialog reachable from `AdapterSetupScreen` and from Settings → Local AI model.
-
-| State | UI |
-|---|---|
-| `idle` | Radio list of available models (from `local-models.json` catalog). Each row shows label, description, file size in MB, and "Recommended" / "Downloaded" badges. |
-| `downloading` | Progress bar (downloaded / total bytes and %). Cancel link. Dialog cannot be dismissed while downloading. |
-| `complete` | Green check, "Model ready" heading, "Start using Trayline" button — calls `localModel.recheckAdapter()` then `onReady()`. |
-| `error` | Error description, "Try again" button returns to idle. |
-
-The `onOpenChange` prop is blocked during `downloading` state (both outside-click and Escape key) to prevent partial downloads from being abandoned silently.
-
-### Settings → Local AI model
-
-A dedicated section in Settings (visible only when local-llm is in the adapter registry) shows:
-
-- List of already-downloaded models with their label and a **Delete** button per model.
-- A "Download another model" link (when at least one is downloaded) or a "Download a model now" link (when none are).
-- Both links open `ModelDownloadModal`.
-
-### Workflow Author warning
-
-When the active adapter is `local-llm`, a soft amber note appears below the textarea in the Workflow Author screen:
-
-> **Using local AI model.** Workflow generation works best with Claude Code — local models may produce simpler or incomplete plans. You can edit the result after creation.
-
----
-
 ## 7.18 Onboarding Tour
 
 A one-time guided tour that runs the first time the user launches the app. Implemented as an overlay with a dimmed backdrop and a highlight ring around the currently-described region.
@@ -527,13 +486,14 @@ A **Keyboard shortcuts** button under **Settings → Help** opens the same refer
 
 ---
 
-## 7.20 AI Setup Screen (N10)
+## 7.20 AI Setup Screen
 
-When no AI adapter is installed, the full-window `AdapterSetupScreen` shows before any other UI. In N10 it was updated to clearly communicate the recommended path:
+When no production AI adapter is installed, the full-window `AdapterSetupScreen` shows before any other UI. It blocks routing until at least one adapter reports `installed: true`.
 
-- **local-llm** is always rendered first and carries a **"Recommended"** green badge. The header copy reads: *"The local model works out of the box — download it once, use it forever, no account needed."*
-- **Claude Code** (and any other CLI adapters) appear below with a **"Power user"** neutral badge, signalling they are optional upgrades for users who want higher-quality output or an existing subscription.
-- Behaviour is otherwise unchanged: local-llm shows the ModelDownloadModal; CLI adapters show a "Check again" + "Setup guide" pair.
+- One card is rendered per registered **production** adapter (mock adapters are always filtered out at the IPC layer and never shown).
+- Each card shows: adapter name, description, install-command code block (from `blockers[0].fixCommand`), install-guide link, **[Check again]** button, **[Setup guide]** button.
+- Currently the only production adapter is **Claude Code**. The screen is generic — additional adapters appear automatically when added to the registry.
+- Header copy: *"Install an AI adapter to get started. Claude Code is the recommended choice."*
 
 ---
 
