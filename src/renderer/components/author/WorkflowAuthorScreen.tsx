@@ -28,6 +28,7 @@ const LOADING_MESSAGES = [
 export default function WorkflowAuthorScreen() {
   const setScreen = useProjectStore((s) => s.setScreen)
   const setActive = useProjectStore((s) => s.setActive)
+  const setJustCreatedProject = useProjectStore((s) => s.setJustCreatedProject)
   const refreshProjects = useProjectStore((s) => s.refreshProjects)
   const regenerateOf = useProjectStore((s) => s.regenerateOf)
   const setRegenerateOf = useProjectStore((s) => s.setRegenerateOf)
@@ -85,6 +86,7 @@ export default function WorkflowAuthorScreen() {
 
   function openProject() {
     if (!postGenOutcome) return
+    setJustCreatedProject(postGenOutcome.project.name)
     setActive(postGenOutcome.project)
   }
 

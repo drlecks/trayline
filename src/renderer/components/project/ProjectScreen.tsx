@@ -11,6 +11,7 @@ import WorkerDetailPanel from './WorkerDetailPanel'
 import SourceDetailPanel from './SourceDetailPanel'
 import OutletDetailPanel from './OutletDetailPanel'
 import ContextPackEditor from './ContextPackEditor'
+import FirstProjectGuide from '../onboarding/FirstProjectGuide'
 import type { StepMeta, SourceRunEvent } from '../../../shared/types'
 import type { CardCounts } from '../../../shared/card'
 import type { WorkerRunEvent, WorkerRunStatus } from '../../../shared/worker-run'
@@ -21,6 +22,8 @@ export default function ProjectScreen() {
   const steps = useProjectStore((s) => s.steps)
   const selectedStepId = useProjectStore((s) => s.selectedStepId)
   const setSelectedStepId = useProjectStore((s) => s.setSelectedStepId)
+  const justCreatedProject = useProjectStore((s) => s.justCreatedProject)
+  const setJustCreatedProject = useProjectStore((s) => s.setJustCreatedProject)
   const setScreen = useProjectStore((s) => s.setScreen)
   const setRegenerateOf = useProjectStore((s) => s.setRegenerateOf)
   const refreshSteps = useProjectStore((s) => s.refreshSteps)
@@ -123,11 +126,22 @@ export default function ProjectScreen() {
                   : selectedStep.kind === 'outlet'
                     ? <OutletDetailPanel step={selectedStep} />
                     : <TrayDetailPanel step={selectedStep} />)
-            : (
-              <div className="h-full flex items-center justify-center text-sm text-neutral-400 dark:text-neutral-600">
-                Select a step on the left to see details
-              </div>
-            )}
+            : active?.name === justCreatedProject
+              ? (
+                <FirstProjectGuide
+                  hasSourceStep={steps.some((s) => s.kind === 'source')}
+                  sourceStepId={steps.find((s) => s.kind === 'source')?.id}
+                  firstTrayId={steps.find((s) => s.kind === 'tray')?.id}
+                  onSelectStep={(id) => { setSelectedStepId(id); setShowContextEditor(false) }}
+                  onDismiss={() => setJustCreatedProject(null)}
+                  onTour={() => window.dispatchEvent(new Event('trayline:open-tour'))}
+                />
+              )
+              : (
+                <div className="h-full flex items-center justify-center text-sm text-neutral-400 dark:text-neutral-600">
+                  Select a step on the left to see details
+                </div>
+              )}
         </section>
       </div>
 

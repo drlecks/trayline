@@ -34,7 +34,7 @@ const TOUR_STEPS: TourStep[] = [
   },
   {
     title: "You're ready",
-    body: 'Add context files to a project to give workers shared knowledge — API docs, style guides, anything plain text. Re-run this tour from Settings → Help anytime.',
+    body: "That's it. Describe a new workflow, add cards, and let the workers do the rest. Re-run this tour from Settings → Help anytime.",
   },
 ]
 
