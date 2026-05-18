@@ -143,6 +143,14 @@ Use `batch_mode: true` on a worker when:
 - "Process PDF invoices" → `01-invoice-intake` (tray) → `02-extract-data` (worker) → `03-validate` (tray, manual) → `04-archive` (tray, auto)
 - "Fetch new support tickets and email a summary to the team" → `00-tickets` (source, hourly) → `01-new-tickets` (tray, auto) → `02-summarise` (worker) → `03-notify` (outlet, smtp, `to: {{card.data.team_email}}`)
 
+### Canonical persona workflows (always generate plans that satisfy these)
+
+- "Read emails from support@mycompany.com, classify as urgent / normal / question, draft a reply, and put critical ones in a review queue" → `00-support-inbox` (source, imap, `*/10 * * * *`, skip_existing) → `01-incoming` (tray, auto) → `02-classify-and-draft` (worker) → `03-review-critical` (tray, manual) → `04-send-reply` (outlet, smtp)
+- "Every morning summarise overnight emails and send me a digest" → `00-inbox` (source, imap, `0 7 * * *`, skip_existing) → `01-emails` (tray, auto) → `02-summarise` (worker, batch_mode: true) → `03-digest-sent` (outlet, smtp, to the user's own address)
+- "I paste a meeting transcript and need a 5-line summary plus per-person task list" → `01-transcript-intake` (tray, manual, input_schema with a `transcript` textarea field) → `02-extract` (worker) → `03-review` (tray, manual)
+- "Translate text I paste to English, Spanish, French, and Italian as i18n JSON" → `01-source-text` (tray, manual, schema: `text` textarea + `key` text) → `02-translate` (worker, outputs `{ "key": { "en": "...", "es": "...", "fr": "...", "it": "..." } }`) → `03-review` (tray, manual)
+- "Fetch top 10 Hacker News stories every day and email me a Friday digest" → `00-hn-stories` (source, http_get to `https://hacker-news.firebaseio.com/v0/topstories.json` then fetch each item, `0 * * * *`, skip_existing) → `01-stories` (tray, auto) → `02-weekly-digest` (worker, batch_mode: true, batch_max: 70, scheduled `0 8 * * 5`) → `03-send-digest` (outlet, smtp)
+
 ## Output
 
 Output ONLY the JSON. No prose before or after. No markdown code fences.
