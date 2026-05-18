@@ -29,18 +29,20 @@ export default function AdapterSetupScreen({ onReady }: { onReady: () => void })
   const [recheckingId, setRecheckingId] = useState<string | null>(null)
   const [downloadModalOpen, setDownloadModalOpen] = useState(false)
 
-  // Load adapter list once on mount
+  // Load adapter list once on mount — local-llm always first
   useState(() => {
     void (async () => {
       const list = await window.trayline.adapters.list()
-      setAdapters(list.filter((a) => a.kind === 'production').map((a) => ({
+      const production = list.filter((a) => a.kind === 'production').map((a) => ({
         id: a.id,
         displayName: a.displayName,
         description: a.description,
         installUrl: a.installUrl,
         requiresExternalInstall: a.requiresExternalInstall,
         kind: a.kind,
-      })))
+      }))
+      production.sort((a, b) => (a.id === 'local-llm' ? -1 : b.id === 'local-llm' ? 1 : 0))
+      setAdapters(production)
     })()
   })
 
@@ -75,10 +77,9 @@ export default function AdapterSetupScreen({ onReady }: { onReady: () => void })
             <Zap size={18} strokeWidth={1.75} className="text-neutral-600 dark:text-neutral-300" />
           </div>
           <div>
-            <h1 className="text-lg font-semibold tracking-tight">Connect your AI</h1>
+            <h1 className="text-lg font-semibold tracking-tight">Set up your AI</h1>
             <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-1 leading-snug">
-              Trayline needs an AI to run your workflows.
-              Choose an option below to get started.
+              The local model works out of the box — download it once, use it forever, no account needed.
             </p>
           </div>
         </div>
@@ -97,7 +98,18 @@ export default function AdapterSetupScreen({ onReady }: { onReady: () => void })
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-sm font-medium">{adapter.displayName}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium">{adapter.displayName}</p>
+                      {isLocalLlm ? (
+                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400">
+                          Recommended
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400">
+                          Power user
+                        </span>
+                      )}
+                    </div>
                     {adapter.description && (
                       <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5">{adapter.description}</p>
                     )}

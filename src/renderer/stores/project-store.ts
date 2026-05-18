@@ -20,12 +20,15 @@ interface ProjectStoreState {
   regenerateOf: string | null
   /** When set, CardsTab opens this card directly after mounting. */
   jumpTarget: { stepId: string; cardId: string } | null
+  /** Name of the most recently generated project; drives the FirstProjectGuide. Cleared on dismiss or step selection. */
+  justCreatedProject: string | null
 
   setScreen: (s: Screen) => void
   setActive: (p: ProjectMeta | null) => void
   setSelectedStepId: (id: string | null) => void
   setRegenerateOf: (name: string | null) => void
   setJumpTarget: (target: { stepId: string; cardId: string } | null) => void
+  setJustCreatedProject: (name: string | null) => void
   refreshProjects: () => Promise<void>
   refreshSteps: () => Promise<void>
 }
@@ -39,15 +42,21 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
   screen: 'splash',
   regenerateOf: null,
   jumpTarget: null,
+  justCreatedProject: null,
 
   setScreen: (s) => set({ screen: s }),
   setActive: (p) => {
     set({ active: p, screen: p ? 'project' : 'projectList', selectedStepId: null, steps: [], workflow: null })
     void window.trayline.settings.set('lastOpenedProject', p ? p.name : null)
   },
-  setSelectedStepId: (id) => set({ selectedStepId: id }),
+  setSelectedStepId: (id) => {
+    set({ selectedStepId: id })
+    // Any step selection dismisses the first-project guide
+    if (id !== null) set({ justCreatedProject: null })
+  },
   setRegenerateOf: (name) => set({ regenerateOf: name }),
   setJumpTarget: (target) => set({ jumpTarget: target }),
+  setJustCreatedProject: (name) => set({ justCreatedProject: name }),
 
   refreshProjects: async () => {
     const all = await window.trayline.project.list()
