@@ -369,3 +369,26 @@ User actions that dismiss the guide:
 ```
 
 **Note:** The `OnboardingTour` no longer fires automatically on app boot. It is purely opt-in — triggered from the first-project guide or from **Settings → Help → Run onboarding tour**.
+
+---
+
+## 6.23 Editing Project Settings (N11)
+
+```
+ProjectScreen — user clicks "Project settings" (bottom of left rail)
+  └── showProjectSettings = true; showContextEditor = false; selectedStepId = null
+  └── ProjectSettingsPanel renders in the right canvas
+
+User edits Name and/or Description
+  └── Clicks [Save] (or presses Enter in the Name field)
+        ├── window.trayline.project.updateMeta(active.name, { display_name, description })
+        ├── IPC: project:updateMeta → projectService.updateMeta()
+        │     └── Reads project.json, merges patch, bumps updated_at
+        │     └── Writes to .tmp then renames to project.json (atomic)
+        ├── setActive({ ...active, ...updated }) — store reflects new name immediately
+        ├── refreshProjects() — project list pill updates
+        └── Shows "Saved ✓" for 2 seconds
+
+Clicking any step card in the left rail
+  └── setSelectedStepId(id); showContextEditor = false; showProjectSettings = false
+```
