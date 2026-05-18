@@ -3,13 +3,21 @@ import fs from 'fs/promises'
 import { Paths } from './fs-service'
 import type {
   ProjectMeta,
+  ProjectPermissions,
   ProjectStatus,
   WorkflowMeta,
   StepKind,
   StepMeta,
 } from '../../shared/types'
 
-export type { ProjectMeta, ProjectStatus, WorkflowMeta, StepKind, StepMeta }
+export type { ProjectMeta, ProjectPermissions, ProjectStatus, WorkflowMeta, StepKind, StepMeta }
+
+const DEFAULT_PERMISSIONS: ProjectPermissions = {
+  allow_network: false,
+  allow_shell: false,
+  credential_ids: [],
+  notes: '',
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -40,7 +48,7 @@ function stepDir(projectName: string, workflowName: string, stepId: string): str
 
 function normalizeMeta(raw: Partial<ProjectMeta> & { name: string }): ProjectMeta {
   const created_at = raw.created_at ?? new Date(0).toISOString()
-  return {
+  const meta: ProjectMeta = {
     id: raw.id ?? raw.name,
     name: raw.name,
     display_name: raw.display_name ?? raw.name,
@@ -49,6 +57,8 @@ function normalizeMeta(raw: Partial<ProjectMeta> & { name: string }): ProjectMet
     status: raw.status === 'inactive' ? 'inactive' : 'active',
     updated_at: raw.updated_at ?? created_at,
   }
+  if (raw.permissions) meta.permissions = raw.permissions
+  return meta
 }
 
 // ─── Project operations ───────────────────────────────────────────────────────
@@ -192,11 +202,36 @@ async function updateMeta(
   return next
 }
 
+async function updatePermissions(
+  projectName: string,
+  permissions: ProjectPermissions,
+): Promise<ProjectMeta> {
+  const path = join(projectDir(projectName), 'project.json')
+  const raw = await readJsonSafe<Partial<ProjectMeta>>(path)
+  if (!raw) throw new Error(`Project not found: ${projectName}`)
+  const next = normalizeMeta({
+    ...raw,
+    name: raw.name ?? projectName,
+    permissions,
+    updated_at: new Date().toISOString(),
+  })
+  const tmp = path + '.tmp'
+  await fs.writeFile(tmp, JSON.stringify(next, null, 2), 'utf-8')
+  await fs.rename(tmp, path)
+  return next
+}
+
+function getPermissions(meta: ProjectMeta | null): ProjectPermissions {
+  return meta?.permissions ?? DEFAULT_PERMISSIONS
+}
+
 export const projectService = {
   listProjects,
   getProject,
   setStatus,
   updateMeta,
+  updatePermissions,
+  getPermissions,
   listWorkflows,
   getWorkflow,
   listSteps,

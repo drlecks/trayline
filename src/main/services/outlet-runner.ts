@@ -11,6 +11,7 @@ import { credentialService } from './credential-service'
 import { auditDb } from './audit-db'
 import { resolveTokens } from '../ai-terminals/prompt-utils'
 import { runAIStep } from './ai-step-helper'
+import { projectService } from './project-service'
 import { IPC } from '../../shared/ipc-channels'
 import type { OutletStepConfig, OutletRunMeta, OutletRunEvent, HttpCredential, SmtpCredential } from '../../shared/types'
 import type { Card } from '../../shared/card'
@@ -130,10 +131,13 @@ async function runOutletInner(
   // Apply AI formatting if a prompt is configured
   if (stepConfig.prompt) {
     try {
+      const projectMeta = await projectService.getProject(project)
+      const permissions = projectService.getPermissions(projectMeta)
       const aiResult = await runAIStep({
         runDir,
         prompt: stepConfig.prompt,
         cardData,
+        permissions,
         timeoutMs: 60_000,
       })
       if (typeof aiResult.output === 'object') {

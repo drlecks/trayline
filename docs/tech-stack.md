@@ -122,6 +122,8 @@ interface AITerminalAdapter {
     workingDir: string;
     timeout: number;
     prefetchedData?: string;
+    /** Project-level permissions. Claude Code translates to --allowedTools flags + a permissions preamble in the prompt. */
+    permissions?: ProjectPermissions;
   }): Promise<AISession>;
 }
 

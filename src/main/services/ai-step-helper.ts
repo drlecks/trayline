@@ -6,6 +6,7 @@ import fs from 'fs/promises'
 import { join } from 'path'
 import { adapterRegistry } from '../ai-terminals/registry'
 import { adapterReadinessService } from './adapter-readiness-service'
+import type { ProjectPermissions } from '../../shared/types'
 
 export interface AIStepResult {
   /** Parsed JSON object if the AI returned valid JSON, otherwise the raw string. */
@@ -18,9 +19,10 @@ export async function runAIStep(opts: {
   prompt: string
   prefetchedData?: string
   cardData?: object
+  permissions?: ProjectPermissions
   timeoutMs?: number
 }): Promise<AIStepResult> {
-  const { runDir, prompt, prefetchedData, cardData = {}, timeoutMs = 60_000 } = opts
+  const { runDir, prompt, prefetchedData, cardData = {}, permissions, timeoutMs = 60_000 } = opts
 
   const adapter =
     adapterRegistry.get('claude-code') ??
@@ -44,6 +46,7 @@ export async function runAIStep(opts: {
     workingDir: runDir,
     timeout: timeoutMs,
     prefetchedData,
+    permissions,
   })
 
   let result

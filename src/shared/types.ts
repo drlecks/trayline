@@ -81,6 +81,15 @@ export interface BootstrapInfo {
 
 export type ProjectStatus = 'active' | 'inactive'
 
+export interface ProjectPermissions {
+  allow_network: boolean
+  allow_shell: boolean
+  /** IDs of credentials the AI may reference by name in its context. */
+  credential_ids: string[]
+  /** Free-text instructions passed to the AI about what tools are available. */
+  notes?: string
+}
+
 export interface ProjectMeta {
   id: string
   name: string
@@ -99,6 +108,8 @@ export interface ProjectMeta {
    * list screen. Defaults to `created_at` on read when absent.
    */
   updated_at: string
+  /** Optional AI permission block. Controls which tools the AI adapter may use. */
+  permissions?: ProjectPermissions
 }
 
 export interface WorkflowMeta {

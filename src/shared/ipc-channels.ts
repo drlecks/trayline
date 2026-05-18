@@ -26,6 +26,7 @@ export const IPC = {
     delete: 'project:delete',
     setStatus: 'project:setStatus',
     updateMeta: 'project:updateMeta',
+    updatePermissions: 'project:updatePermissions',
     getOrchestration: 'project:getOrchestration',
     onStatusChanged: 'project:onStatusChanged',
     liveStats: 'project:live-stats',

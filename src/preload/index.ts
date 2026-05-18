@@ -6,6 +6,7 @@ import type {
   AuditRow,
   BootstrapInfo,
   ProjectMeta,
+  ProjectPermissions,
   ProjectStatus,
   WorkflowMeta,
   StepMeta,
@@ -81,6 +82,8 @@ const api = {
       ipcRenderer.invoke(IPC.project.setStatus, name, status),
     updateMeta: (name: string, patch: { display_name?: string; description?: string }): Promise<ProjectMeta> =>
       ipcRenderer.invoke(IPC.project.updateMeta, name, patch),
+    updatePermissions: (name: string, permissions: ProjectPermissions): Promise<ProjectMeta> =>
+      ipcRenderer.invoke(IPC.project.updatePermissions, name, permissions),
     getOrchestration: (name: string): Promise<{ name: string; mounted: boolean }> =>
       ipcRenderer.invoke(IPC.project.getOrchestration, name),
     onStatusChanged: (
