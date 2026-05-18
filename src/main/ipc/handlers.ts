@@ -15,7 +15,6 @@ import { orchestrator } from '../services/orchestrator'
 import { adapterReadinessService } from '../services/adapter-readiness-service'
 import { queueService } from '../services/queue-service'
 import { notificationService } from '../services/notification-service'
-import { localModelService } from '../services/local-model-service'
 import { credentialService } from '../services/credential-service'
 import { outletRunner } from '../services/outlet-runner'
 import { join } from 'path'
@@ -378,14 +377,11 @@ export function registerIpcHandlers(
       nextRunAt: sourceScheduler.getNextRunAt(project, workflow, stepId),
     }
   })
-  ipcMain.handle('source:read-instructions', (_: unknown, project: string, workflow: string, stepId: string) =>
-    stepService.readSourceInstructions(project, workflow, stepId),
-  )
-  ipcMain.handle('source:update-instructions', (_: unknown, input: Parameters<typeof stepService.updateSourceInstructions>[0]) =>
-    stepService.updateSourceInstructions(input),
-  )
   ipcMain.handle('source:list-runs', (_: unknown, project: string, workflow: string, stepId: string) =>
     sourceRunner.listRuns(project, workflow, stepId),
+  )
+  ipcMain.handle('source:reset-dedup', (_: unknown, project: string, workflow: string, stepId: string) =>
+    sourceRunner.resetDedup(project, workflow, stepId),
   )
 
   // ── Worker runs ───────────────────────────────────────────────────────────
@@ -464,39 +460,6 @@ export function registerIpcHandlers(
 
   ipcMain.handle('notifications:get-badge-count', () =>
     notificationService.getCurrentBadgeCount(),
-  )
-
-  // ── Local model management ────────────────────────────────────────────────
-  ipcMain.handle('local-model:list', () => localModelService.listWithStatus())
-
-  ipcMain.handle('local-model:download', async (_: unknown, modelId: string) => {
-    const broadcast = (channel: string, payload: unknown) => {
-      for (const win of BrowserWindow.getAllWindows()) {
-        if (!win.isDestroyed()) win.webContents.send(channel, payload)
-      }
-    }
-    try {
-      await localModelService.downloadModel(modelId, (progress) => {
-        broadcast('local-model:progress', { ...progress, modelId })
-      })
-      broadcast('local-model:download-complete', { modelId })
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      broadcast('local-model:download-error', { modelId, error: message })
-      throw err
-    }
-  })
-
-  ipcMain.handle('local-model:cancel', (_: unknown, modelId: string) => {
-    localModelService.cancelDownload(modelId)
-  })
-
-  ipcMain.handle('local-model:delete', (_: unknown, modelId: string) =>
-    localModelService.deleteModel(modelId),
-  )
-
-  ipcMain.handle('local-model:recheck-adapter', () =>
-    adapterReadinessService.recheck('local-llm'),
   )
 
   // ── Credentials ───────────────────────────────────────────────────────────

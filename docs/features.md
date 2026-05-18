@@ -205,7 +205,7 @@ A first-class feature, not just a setup screen. Available whenever the user star
 - **Edit before scaffolding** (post-MVP): preview the proposed plan and tweak before files are written
 
 The workflow author understands:
-- **Source steps** (`kind: "source"`): generated when the description involves polling, monitoring, or ingesting from an external source on a schedule. The plan includes `schedule_cron`, `dedup.key`, `dedup.first_run`, and a draft `source.md`.
+- **Source steps** (`kind: "source"`): generated when the description involves polling, monitoring, or ingesting from an external source on a schedule. The plan includes `schedule_cron`, `dedup.key`, `dedup.first_run`, and a `channel` block (`http_get` or `imap`). No AI is involved in fetching — the runner calls the channel directly. A Worker step immediately after handles AI processing of the raw data.
 - **Batch workers** (`batch_mode: true`): generated when the description involves summarising or digesting many items into one output. The plan sets `batch_max` and coerces the trigger to `scheduled` or `manual`.
 
 The author prompt lives in `resources/author-prompt.md` in the app bundle.
@@ -258,80 +258,70 @@ Status states on the left rail card:
 
 ### Source Detail Panel (Right Canvas)
 
-Two tabs: **Source** and **Config**.
+Two tabs: **Config** and **Runs**.
 
-**Source tab** — full-screen markdown editor for `source.md`. Same editor as the Worker instructions editor (side preview, token estimate, variable autocomplete). The user writes what the AI should fetch and the exact JSON output format it must return.
+Source steps are **channel-based** — no AI is involved in fetching. The runner calls the configured channel directly (HTTP GET or IMAP) and creates cards from the raw response. AI processing of the fetched data happens in a Worker step that immediately follows the source.
 
 **Config tab:**
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│  Name          [Instagram Comments              ]            │
-│  Description   [Polls for new comments every 5 min]          │
-│                                                              │
-│  Schedule      [Every 5 minutes            ▼] [Custom...]   │
-│                cron: */5 * * * *                             │
-│                                                              │
-│  Dedup key     [id                          ]               │
-│  Max memory    [10000                       ]               │
-│                                                              │
-│  First run     ○ Skip existing (default)                     │
-│                ○ Process all                                 │
-│                ○ Process last N  [N: ___]                    │
-│                                                              │
-│  Adapter       [claude-code ▼]   Timeout [60s]              │
-│                                                              │
-│  [Run now]   [Pause schedule]                               │
-└──────────────────────────────────────────────────────────────┘
-```
-
-**Schedule picker** shows friendly labels ("Every 5 minutes", "Every hour", "Every day at 9am", "Custom") and renders the resulting cron expression below the picker so users can verify it.
-
-**First run** mode only applies the very first time the source runs (when `seen-ids.json` is empty or absent). After the first run it has no effect.
-
-**Adapter selector** — dropdown of all installed AI Terminal Adapters. Defaults to the global default. Per-source overrides persist in `step.json → execution.adapter`. *(Pending implementation — see N3.2)*
-
-**Run now** fires the source immediately, outside the cron schedule. Useful for testing `source.md` before relying on the schedule.
-
-**Pause schedule** suspends the cron without deleting the step. The left rail card shows `⏸ Paused`.
-
-**Data source section** — below the Execution block, a channel selector lets the user choose how data is fetched:
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│  Data source                                                 │
-│  ○ AI fetches data (default — requires Claude Code)          │
-│  ○ HTTP GET      ○ IMAP inbox                                │
+│  DATA CHANNEL                         [Required]             │
+│  Channel type  [HTTP GET ▼]                                  │
 │                                                              │
 │  [HTTP GET selected]                                         │
 │  Credential   [GitHub API ▼]  (HTTP credentials only)        │
 │  URL path     [/repos/owner/repo/issues?since={{last_run_at}}]│
 │               Appended to credential base URL.               │
 │               Use {{last_run_at}} for incremental fetches.   │
+│  Response path [data.items        ]  (optional — dot-path)   │
+│                Leave blank if root is already an array.      │
 │                                                              │
 │  [IMAP selected]                                             │
 │  Credential   [Gmail Inbox ▼]  (IMAP credentials only)       │
 │  Folder       [INBOX]                                        │
 │  Max messages [50]    [☑] Unseen only                        │
 │  Subject contains  [______]   From contains  [______]        │
+├──────────────────────────────────────────────────────────────┤
+│  Name          [GitHub Issues                    ]           │
+│  Description   [Polls for new issues every hour  ]           │
+│                                                              │
+│  Schedule      [Every hour                 ▼] [Custom...]   │
+│                cron: 0 * * * *                               │
+│                                                              │
+│  DEDUPLICATION                                               │
+│  Dedup key     [id                          ]               │
+│  Max memory    [10000                       ]               │
+│                                                              │
+│  First run     ○ Skip existing (default)                     │
+│                ○ Process all                                 │
+│                ○ Process last N  [N: ___]                    │
 └──────────────────────────────────────────────────────────────┘
 ```
 
-When a channel is configured, the runner pre-fetches data before the AI run and prepends it as `## Fetched data` in the prompt. The AI then parses and structures it; `source.md` should instruct the AI on the expected format. When no channel is configured, the AI fetches data itself (existing behaviour).
+When `channel` is `null` (not yet configured), the channel section is highlighted in amber with a **Required** badge. The source cannot run until a channel is configured.
+
+**Schedule picker** shows friendly labels ("Every 5 minutes", "Every hour", "Every day at 9am", "Custom") and renders the resulting cron expression below the picker so users can verify it.
+
+**First run** mode only applies the very first time the source runs (when `seen-ids.json` is empty or absent). After the first run it has no effect.
+
+**Run now** fires the source immediately, outside the cron schedule.
+
+**Pause schedule** suspends the cron without deleting the step. The left rail card shows `⏸ Paused`.
 
 ### Run History
 
-A **Runs** sub-tab (inside the Config tab, or a third top-level tab) shows a table of past source runs:
+The **Runs** tab shows a table of past source runs:
 
 | Column | Content |
 |---|---|
 | Time | ISO timestamp |
-| Duration | ms or seconds |
-| Items found | Total items the AI returned |
+| Duration | seconds |
+| Items found | Total items fetched from the channel |
 | Items new | Cards created this run |
 | Status | ✓ / ⚠ |
 
-Clicking a row shows the raw AI output, the list of new IDs found, and any error detail.
+Clicking a row expands error details with a copy button.
 
 ---
 

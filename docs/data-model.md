@@ -201,27 +201,20 @@ Password stored in keytar as `account='password'`.
   "channel": {
     "type": "http_get",
     "credential_id": "github-api",
-    "url_path": "/repos/owner/repo/issues?state=open&since={{last_run_at}}",
-    "response_path": ""
+    "url_path": "/repos/owner/repo/issues?state=open&since={{last_run_at}}"
   },
   "schedule_cron": "0 * * * *",
-  "dedup": {
-    "key": "id",
-    "max_memory": 10000,
-    "first_run": "skip_existing",
-    "first_run_n": 10
-  },
-  "execution": {
-    "timeout_seconds": 60,
-    "adapter": "claude-code"
-  },
   "paused": false
 }
 ```
 
-The optional `channel` block assigns a pre-fetch data source to the step. When present, the runner fetches data before spawning the AI and prepends a `## Fetched data` section to the prompt. When absent, the AI fetches data itself (requires Claude Code or equivalent).
+Source steps are **channel-based** — no AI is involved in fetching. The runner calls the channel directly (HTTP GET or IMAP) and creates cards. AI processing of the retrieved data happens in a Worker step that follows.
 
-**IMAP channel variant:**
+`channel` is **required**. When `null`, the source cannot run and will fail with a configuration error.
+
+**HTTP GET behaviour:** one fetch per scheduled run → **one card** created. The full response text (any content type — JSON, HTML, plain text) is stored verbatim in `card.data.body`. There is no JSON parsing, no item extraction, and no dedup. The Worker that follows receives `{{card.data.body}}` and does whatever parsing is needed.
+
+**IMAP channel variant (with dedup):**
 ```json
 {
   "channel": {
@@ -232,44 +225,51 @@ The optional `channel` block assigns a pre-fetch data source to the step. When p
     "max_messages": 50,
     "subject_contains": "",
     "from_contains": ""
+  },
+  "dedup": {
+    "key": "message_id",
+    "max_memory": 10000,
+    "first_run": "skip_existing",
+    "first_run_n": 10
   }
 }
 ```
+
+IMAP creates one card per email, deduplicated by `dedup.key`. `dedup` is only used for IMAP sources — omit it entirely for `http_get`.
 
 `{{last_run_at}}` is a built-in token resolved to the ISO timestamp of the last successful run (from `state/counters.json`), or empty string on first run.
 
 | Field | Meaning |
 |---|---|
 | `kind` | Always `"source"` |
-| `channel` | Optional data-source channel (HTTP GET or IMAP). When absent, AI fetches data itself. |
+| `channel` | Required data-source channel (`http_get` or `imap`). `null` means not yet configured. |
+| `channel.type` | `"http_get"`: fetches the URL, creates 1 card with `data.body` = full response text. `"imap"`: fetches emails, one card per email. |
 | `schedule_cron` | Standard cron expression for how often the source runs |
-| `dedup.key` | The field name in each AI-returned JSON item used as the unique identifier |
-| `dedup.max_memory` | Maximum number of IDs stored in `seen-ids.json`; oldest entries pruned when exceeded |
-| `dedup.first_run` | What to do on the very first run: `skip_existing` (default — fetch but discard all, record IDs only), `process_all` (create cards for everything found), `process_last_n` (create cards for the N most recent) |
-| `dedup.first_run_n` | Number of most-recent items to process when `first_run` is `"process_last_n"` |
-| `execution.adapter` | Which AI Terminal Adapter to use for this source (overrides global default). Defaults to `claude-code`. |
+| `dedup.key` | **IMAP only.** The field name in each email object used as the unique identifier. |
+| `dedup.max_memory` | **IMAP only.** Maximum number of IDs stored in `seen-ids.json`; oldest entries pruned when exceeded. |
+| `dedup.first_run` | **IMAP only.** What to do on the very first run: `skip_existing` (default), `process_all`, `process_last_n`. |
+| `dedup.first_run_n` | **IMAP only.** Number of most-recent emails to process when `first_run` is `"process_last_n"`. |
 | `paused` | When `true`, the cron job is not registered at launch and `source:pause` / `source:resume` toggle it |
 
 **Source step folder structure:**
 ```
 00-source/
-├── step.json         # Config above
-├── source.md         # AI instructions: what to fetch, JSON array output format
+├── step.json         # Config above (includes channel)
 ├── state/
 │   ├── seen-ids.json # [{ id, seen_at }] — deduplicated item IDs, pruned to max_memory
 │   └── counters.json # { runs_total, items_found, items_new, last_run_at }
 ├── runs/
 │   └── run_YYYY-MM-DD_NNN/
 │       ├── meta.json   # { run_id, status, started_at, ended_at, items_found, items_new, error? }
-│       └── output.json # The raw JSON array returned by the AI (on success)
+│       └── output.json # The fetched JSON array (on success)
 └── cards/
-    ├── ready/          # New deduplicated cards, one per new item
+    ├── ready/          # Cards created by this source run
     └── archived/       # Cards that have moved downstream
 ```
 
 A Source step is always the **first** step in a workflow (`00-<slug>`). It has no preceding step to read cards from — it generates cards by polling the world.
 
-**Atomic write protocol for `seen-ids.json`:** Write to `seen-ids.json.tmp` first, then rename to `seen-ids.json`. On app launch, any leftover `.tmp` file is discarded (the last complete `seen-ids.json` remains authoritative).
+**Atomic write protocol for `seen-ids.json` (IMAP):** Write to `seen-ids.json.tmp` first, then rename to `seen-ids.json`. On app launch, any leftover `.tmp` file is discarded (the last complete `seen-ids.json` remains authoritative).
 
 ### Outlet `step.json`
 
@@ -387,44 +387,37 @@ The renderer writes `lastOpenedProject` whenever the active project changes (ope
 
 ```
 00-source/
-├── step.json
-├── source.md                  # AI instructions — what to fetch and how to format output
+├── step.json                  # Config (includes channel)
 ├── state/
-│   ├── seen-ids.json          # [{id: "...", seen_at: "ISO"}], capped at dedup.max_memory
+│   ├── seen-ids.json          # IMAP only: [{id: "...", seen_at: "ISO"}], capped at dedup.max_memory
 │   └── counters.json          # {runs_total, items_found, items_new, last_run_at}
+├── runs/
+│   └── run_YYYY-MM-DD_NNN/
+│       ├── meta.json          # Run metadata (status, times, counts, error)
+│       ├── output.txt         # http_get: full response text
+│       └── output.json        # imap: fetched email array
 └── cards/
-    ├── ready/                 # New deduplicated items, consumed by the next step
-    └── archived/              # Items already processed downstream
+    ├── ready/                 # Cards created by this source run, consumed by the next step
+    └── archived/              # Cards already processed downstream
 ```
 
-`source.md` instructs the AI what to fetch and specifies the exact JSON output format. It must include the field that matches `dedup.key`. Example:
+The source fetches data directly via its `channel` — no AI involved. A **Worker** step immediately after processes the cards with AI.
 
-```markdown
-# Instagram Comments
+- **`http_get`**: one run → one card. `card.data.body` holds the full response text verbatim.
+- **`imap`**: one run → one card per new email (deduplicated). `card.data` holds the email fields.
 
-Fetch all comments on post {{config.post_url}} via the Instagram API.
-
-For each comment, output a JSON array item with:
-- id: the comment's unique ID (string, used for deduplication)
-- author: username (string)
-- text: comment content (string)
-- posted_at: ISO 8601 timestamp
-
-Return ONLY the JSON array. No explanations, no markdown fences.
-```
-
-#### `seen-ids.json`
+#### `seen-ids.json` (IMAP only)
 
 ```json
 [
-  { "id": "comment_12345", "seen_at": "2026-05-11T09:00:00Z" },
-  { "id": "comment_12346", "seen_at": "2026-05-11T09:00:00Z" }
+  { "id": "msg_12345", "seen_at": "2026-05-11T09:00:00Z" },
+  { "id": "msg_12346", "seen_at": "2026-05-11T09:00:00Z" }
 ]
 ```
 
-- Entries are appended after each run.
+- Entries are appended after each IMAP run.
 - When the array length exceeds `dedup.max_memory`, the oldest entries (by `seen_at`) are pruned.
-- The file is written atomically: written to `seen-ids.json.tmp`, then renamed. This means a crash mid-write never corrupts the dedup index.
+- Written atomically: written to `seen-ids.json.tmp`, then renamed. A crash mid-write never corrupts the dedup index.
 
 ---
 

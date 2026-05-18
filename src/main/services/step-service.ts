@@ -289,29 +289,6 @@ interface AddSourceInput {
   dedup_key?: string
 }
 
-const DEFAULT_SOURCE_MD = `# Source Instructions
-
-Write instructions for what the AI should fetch. Be specific about:
-- Where to find the data (API, URL, file, etc.)
-- What the unique ID field is for deduplication
-- Any filtering or transformation to apply
-
-## Output Format
-
-Reply with **only** a JSON array. Each element must have a unique ID field.
-Do not include any prose or explanation — only the raw JSON array.
-
-\`\`\`json
-[
-  {
-    "id": "<unique-identifier>",
-    "title": "<item title>",
-    "summary": "<brief description>"
-  }
-]
-\`\`\`
-`
-
 async function addSource(input: AddSourceInput): Promise<SourceStepConfig & { id: string }> {
   // Source steps always go at position 0 — before all other steps
   const stepsRoot = join(projectService.paths.workflowDir(input.project, input.workflow), 'steps')
@@ -343,15 +320,11 @@ async function addSource(input: AddSourceInput): Promise<SourceStepConfig & { id
       max_memory: 10000,
       first_run: 'skip_existing',
     },
-    execution: {
-      timeout_seconds: 60,
-      adapter: 'claude-code',
-    },
     paused: false,
+    channel: null,
   }
 
   await fsService.writeJsonAtomic(join(stepDir, 'step.json'), stepJson)
-  await fs.writeFile(join(stepDir, 'source.md'), DEFAULT_SOURCE_MD, 'utf-8')
   await fsService.writeJsonAtomic(join(stepDir, 'state', 'counters.json'), {
     runs_total: 0,
     items_found: 0,
@@ -374,27 +347,6 @@ async function insertSourceIntoWorkflow(project: string, workflow: string, sourc
   await fsService.writeJsonAtomic(wfPath, { ...wf, step_ids: [sourceId, ...existing] })
 }
 
-interface UpdateSourceInstructionsInput {
-  project: string
-  workflow: string
-  stepId: string
-  content: string
-}
-
-async function updateSourceInstructions(input: UpdateSourceInstructionsInput): Promise<void> {
-  const path = join(
-    projectService.paths.stepDir(input.project, input.workflow, input.stepId),
-    'source.md',
-  )
-  await fs.writeFile(path, input.content, 'utf-8')
-}
-
-async function readSourceInstructions(project: string, workflow: string, stepId: string): Promise<string> {
-  const path = join(projectService.paths.stepDir(project, workflow, stepId), 'source.md')
-  if (!(await pathExists(path))) return ''
-  return fs.readFile(path, 'utf-8')
-}
-
 export const stepService = {
   addTray,
   addWorker,
@@ -402,7 +354,5 @@ export const stepService = {
   updateStep,
   updateWorkerProcess,
   readWorkerProcess,
-  updateSourceInstructions,
-  readSourceInstructions,
   deleteStep,
 }

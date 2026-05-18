@@ -58,10 +58,10 @@ Clicking an example fills the textbox so the user can edit before submitting.
 **On submit:**
 1. A loading screen with a soft animated circle and rotating status messages: *"Imagining your workflow..."* / *"Sketching out the trays..."* / *"Wiring up the workers..."* / *"Almost there..."*
 2. Trayline runs the author prompt (`resources/author-prompt.md`) against the user's description via the AI Terminal Adapter.
-3. The author outputs a structured JSON workflow plan: ordered steps with names, descriptions, tray schemas, and a draft `process.md` per worker.
+3. The author outputs a structured JSON workflow plan: ordered steps with names, descriptions, tray schemas, a draft `process.md` per worker, and a `channel` block per source step.
 4. The scaffold service writes that plan to disk — creating the project folder, all step folders, JSON files, and process files from templates.
 5. Loading screen fades out. User lands in the project view with the workflow already on the left rail.
-   - If the plan includes a Source step: banner tells the user to open it and write their fetch instructions.
+   - If the plan includes a Source step: banner tells the user to open it and configure a credential for the channel.
    - Otherwise: banner says *"Here's a starting point for you. Edit anything you want."*
 
 **Regenerate:** A **Regenerate** button at the top of the new project lets the user refine their description and try again. The previous version is archived to `<project>/.history/<timestamp>/`.
@@ -149,11 +149,11 @@ Clicking an example fills the textbox so the user can edit before submitting.
    - **Name** (e.g. "Instagram Comments")
    - **Schedule** — friendly picker ("Every 5 minutes", "Every hour", "Custom") + cron expression preview
    - **Dedup key** — the field name in each item the AI returns that uniquely identifies it (e.g. `id`)
-4. Clicking **Create** scaffolds the Source step folder with a blank `source.md`, default `step.json`, and empty `state/` directory
+4. Clicking **Create** scaffolds the Source step folder with a default `step.json` (channel: null) and empty `state/` directory
 5. The Source step is placed at the top of the workflow rail (Source is always the first step)
-6. The **Source** tab opens automatically so the user can write their `source.md`
-7. A prompt hint appears in the editor: *"Write instructions for what the AI should fetch. End with: Return ONLY the JSON array. No explanations, no markdown fences."*
-8. User clicks **Run now** to test before relying on the schedule — the terminal panel shows the raw AI output and the dedup results
+6. The **Config** tab opens automatically, highlighting the **Data channel** section in amber because no channel is configured yet
+7. User selects a channel type (HTTP GET or IMAP), picks a credential, and fills in the URL path or folder settings
+8. User clicks **Run now** to test before relying on the schedule — on success, the runner shows items found and new cards created
 
 ---
 
@@ -231,25 +231,22 @@ When a card lands in a manual-approval tray while the app is in the background:
 Triggered automatically by the cron scheduler, or manually via **Run now**:
 
 1. **Scheduler fires** — node-cron matches the `schedule_cron` expression and triggers the source runner
-2. **Load dedup state** — source runner reads `state/seen-ids.json` into memory; if the file is absent (first run), the set is empty
-3. **Spawn AI adapter** — source runner spawns the configured adapter (e.g. `claude-code`) with `source.md` as the process instructions, no card input
-4. **AI returns JSON array** — the adapter exits; the runner parses the output as a JSON array; if the output is not valid JSON or is not an array, the run is marked `source_run_failed` and the error is written to the audit log
-5. **Dedup loop** — for each item in the array:
-   - Extract `item[dedup.key]`
-   - If the key is already in `seen-ids`, skip
-   - If the key is new: write a card JSON file to `cards/ready/`, append `{ id, seen_at }` to the in-memory seen set, emit a `source_item_new` audit event
-6. **Persist dedup index** — write the updated seen set to `state/seen-ids.json.tmp`, then rename to `state/seen-ids.json` (atomic); prune oldest entries if length exceeds `max_memory`
-7. **Update counters** — write `state/counters.json` with updated `runs_total`, `items_found`, `items_new`, `last_run_at`
-8. **Emit completion event** — IPC event fires to the renderer; the left rail card updates to show "N new · M seen"
-9. **Next step picks up cards** — the step after the Source (typically a Tray or Worker) has a chokidar watcher on `cards/ready/`; new files trigger normal card handling
+2. **Check channel** — if `channel` is null (not configured), the run is marked failed immediately with a clear configuration error
+3. **Fetch via channel** — source runner calls the channel directly (no AI):
+   - `http_get`: fetches the URL (base + `url_path`); the entire response text (any content type) becomes `card.data.body` in a single new card — one run, one card, no parsing, no dedup
+   - `imap`: reads `state/seen-ids.json` into memory (empty on first run), fetches emails matching the folder/filter settings, deduplicates by `dedup.key`
+4. **Create cards** — each new item is written to `cards/ready/` with an audit entry before the file is created (replayable on crash)
+5. **Persist dedup index (IMAP only)** — write the updated seen set to `state/seen-ids.json.tmp`, then rename to `state/seen-ids.json` (atomic); prune oldest entries if length exceeds `max_memory`
+6. **Update counters** — write `state/counters.json` with updated `runs_total`, `items_found`, `items_new`, `last_run_at`
+7. **Emit completion event** — IPC event fires to the renderer
+8. **Next step picks up cards** — the Worker step following the Source has a chokidar watcher on `cards/ready/`; new files trigger normal card handling (AI processing happens there)
 
-**On first run (`first_run: skip_existing`):**
-- All items are added to the seen index but no cards are created
-- The left rail shows "0 new · N seen (first run — existing items skipped)"
-- On subsequent runs, only items with IDs not in the index become cards
+**IMAP first run (`first_run: skip_existing`):**
+- All emails are added to the seen index but no cards are created
+- On subsequent runs, only emails with IDs not in the index become cards
 
-**On crash mid-run:**
-- If the app crashes after AI output but before `seen-ids.json` is written, the `seen-ids.json.tmp` file is the signal — on next launch, if `.tmp` exists, the runner discards it and replays using the last good `seen-ids.json`
+**On crash mid-run (IMAP):**
+- If the app crashes before `seen-ids.json` is written, the `seen-ids.json.tmp` file is the signal — on next launch, if `.tmp` exists, the runner discards it and replays using the last good `seen-ids.json`
 - Cards already written to `ready/` in a crashed run may be duplicates on the next run; this is acceptable (at-least-once delivery) and noted in the audit log
 
 ---
@@ -280,18 +277,19 @@ After adding a Credential, the user can assign it to a Source step:
 
 ```
 ProjectScreen → select Source step
-  └── Source detail panel → Config tab → Data source section
-        ├── "AI fetches data (default)" — no change from pre-N9
+  └── Source detail panel → Config tab → Data channel section (amber if unconfigured)
+        ├── Channel type selector
         ├── "HTTP GET" selected
         │     ├── Credential selector (HTTP credentials only)
-        │     └── URL path field — appended to credential base URL
-        │           Hint: "Use {{last_run_at}} for incremental fetches"
+        │     ├── URL path field — appended to credential base URL
+        │     │     Hint: "Use {{last_run_at}} for incremental fetches"
+        │     └── Response path (optional) — dot-path to array inside JSON
         └── "IMAP inbox" selected
               ├── Credential selector (IMAP credentials only)
               ├── Folder (default: INBOX), Max messages, Unseen only toggle
               └── Optional Subject / From filters
-  └── [Save] — writes channel block to step.json
-  └── [Run now] — pre-fetches data, spawns AI, creates cards
+  └── Changes auto-save on blur — step.json updated immediately
+  └── [Run now] — fetches via channel, creates cards (no AI involved here)
 ```
 
 ---

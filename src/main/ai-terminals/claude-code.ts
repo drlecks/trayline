@@ -12,19 +12,7 @@ import type {
   AdapterUsageSnapshot,
   AdapterReadiness,
 } from './adapter'
-import { renderProcessTemplate } from './prompt-utils'
-
-// Strip ANSI escape sequences before trying to parse output as JSON. The PTY
-// preserves cursor moves, colour codes, AND OSC title sequences from the
-// underlying CLI, but the worker contract treats stdout as the agent's reply
-// text. Handles:
-//   - CSI:   ESC [ ... <final-byte>
-//   - OSC:   ESC ] ... (BEL | ESC \)        ← e.g. \x1B]0;claude\x07
-//   - other: ESC <single-char>
-// Also drops stray BEL (\x07) bytes left after partial parses, plus any C1
-// control characters that conpty/Windows occasionally injects.
-// eslint-disable-next-line no-control-regex
-const ANSI_RE = /\x1B\][^\x07\x1B]*(?:\x07|\x1B\\)|\x1B\[[0-?]*[ -/]*[@-~]|\x1B[@-Z\\-_]|[\x07\x00-\x06\x0E-\x1A\x1C-\x1F]/g
+import { renderProcessTemplate, ANSI_RE } from './prompt-utils'
 
 // Lightweight heuristic: trailing prompt characters with no following newline
 // suggest the CLI is waiting on input. Conservative on purpose — Claude in
