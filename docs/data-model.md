@@ -54,13 +54,27 @@ Workflows are linear — the prefix encodes order on disk. Reordering the workfl
   "description": "Intake new clients and route their requests.",
   "created_at": "2026-05-07T14:32:11Z",
   "status": "active",
-  "updated_at": "2026-05-13T09:10:22Z"
+  "updated_at": "2026-05-13T09:10:22Z",
+  "permissions": {
+    "allow_network": false,
+    "allow_shell": false,
+    "credential_ids": [],
+    "notes": ""
+  }
 }
 ```
 
 - `status` is `"active" | "inactive"`. It does not gate execution today; it's a hook for future scheduling/visibility features and drives the green/red dot on the Project List screen.
 - `updated_at` is bumped whenever the project is created, regenerated, or has its status toggled. The Project List screen sorts on this field, descending.
 - Both fields are optional on disk for backward compatibility — readers default missing `status` to `"active"` and missing `updated_at` to `created_at`.
+- `permissions` is optional. When absent, defaults to `{ allow_network: false, allow_shell: false, credential_ids: [], notes: '' }`. Controls which tools the AI adapter may use for this project's worker and source/outlet AI steps:
+
+| Field | Meaning |
+|---|---|
+| `allow_network` | When `true`, the Claude Code adapter adds `--allowedTools "Bash(curl:*),Bash(wget:*),WebFetch"` to permit network access without prompting. |
+| `allow_shell` | When `true`, the Claude Code adapter adds `--allowedTools Bash` to permit all shell commands. Supersedes `allow_network`. |
+| `credential_ids` | IDs of credentials the AI may reference by name in its context (prepended as a "Available credentials" preamble). |
+| `notes` | Free-text instructions prepended to the AI prompt under `## Permissions`. Use this to describe what tools and data sources are available to the AI. |
 
 ### Card (`card_2026-05-07_001.json`)
 

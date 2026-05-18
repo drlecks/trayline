@@ -244,7 +244,9 @@ async function runSourceInner({ project, workflow, stepId, stepConfig }: RunSour
     let cardData: object = { body: rawBody }
     if (stepConfig.prompt) {
       try {
-        const aiResult = await runAIStep({ runDir, prompt: stepConfig.prompt, prefetchedData: rawBody })
+        const projectMeta = await projectService.getProject(project)
+        const permissions = projectService.getPermissions(projectMeta)
+        const aiResult = await runAIStep({ runDir, prompt: stepConfig.prompt, prefetchedData: rawBody, permissions })
         cardData = typeof aiResult.output === 'object' ? aiResult.output : { ai_output: aiResult.output }
       } catch (err) {
         await failRun({ project, workflow, stepId, runId, stateDir, runDir, startedAt, meta, error: `AI step failed: ${err instanceof Error ? err.message : String(err)}` })
@@ -341,7 +343,9 @@ async function runSourceInner({ project, workflow, stepId, stepConfig }: RunSour
       let cardData: object = item
       if (stepConfig.prompt) {
         try {
-          const aiResult = await runAIStep({ runDir, prompt: stepConfig.prompt, prefetchedData: JSON.stringify(item, null, 2) })
+          const projectMeta = await projectService.getProject(project)
+          const permissions = projectService.getPermissions(projectMeta)
+          const aiResult = await runAIStep({ runDir, prompt: stepConfig.prompt, prefetchedData: JSON.stringify(item, null, 2), permissions })
           cardData = typeof aiResult.output === 'object' ? aiResult.output : { ai_output: aiResult.output }
         } catch (err) {
           await failRun({ project, workflow, stepId, runId, stateDir, runDir, startedAt, meta, error: `AI step failed for item ${itemId}: ${err instanceof Error ? err.message : String(err)}` })

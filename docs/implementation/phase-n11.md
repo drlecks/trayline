@@ -103,22 +103,14 @@ At worker spawn time, the worker engine reads `project.permissions` and includes
 
 #### Tasks
 
-- [ ] **C1** Add `permissions?: ProjectPermissions` to `ProjectMeta` in `src/shared/types.ts`:
-  ```typescript
-  export interface ProjectPermissions {
-    allow_network: boolean
-    allow_shell: boolean
-    credential_ids: string[]   // credentials the AI may reference by name
-    notes?: string             // free-text context given to the AI about what it can do
-  }
-  ```
-- [ ] **C2** Update `src/main/services/project-service.ts` to read/write `permissions` in `project.json` (default to `{ allow_network: false, allow_shell: false, credential_ids: [], notes: '' }` when absent).
-- [ ] **C3** Add `project:updatePermissions` IPC channel and handler.
-- [ ] **C4** Pass `project.permissions` through to `SpawnOptions` in the worker engine (and source runner when AI is used). The Claude Code adapter translates `allow_network` / `allow_shell` to `--allowedTools` flags, and prepends any listed credentials' names + the `notes` field as a system context block in the prompt.
-- [ ] **C5** Update the `AITerminalAdapter.spawn()` interface in `adapter.ts` to accept an optional `permissions?: ProjectPermissions` field in `SpawnOptions`.
-- [ ] **C6** Implement in `claude-code.ts`: when `permissions.allow_network` is true, add `--allowedTools Bash(curl:*)` (or equivalent); when `permissions.allow_shell` is true, add `--allowedTools Bash`; prepend credential names and notes as a tool-availability preamble in the process file.
-- [ ] **C7** Update `docs/data-model.md` — document the `permissions` block in `project.json`.
-- [ ] **C8** Update `docs/tech-stack.md` — note that `SpawnOptions` now carries a `permissions` field.
+- [x] **C1** Added `ProjectPermissions` interface and `permissions?: ProjectPermissions` to `ProjectMeta` in `src/shared/types.ts`.
+- [x] **C2** Updated `project-service.ts`: `normalizeMeta` preserves `permissions`; added `updatePermissions` and `getPermissions` (defaults to no-op block when absent).
+- [x] **C3** Added `project:updatePermissions` IPC channel, handler, and preload bridge.
+- [x] **C4** `worker-runner.ts` loads `projectService.getPermissions()` and passes to both single-card and batch spawns. `source-runner.ts` and `outlet-runner.ts` do the same via `runAIStep`. `ai-step-helper.ts` accepts and forwards `permissions` field.
+- [x] **C5** Added `permissions?: ProjectPermissions` to `SpawnOptions` in `adapter.ts`.
+- [x] **C6** `claude-code.ts`: builds `--allowedTools` flag from permissions; prepends `## Permissions` preamble (notes, credential names, capability flags) to the prompt.
+- [x] **C7** Updated `docs/data-model.md` — `permissions` block documented in `project.json` schema with field table.
+- [x] **C8** Updated `docs/tech-stack.md` — `SpawnOptions.permissions` documented.
 
 ---
 

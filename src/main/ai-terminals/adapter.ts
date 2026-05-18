@@ -22,6 +22,12 @@ export interface SpawnOptions {
    */
   prefetchedData?: string
   /**
+   * Project-level AI permissions. Adapters translate this to CLI flags
+   * (e.g. --allowedTools) and/or a permissions preamble in the prompt.
+   * Omit for backwards-compat default (no extra tools allowed).
+   */
+  permissions?: import('../../shared/types').ProjectPermissions
+  /**
    * Notifies when the session flips between awaiting user input and not.
    * Adapters that never block on input (e.g. mock) may ignore this.
    */

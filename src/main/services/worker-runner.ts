@@ -360,6 +360,8 @@ async function runInner(input: TriggerRunInput): Promise<TriggerRunResult> {
   }
 
   const timeoutMs = (worker.execution?.timeout_seconds ?? 180) * 1000
+  const projectMeta = await projectService.getProject(project)
+  const permissions = projectService.getPermissions(projectMeta)
 
   let exitCode = -1
   let output: object | string | null = null
@@ -374,6 +376,7 @@ async function runInner(input: TriggerRunInput): Promise<TriggerRunResult> {
       contextPacks,
       workingDir: runDir,
       timeout: timeoutMs,
+      permissions,
       onAwaitingInputChange: (awaiting) => {
         emit({ type: 'awaiting_input', project, workflow, stepId, runId, awaiting })
       },
@@ -660,6 +663,8 @@ async function runBatchInner(input: TriggerBatchRunInput): Promise<TriggerRunRes
   }
 
   const timeoutMs = (worker.execution?.timeout_seconds ?? 180) * 1000
+  const projectMetaBatch = await projectService.getProject(project)
+  const permissionsBatch = projectService.getPermissions(projectMetaBatch)
   let exitCode = -1
   let output: object | string | null = null
   let runError: string | undefined
@@ -669,7 +674,7 @@ async function runBatchInner(input: TriggerBatchRunInput): Promise<TriggerRunRes
   try {
     session = await adapter.spawn({
       processFile, cardData: batchData, contextPacks,
-      workingDir: runDir, timeout: timeoutMs,
+      workingDir: runDir, timeout: timeoutMs, permissions: permissionsBatch,
       onAwaitingInputChange: (awaiting) => {
         emit({ type: 'awaiting_input', project, workflow, stepId, runId, awaiting })
       },

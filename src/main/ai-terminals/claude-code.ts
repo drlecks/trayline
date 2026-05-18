@@ -317,6 +317,23 @@ export const claudeCodeAdapter: AITerminalAdapter = {
     const processBody = await fs.readFile(opts.processFile, 'utf-8')
 
     const promptParts: string[] = []
+
+    // Permissions preamble — emitted before fetched data so the AI knows what
+    // tools and credentials are available for this run.
+    if (opts.permissions) {
+      const p = opts.permissions
+      const lines: string[] = []
+      if (p.notes) lines.push(p.notes)
+      if (p.credential_ids.length > 0) {
+        lines.push(`Available credentials: ${p.credential_ids.join(', ')}`)
+      }
+      if (p.allow_network) lines.push('Network access is allowed (curl/fetch).')
+      if (p.allow_shell) lines.push('Shell commands are allowed.')
+      if (lines.length > 0) {
+        promptParts.push(`## Permissions\n\n${lines.join('\n')}`)
+      }
+    }
+
     if (opts.prefetchedData) {
       promptParts.push(`## Fetched data\n\n${opts.prefetchedData}`)
     }
@@ -333,6 +350,17 @@ export const claudeCodeAdapter: AITerminalAdapter = {
     const promptFile = join(opts.workingDir, 'prompt.txt')
     await fs.writeFile(promptFile, prompt, 'utf-8')
 
+    // Build --allowedTools flags from project permissions
+    const allowedToolParts: string[] = []
+    if (opts.permissions?.allow_shell) {
+      allowedToolParts.push('Bash')
+    } else if (opts.permissions?.allow_network) {
+      allowedToolParts.push('Bash(curl:*)', 'Bash(wget:*)', 'WebFetch')
+    }
+    const allowedToolsFlag = allowedToolParts.length > 0
+      ? ` --allowedTools "${allowedToolParts.join(',')}"`
+      : ''
+
     const isWin = process.platform === 'win32'
     const shell = isWin ? 'cmd.exe' : '/bin/sh'
     // On Windows, pass the command line as a single raw string to bypass
@@ -342,8 +370,8 @@ export const claudeCodeAdapter: AITerminalAdapter = {
     // "filename/directory/volume label syntax is incorrect". `/s /c "<cmd>"`
     // tells cmd to use everything between the outer quotes verbatim.
     const shellArgs: string | string[] = isWin
-      ? `/s /c "claude -p < "${promptFile}""`
-      : ['-c', `claude -p < "${promptFile}"`]
+      ? `/s /c "claude -p${allowedToolsFlag} < "${promptFile}""`
+      : ['-c', `claude -p${allowedToolsFlag} < "${promptFile}"`]
 
     // Use a very wide PTY so the CLI does not soft-wrap its stdout. ConPTY on
     // Windows emits awkward last-column autowrap artifacts that split JSON
