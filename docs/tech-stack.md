@@ -157,6 +157,18 @@ interface AISession {
 
 Every worker run — success **or** failure — ends with the runner invoking `adapter.clearContext()` before releasing the adapter back to the pool. This prevents transcript history from one card carrying into the next and burning tokens. Clear failures are non-fatal: the runner writes an `ai_terminal_clear_failed` audit row and the run outcome stands.
 
+### Permission auto-accept loop
+
+While a worker session is running, the worker runner scans the stdout stream for Claude Code permission-request prompts (e.g. `[y/N]` style or TUI numbered-choice boxes). When detected, the runner:
+
+1. Sends the appropriate confirmation input (`y\n` or `1\n`) via `session.sendInput()`.
+2. Writes an `ai_permission_auto_accepted` audit row with the retry counter.
+3. Increments a per-run retry counter.
+
+If the counter reaches **3** and a fourth prompt is detected, the runner calls `session.kill()` and sets `runError = 'max_permission_retries_exceeded'`, failing the run cleanly. The source card lands in `99-errors/`.
+
+Detection lives in `detectPermissionPrompt(rawText: string): boolean` (exported from `claude-code.ts`). The function strips ANSI escape sequences before pattern matching, so it works on raw PTY output. The companion `permissionPromptResponse(rawText)` picks the right reply (`y\n` vs `1\n`) based on the same patterns.
+
 ### Provider / model / effort selection
 
 The Settings screen surfaces a Provider list (sourced from `adapterRegistry.list()` filtered by `detectInstalled()`), a Model dropdown (sourced from `adapter.listModels()`), and an Effort dropdown (sourced from `adapter.listEfforts(modelId)`). Selecting a provider re-issues `listModels`; selecting a model re-issues `listEfforts` because some providers tie efforts to specific models. Selections persist as `defaultAdapterId` / `defaultModelByAdapter` / `defaultEffortByAdapter` on the global Settings object. Worker `step.json` may still override these per-step — when present, the per-step fields are authoritative.

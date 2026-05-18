@@ -57,6 +57,7 @@ export type AuditEvent =
   | 'outlet_run_started'
   | 'outlet_run_completed'
   | 'outlet_run_failed'
+  | 'ai_permission_auto_accepted'
 
 export interface AuditRow {
   id: string
