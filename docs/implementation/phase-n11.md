@@ -198,10 +198,10 @@ If the watcher in `step-service.ts` / `worker-engine` uses a relative path that 
 
 #### Tasks
 
-- [ ] **G1** Trace the watcher setup in `src/main/services/step-service.ts` (or wherever workers register their chokidar paths) and confirm the watched path is derived from the step's actual preceding step in the workflow — not an assumed adjacent folder.
-- [ ] **G2** Write an integration test in `source-runner.test.ts`: run a source, verify a card appears in `cards/ready/`, then verify the mock worker engine receives the file-add event and processes it.
-- [ ] **G3** If the watcher path is wrong, fix `step-service.ts` / `worker-engine.ts` to correctly resolve `prevStep.dir + '/cards/ready/'` for Source steps.
-- [ ] **G4** Update `docs/user-flows.md` flow 6.13 "A Source Step Runs" to explicitly state that the following Worker's chokidar watcher picks up the new cards automatically.
+- [x] **G1** Trace the watcher setup in `src/main/services/step-service.ts` (or wherever workers register their chokidar paths) and confirm the watched path is derived from the step's actual preceding step in the workflow — not an assumed adjacent folder.
+- [x] **G2** Write an integration test in `source-runner.test.ts`: run a source, verify a card appears in `cards/ready/`, then verify the mock worker engine receives the file-add event and processes it.
+- [x] **G3** If the watcher path is wrong, fix `step-service.ts` / `worker-engine.ts` to correctly resolve `prevStep.dir + '/cards/ready/'` for Source steps. (Watcher was already correct — no fix needed.)
+- [x] **G4** Update `docs/user-flows.md` flow 6.13 "A Source Step Runs" to explicitly state that the following Worker's chokidar watcher picks up the new cards automatically.
 
 ---
 
