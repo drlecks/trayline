@@ -19,6 +19,7 @@ All design decisions, data models, flows, and implementation plans live in `docs
 | File | Contents |
 |---|---|
 | [`docs/app-description.md`](docs/app-description.md) | Concept, vocabulary (authoritative glossary), target users, why it works, MVP scope |
+| [`docs/new-feature-revision.md`](docs/new-feature-revision.md) | **Feature compliance rules** — core promise, 5 canonical user personas + test workflows, compliance checklist, active gaps audit. Read before designing any new feature. |
 | [`docs/tech-stack.md`](docs/tech-stack.md) | Full tech stack, AI Terminal Adapter interface and architecture |
 | [`docs/design-principles.md`](docs/design-principles.md) | UI layout, color system, typography, motion rules, status pill states |
 | [`docs/data-model.md`](docs/data-model.md) | Folder structure, all file schemas (card, tray step.json, worker step.json, skill, MCP), atomic card movement rules, audit log schema |

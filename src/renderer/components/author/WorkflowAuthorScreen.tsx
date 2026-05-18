@@ -6,13 +6,13 @@ import { useProjectStore } from '@/stores/project-store'
 import type { ProjectCreateOutcome, ProjectCreateSuccess } from '../../../shared/types'
 
 const EXAMPLES = [
-  'Monitor a GitHub repo for new issues and triage them.',
-  'Browse competitor websites weekly and summarise price changes.',
-  'Turn long YouTube videos into short-form scripts.',
-  'Process PDF invoices and post them to my accounting tool.',
-  'Triage support tickets and draft responses.',
-  'Poll Instagram comments every hour and draft a reply for each new one.',
-  'Fetch the top Hacker News stories every 30 minutes and send a daily digest.',
+  'Read emails from support@mycompany.com, classify each as urgent / normal / question, draft a reply, and put anything urgent in a review queue.',
+  'Every morning, pull new emails from my inbox, summarise which ones need a decision, and send me the digest.',
+  'I paste a meeting transcript and the app gives me a 5-line summary plus a task list for each person mentioned.',
+  'Translate any text I paste into English, Spanish, French, and Italian, and return a valid i18n JSON file.',
+  'Fetch the top 10 Hacker News stories every day and email me a digest every Friday morning.',
+  'Read new customer support emails every 10 minutes, draft a first reply, and email me anything critical immediately.',
+  'I add a PDF invoice to a tray and the app extracts the vendor, amount, and due date for me to approve.',
 ]
 
 const LOADING_MESSAGES = [
@@ -28,6 +28,7 @@ const LOADING_MESSAGES = [
 export default function WorkflowAuthorScreen() {
   const setScreen = useProjectStore((s) => s.setScreen)
   const setActive = useProjectStore((s) => s.setActive)
+  const setJustCreatedProject = useProjectStore((s) => s.setJustCreatedProject)
   const refreshProjects = useProjectStore((s) => s.refreshProjects)
   const regenerateOf = useProjectStore((s) => s.regenerateOf)
   const setRegenerateOf = useProjectStore((s) => s.setRegenerateOf)
@@ -85,6 +86,7 @@ export default function WorkflowAuthorScreen() {
 
   function openProject() {
     if (!postGenOutcome) return
+    setJustCreatedProject(postGenOutcome.project.name)
     setActive(postGenOutcome.project)
   }
 

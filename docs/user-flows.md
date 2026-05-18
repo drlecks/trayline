@@ -372,3 +372,34 @@ AdapterSetupScreen
 - Downloads stream via HTTPS and write to a `.part` file, renamed atomically to the final `.gguf` path only on completion.
 - On app startup, `localModelService.cleanupStaleParts()` removes any `.part` files left by a previous crash.
 - The user can also open the download modal from **Settings → Local AI model → Download a model now** at any time after first launch.
+
+---
+
+## 6.22 First Project — Guided Onboarding (N10)
+
+Triggered automatically after the Workflow Author generates a project and the user clicks "Open project":
+
+```
+WorkflowAuthorScreen — PostGenBanner → [Open project]
+  └── setJustCreatedProject(projectName)
+  └── setActive(project) → ProjectScreen loads
+
+ProjectScreen — no step selected + active.name === justCreatedProject
+  └── FirstProjectGuide renders in the right panel (non-blocking)
+        ├── Source-based workflow:
+        │     1. "Open your Source step" [Go to Source →]
+        │     2. "Add a credential if your source needs one"
+        │     3. "Click Run now to test your Source"
+        └── Manual-intake workflow:
+              1. "Open the first tray" [Go to tray →]
+              2. "Mark the card as ready"
+              3. "Check the next tray for results"
+
+User actions that dismiss the guide:
+  ├── Clicks any step in the left rail → setSelectedStepId → clears justCreatedProject
+  ├── Clicks "Dismiss" → setJustCreatedProject(null)
+  └── Clicks "Take a quick tour" → dispatches trayline:open-tour → OnboardingTour opens
+        └── On close → user returns to project with guide still visible (if not yet dismissed)
+```
+
+**Note:** The `OnboardingTour` no longer fires automatically on app boot. It is purely opt-in — triggered from the first-project guide or from **Settings → Help → Run onboarding tour**.
