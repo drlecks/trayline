@@ -513,6 +513,42 @@ When no production AI adapter is installed, the full-window `AdapterSetupScreen`
 
 ---
 
+## 7.23 Quick AI Console (N11)
+
+A lightweight modal for sending a one-shot prompt to the active AI adapter and seeing the raw streaming response. Accessible via the **Terminal** icon button in the top bar or the keyboard shortcut **Ctrl+Shift+A** (⌘+Shift+A on macOS).
+
+**UI layout:**
+```
+┌─────────────────────────────────────────────────────────┐
+│  Quick AI                                         [×]   │
+│  ─────────────────────────────────────────────────────  │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │  Ask anything… (Ctrl+Enter to send)             │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                              [Ask ›]    │
+│  ─────────────────────────────────────────────────────  │
+│  Response                                  [Copy]       │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │  (streamed response rendered in monospace)      │   │
+│  └─────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Behaviour:**
+- Stateless — no history is persisted between opens.
+- The prompt textarea is focused when the modal opens.
+- Ctrl+Enter (⌘+Enter) submits the prompt without clicking Ask.
+- Response text streams in real time as the AI adapter emits chunks.
+- A **Copy** button appears once a response is present.
+- Closing the modal while a request is in flight calls `window.trayline.ai.abort()` which kills the underlying AI session.
+
+**IPC:**
+- `ai:query` — invoke from renderer with `prompt: string`; main spawns the adapter, streams `ai:query-chunk` events, resolves when done.
+- `ai:abort` — send from renderer to kill any in-flight session.
+- `ai:query-chunk` — push from main with each stdout chunk.
+
+---
+
 ## 7.22 Project Settings Panel (N11)
 
 Accessible from the **Project settings** button at the bottom of the left rail (above "Context files"). Clicking it clears any selected step and opens `ProjectSettingsPanel` in the right canvas.
