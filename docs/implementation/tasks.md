@@ -103,6 +103,12 @@ Each task corresponds to a phase file in this folder. Check off tasks as they ar
 
 ---
 
+## N11 Phases (Adapter Simplification, Connected AI, & Project UX)
+
+- [ ] [Phase N11 — Adapter Simplification, Connected AI, & Project UX](./phase-n11.md)
+
+---
+
 ## Estimates
 
 | Block | Estimate |
