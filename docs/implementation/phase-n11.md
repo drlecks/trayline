@@ -34,10 +34,10 @@ This phase has eight work areas:
 - [x] **A7** Remove `node-llama-cpp` and `@electron/rebuild` from `package.json` and run `npm install` to clean `package-lock.json`.
 - [x] **A8** Remove the "Local AI model" section from `SettingsScreen.tsx` (the download/delete UI).
 - [x] **A9** Remove the local-llm warning note from `WorkflowAuthorScreen.tsx`.
-- [ ] **A10** Update `docs/tech-stack.md` — remove `node-llama-cpp`, `@electron/rebuild`, and the local-llm adapter from all descriptions. Update the adapter list (only Claude Code ships; architecture still supports future adapters).
-- [ ] **A11** Update `docs/features.md` — remove section 7.18 "Local AI Model — Download & Management" and section 7.20 "AI Setup Screen (N10)" reference to local-llm being "Recommended". Claude Code is now the sole default adapter.
-- [ ] **A12** Update `docs/app-description.md` — remove local-llm from the "Why This Will Work" and vocabulary sections; keep the note that the architecture supports future adapters.
-- [ ] **A13** Update `docs/user-flows.md` — remove flow 6.17 "First Launch — Download Local Model".
+- [x] **A10** Update `docs/tech-stack.md` — remove `node-llama-cpp`, `@electron/rebuild`, and the local-llm adapter from all descriptions. Update the adapter list (only Claude Code ships; architecture still supports future adapters).
+- [x] **A11** Update `docs/features.md` — remove section 7.18 "Local AI Model — Download & Management" and section 7.20 "AI Setup Screen (N10)" reference to local-llm being "Recommended". Claude Code is now the sole default adapter.
+- [x] **A12** Update `docs/app-description.md` — remove local-llm from the "Why This Will Work" and vocabulary sections; keep the note that the architecture supports future adapters.
+- [x] **A13** Update `docs/user-flows.md` — remove flow 6.17 "First Launch — Download Local Model".
 
 ---
 
