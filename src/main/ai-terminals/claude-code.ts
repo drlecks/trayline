@@ -226,6 +226,30 @@ function extractTrailingJson(s: string): string | null {
   return trimmed.slice(start, end + 1)
 }
 
+/**
+ * Returns true when the accumulated PTY output contains a Claude Code
+ * permission-request prompt waiting for user confirmation. Strips ANSI
+ * escape sequences before pattern matching.
+ */
+export function detectPermissionPrompt(rawText: string): boolean {
+  const text = rawText.replace(ANSI_RE, '')
+  // Classic [y/N] / [Y/n] yes-or-no prompts
+  if (/\[y\/N\]|\[Y\/n\]/i.test(text)) return true
+  // Claude Code TUI numbered-choice box: "1. Yes … 2. No"
+  if (/1\.\s*Yes[^\n]*2\.\s*No/i.test(text)) return true
+  return false
+}
+
+/**
+ * Returns the appropriate terminal input to confirm the detected permission
+ * prompt: "y\n" for classic yes/no, "1\n" for numbered-choice TUI.
+ */
+export function permissionPromptResponse(rawText: string): string {
+  const text = rawText.replace(ANSI_RE, '')
+  if (/\[y\/N\]|\[Y\/n\]/i.test(text)) return 'y\n'
+  return '1\n'
+}
+
 // Claude Code's published models. We keep this list curated here because the
 // CLI's `claude --help` output does not expose a machine-readable model list,
 // and shelling out to `claude models` is interactive. When new models ship,

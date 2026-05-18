@@ -20,6 +20,7 @@ import { auditDb } from './audit-db'
 import { settingsStore } from './settings-store'
 import { adapterRegistry } from '../ai-terminals/registry'
 import { adapterReadinessService } from './adapter-readiness-service'
+import { detectPermissionPrompt, permissionPromptResponse } from '../ai-terminals/claude-code'
 import { IPC } from '../../shared/ipc-channels'
 import type { AISession } from '../ai-terminals/adapter'
 import type { Card, CardHistoryEntry } from '../../shared/card'
@@ -231,6 +232,10 @@ async function nextCardIdForStep(project: string, workflow: string, stepId: stri
   return `card_${date}_${String(max + 1).padStart(3, '0')}`
 }
 
+// ── Permission auto-accept ────────────────────────────────────────────────────
+
+const MAX_PERMISSION_RETRIES = 3
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 export interface TriggerRunInput {
@@ -369,6 +374,7 @@ async function runInner(input: TriggerRunInput): Promise<TriggerRunResult> {
 
   const sessionKey = runKey(project, workflow, stepId, runId)
   let session: AISession | null = null
+  let maxRetriesExceeded = false
   try {
     session = await adapter.spawn({
       processFile,
@@ -383,25 +389,54 @@ async function runInner(input: TriggerRunInput): Promise<TriggerRunResult> {
     })
     liveSessions.set(sessionKey, session)
 
-    // Stream log chunks to renderer as they arrive
-    void (async () => {
+    let permissionRetries = 0
+    let permissionBuffer = ''
+    const activeSession = session
+
+    // consumeStdout drives permission auto-accept; stderr is truly fire-and-forget
+    const consumeStdout = async () => {
       try {
-        for await (const chunk of session.stdout) {
+        for await (const chunk of activeSession.stdout) {
           emit({ type: 'log', project, workflow, stepId, runId, chunk })
+          permissionBuffer += chunk
+          if (permissionBuffer.length > 4096) permissionBuffer = permissionBuffer.slice(-4096)
+          if (detectPermissionPrompt(permissionBuffer)) {
+            const response = permissionPromptResponse(permissionBuffer)
+            permissionBuffer = ''
+            if (permissionRetries >= MAX_PERMISSION_RETRIES) {
+              maxRetriesExceeded = true
+              await activeSession.kill()
+            } else {
+              permissionRetries++
+              auditDb.insert({
+                project_id: project, workflow_id: workflow, step_id: stepId, card_id: cardId,
+                event: 'ai_permission_auto_accepted', actor: 'system',
+                details_json: JSON.stringify({ run_id: runId, retry: permissionRetries }),
+              })
+              await activeSession.sendInput(response)
+            }
+          }
         }
       } catch { /* ignore */ }
-    })()
+    }
     void (async () => {
       try {
-        for await (const chunk of session.stderr) {
+        for await (const chunk of activeSession.stderr) {
           emit({ type: 'log', project, workflow, stepId, runId, chunk })
         }
       } catch { /* ignore */ }
     })()
 
-    const result = await session.result()
-    exitCode = result.exitCode
-    output = result.output
+    // Run stdout consumer and result() concurrently; Promise.all ensures
+    // permission detection completes before we inspect maxRetriesExceeded
+    await Promise.all([
+      consumeStdout(),
+      session.result().then(r => { exitCode = r.exitCode; output = r.output }),
+    ])
+
+    if (maxRetriesExceeded && runError === undefined) {
+      runError = 'max_permission_retries_exceeded'
+    }
   } catch (err) {
     runError = err instanceof Error ? err.message : String(err)
   } finally {
@@ -671,6 +706,7 @@ async function runBatchInner(input: TriggerBatchRunInput): Promise<TriggerRunRes
 
   const sessionKey = runKey(project, workflow, stepId, runId)
   let session: AISession | null = null
+  let maxRetriesExceededBatch = false
   try {
     session = await adapter.spawn({
       processFile, cardData: batchData, contextPacks,
@@ -680,11 +716,46 @@ async function runBatchInner(input: TriggerBatchRunInput): Promise<TriggerRunRes
       },
     })
     liveSessions.set(sessionKey, session)
-    void (async () => { try { for await (const chunk of session!.stdout) emit({ type: 'log', project, workflow, stepId, runId, chunk }) } catch { /* ignore */ } })()
-    void (async () => { try { for await (const chunk of session!.stderr) emit({ type: 'log', project, workflow, stepId, runId, chunk }) } catch { /* ignore */ } })()
-    const result = await session.result()
-    exitCode = result.exitCode
-    output = result.output
+
+    let permissionRetriesBatch = 0
+    let permissionBufferBatch = ''
+    const activeSessionBatch = session
+
+    const consumeStdoutBatch = async () => {
+      try {
+        for await (const chunk of activeSessionBatch.stdout) {
+          emit({ type: 'log', project, workflow, stepId, runId, chunk })
+          permissionBufferBatch += chunk
+          if (permissionBufferBatch.length > 4096) permissionBufferBatch = permissionBufferBatch.slice(-4096)
+          if (detectPermissionPrompt(permissionBufferBatch)) {
+            const response = permissionPromptResponse(permissionBufferBatch)
+            permissionBufferBatch = ''
+            if (permissionRetriesBatch >= MAX_PERMISSION_RETRIES) {
+              maxRetriesExceededBatch = true
+              await activeSessionBatch.kill()
+            } else {
+              permissionRetriesBatch++
+              auditDb.insert({
+                project_id: project, workflow_id: workflow, step_id: stepId, card_id: 'batch',
+                event: 'ai_permission_auto_accepted', actor: 'system',
+                details_json: JSON.stringify({ run_id: runId, retry: permissionRetriesBatch }),
+              })
+              await activeSessionBatch.sendInput(response)
+            }
+          }
+        }
+      } catch { /* ignore */ }
+    }
+    void (async () => { try { for await (const chunk of activeSessionBatch.stderr) emit({ type: 'log', project, workflow, stepId, runId, chunk }) } catch { /* ignore */ } })()
+
+    await Promise.all([
+      consumeStdoutBatch(),
+      session.result().then(r => { exitCode = r.exitCode; output = r.output }),
+    ])
+
+    if (maxRetriesExceededBatch && runError === undefined) {
+      runError = 'max_permission_retries_exceeded'
+    }
   } catch (err) {
     runError = err instanceof Error ? err.message : String(err)
   } finally {

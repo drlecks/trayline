@@ -122,12 +122,12 @@ Detection: scan the live stdout stream for lines matching known Claude Code perm
 
 #### Tasks
 
-- [ ] **D1** In `src/main/ai-terminals/claude-code.ts`, add a `detectPermissionPrompt(line: string): boolean` utility that recognises Claude Code permission-request lines.
-- [ ] **D2** In the session stream consumer (worker runner), when a permission prompt is detected: send `"y\n"` via `session.sendInput()`; log an `ai_permission_auto_accepted` audit event; increment a per-run retry counter.
-- [ ] **D3** If the retry counter exceeds 3 in a single run, abort the run with a `run_failed` result and error code `max_permission_retries_exceeded` — surface this clearly in the UI.
-- [ ] **D4** Add `ai_permission_auto_accepted` to `AuditEvent` in `src/shared/types.ts`.
-- [ ] **D5** Write unit tests: mock a PTY session that emits permission prompt lines; verify the runner responds with `y`, emits the audit event, and retries; verify hard failure after 3 retries.
-- [ ] **D6** Update `docs/tech-stack.md` — document the permission-auto-accept loop and retry cap.
+- [x] **D1** In `src/main/ai-terminals/claude-code.ts`, add a `detectPermissionPrompt(line: string): boolean` utility that recognises Claude Code permission-request lines.
+- [x] **D2** In the session stream consumer (worker runner), when a permission prompt is detected: send `"y\n"` via `session.sendInput()`; log an `ai_permission_auto_accepted` audit event; increment a per-run retry counter.
+- [x] **D3** If the retry counter exceeds 3 in a single run, abort the run with a `run_failed` result and error code `max_permission_retries_exceeded` — surface this clearly in the UI.
+- [x] **D4** Add `ai_permission_auto_accepted` to `AuditEvent` in `src/shared/types.ts`.
+- [x] **D5** Write unit tests: mock a PTY session that emits permission prompt lines; verify the runner responds with `y`, emits the audit event, and retries; verify hard failure after 3 retries.
+- [x] **D6** Update `docs/tech-stack.md` — document the permission-auto-accept loop and retry cap.
 
 ---
 
