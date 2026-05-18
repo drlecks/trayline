@@ -247,12 +247,12 @@ Saving writes the updated `display_name` and `description` to `project.json` and
 
 Review every file under `docs/` (excluding `docs/implementation/`) for staleness after the N11 changes above. Update any section that describes removed features (local-llm, multi-adapter setup), or that is missing the new features (Source/Outlet instructions, Quick AI console, project permissions, project settings).
 
-- [ ] **I1** `docs/app-description.md` — verify vocabulary, target users, and feature list are consistent with N11 (no local-llm, correct Source/Outlet/Worker descriptions).
-- [ ] **I2** `docs/tech-stack.md` — remove local-llm stack entries; add Quick AI Console IPC channels; update `SpawnOptions` and adapter interface docs.
-- [ ] **I3** `docs/data-model.md` — add `prompt` to Source/Outlet schemas; add `permissions` to `project.json` schema.
-- [ ] **I4** `docs/features.md` — remove 7.18 Local AI Model, update 7.16 Source and 7.21 Outlet for instructions field, remove 7.20 AI Setup multi-adapter layout, add 7.22 Quick AI Console, add 7.23 Project Settings Panel.
-- [ ] **I5** `docs/user-flows.md` — update 6.14 AI Setup, remove 6.17 Local Model Download, update 6.13 Source Step Run (auto-advance), add 6.23 Quick AI Query, add 6.24 Editing Project Settings.
-- [ ] **I6** `docs/design-principles.md` — confirm no local-llm-specific design rules remain; add any N11-specific UI patterns (Quick AI console style, Project Settings panel).
+- [x] **I1** `docs/app-description.md` — verify vocabulary, target users, and feature list are consistent with N11 (no local-llm, correct Source/Outlet/Worker descriptions).
+- [x] **I2** `docs/tech-stack.md` — remove local-llm stack entries; add Quick AI Console IPC channels; update `SpawnOptions` and adapter interface docs.
+- [x] **I3** `docs/data-model.md` — add `prompt` to Source/Outlet schemas; add `permissions` to `project.json` schema.
+- [x] **I4** `docs/features.md` — removed 7.18 Local AI Model (replaced by Onboarding Tour), updated 7.16 Source and 7.24 Outlet (renumbered from 7.21) for instructions field, updated 7.25 AI Setup Screen (renumbered from 7.20 to fix duplicate), added 7.22 Project Settings Panel and 7.23 Quick AI Console.
+- [x] **I5** `docs/user-flows.md` — updated 6.14 AI Setup, removed 6.17 Local Model Download, updated 6.13 Source Step Run (auto-advance), added 6.23 Editing Project Settings and 6.24 Quick AI Query.
+- [x] **I6** `docs/design-principles.md` — no local-llm-specific design rules remain; added N11 UI patterns section (Quick AI console, Project Settings panel).
 
 ---
 

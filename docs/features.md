@@ -414,7 +414,7 @@ Empty state: *"No credentials yet. Add one to connect your workflows to external
 
 ---
 
-## 7.21 Outlet Step
+## 7.24 Outlet Step
 
 ### Left Rail Card
 
@@ -502,7 +502,7 @@ A **Keyboard shortcuts** button under **Settings → Help** opens the same refer
 
 ---
 
-## 7.20 AI Setup Screen
+## 7.25 AI Setup Screen
 
 When no production AI adapter is installed, the full-window `AdapterSetupScreen` shows before any other UI. It blocks routing until at least one adapter reports `installed: true`.
 
