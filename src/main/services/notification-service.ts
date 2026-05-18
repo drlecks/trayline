@@ -64,6 +64,33 @@ export function notifyCardNeedsReview(opts: NotifyCardOpts): void {
   n.show()
 }
 
+export interface NotifySourceRunFailedOpts {
+  projectName: string
+  workflowName: string
+  error: string
+}
+
+export function notifySourceRunFailed(opts: NotifySourceRunFailedOpts): void {
+  const settings = settingsStore.get('notificationSettings')
+  if (!settings.enabled) return
+  if (settings.disabledProjects.includes(opts.projectName)) return
+  if (!Notification.isSupported()) return
+
+  const body = opts.error.length > 120 ? opts.error.slice(0, 120) + '…' : opts.error
+  const n = new Notification({
+    title: `Source run failed — ${opts.workflowName}`,
+    body,
+  })
+  n.on('click', () => {
+    const win = BrowserWindow.getAllWindows()[0]
+    if (win && !win.isDestroyed()) {
+      if (win.isMinimized()) win.restore()
+      win.focus()
+    }
+  })
+  n.show()
+}
+
 export function clearNotified(cardId: string): void {
   notified.delete(cardId)
 }
@@ -122,6 +149,7 @@ export function getCurrentBadgeCount(): number {
 export const notificationService = {
   setMainWindow,
   notifyCardNeedsReview,
+  notifySourceRunFailed,
   clearNotified,
   clearAllNotified,
   updateBadgeCount,

@@ -1,3 +1,38 @@
+// Matches all ANSI / VT100 escape sequences emitted by a PTY:
+//   OSC:   ESC ] ... (BEL | ESC \)       e.g. \x1B]0;claude\x07
+//   CSI:   ESC [ [0-?]* [ -/]* [@-~]    e.g. \x1B[?9001h  \x1B[>4m  \x1B[<u]
+//   Other: ESC [@-Z\-_]
+//   Stray control chars conpty/Windows occasionally injects
+// [0-?] = 0x30-0x3F covers 0-9 : ; < = > ? (the full CSI param range).
+// eslint-disable-next-line no-control-regex
+export const ANSI_RE = /\x1B\][^\x07\x1B]*(?:\x07|\x1B\\)|\x1B\[[0-?]*[ -/]*[@-~]|\x1B[@-Z\\-_]|[\x07\x00-\x06\x0E-\x1A\x1C-\x1F]/g
+
+/** Strip all ANSI/VT100 escape sequences and stray control characters. */
+export function stripAnsi(str: string): string {
+  // eslint-disable-next-line no-control-regex
+  return str.replace(/\x1B\][^\x07\x1B]*(?:\x07|\x1B\\)|\x1B\[[0-?]*[ -/]*[@-~]|\x1B[@-Z\\-_]|[\x07\x00-\x06\x0E-\x1A\x1C-\x1F]/g, '')
+}
+
+/**
+ * Strip ANSI sequences then extract and parse a JSON value from raw AI
+ * terminal output. Tries, in order:
+ *   1. Markdown code fence  ```(json)? ... ```
+ *   2. First balanced { } or [ ] block (AI wrote prose around the JSON)
+ *   3. The whole cleaned string
+ * Throws SyntaxError if no valid JSON can be found.
+ */
+export function parseAiJsonOutput(raw: string): unknown {
+  const clean = stripAnsi(raw)
+  if (!clean.trim()) throw new Error('AI produced no output')
+  const fence = clean.match(/```(?:json)?\s*([\s\S]*?)```/)
+  if (fence) return JSON.parse(fence[1].trim())
+  const bracket = clean.match(/(\{[\s\S]*\}|\[[\s\S]*\])/)
+  if (bracket) {
+    try { return JSON.parse(bracket[1]) } catch { /* fall through to full parse */ }
+  }
+  return JSON.parse(clean.trim())
+}
+
 /**
  * Substitute `{{card.data}}`, `{{card.data.<path>}}`, and `{{card.data | json}}`
  * tokens in a template string with values from the card payload.

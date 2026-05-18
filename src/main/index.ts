@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, nativeTheme, dialog } from 'electron'
+import { app, BrowserWindow, ipcMain, nativeTheme, dialog, shell } from 'electron'
 import { join } from 'path'
 import fs from 'fs'
 import { settingsStore } from './services/settings-store'
@@ -122,6 +122,11 @@ function createWindow() {
 
   win.webContents.on('preload-error', (_e, preloadPath, err) => {
     logCrash('preload-error', `${preloadPath}: ${err.message}\n${err.stack ?? ''}`)
+  })
+
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    void shell.openExternal(url)
+    return { action: 'deny' }
   })
 
   if (process.env.VITE_DEV_SERVER_URL) {

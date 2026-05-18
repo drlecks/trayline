@@ -1,11 +1,39 @@
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
+import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest'
 import fs from 'node:fs/promises'
 import { join } from 'node:path'
 import { Paths } from './fs-service'
 import { auditDb } from './audit-db'
 import { sourceRunner } from './source-runner'
-import { setMockScript } from '../ai-terminals/mock'
 import type { SourceStepConfig, SeenIdsEntry, SourceRunMeta } from '../../shared/types'
+
+// ── Mocks ─────────────────────────────────────────────────────────────────────
+
+vi.mock('./credential-service', () => ({
+  credentialService: {
+    get: vi.fn().mockResolvedValue({
+      id: 'test-cred', type: 'http', name: 'Test',
+      base_url: 'https://example.com', headers: [], timeout_ms: 5000,
+    }),
+  },
+}))
+
+vi.mock('./http-channel', () => ({ fetchHttp: vi.fn() }))
+vi.mock('./imap-channel', () => ({ fetchEmails: vi.fn() }))
+
+async function setHttpBody(text: string) {
+  const mod = await import('./http-channel')
+  vi.mocked(mod.fetchHttp).mockResolvedValue(text)
+}
+
+async function setHttpError(message: string) {
+  const mod = await import('./http-channel')
+  vi.mocked(mod.fetchHttp).mockRejectedValue(new Error(message))
+}
+
+async function setImapEmails(emails: unknown[]) {
+  const mod = await import('./imap-channel')
+  vi.mocked(mod.fetchEmails).mockResolvedValue(emails as never)
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -22,32 +50,33 @@ async function pathExists(p: string): Promise<boolean> {
   try { await fs.access(p); return true } catch { return false }
 }
 
-function makeConfig(overrides: Partial<SourceStepConfig> = {}): SourceStepConfig {
+function makeHttpConfig(overrides: Partial<SourceStepConfig> = {}): SourceStepConfig {
   return {
-    id: '00-source',
-    kind: 'source',
-    name: 'Test Source',
-    description: '',
-    color: '#4CB87E',
-    icon: 'rss',
-    schedule_cron: '0 * * * *',
-    dedup: { key: 'id', max_memory: 10000, first_run: 'process_all' },
-    execution: { timeout_seconds: 60, adapter: 'mock' },
-    paused: false,
+    id: '00-source', kind: 'source', name: 'Test Source', description: '',
+    color: '#4CB87E', icon: 'rss', schedule_cron: '0 * * * *', paused: false,
+    channel: { type: 'http_get', credential_id: 'test-cred', url_path: '/data' },
     ...overrides,
   }
 }
 
-async function setupSourceStep(project: string, workflow: string, stepId: string, cfg: SourceStepConfig = makeConfig()) {
+function makeImapConfig(overrides: Partial<SourceStepConfig> = {}): SourceStepConfig {
+  return {
+    id: '00-source', kind: 'source', name: 'Test Source', description: '',
+    color: '#4CB87E', icon: 'rss', schedule_cron: '0 * * * *', paused: false,
+    dedup: { key: 'message_id', max_memory: 10000, first_run: 'process_all' },
+    channel: { type: 'imap', credential_id: 'test-cred', folder: 'INBOX', unseen_only: true, max_messages: 50 },
+    ...overrides,
+  }
+}
+
+async function setupSourceStep(project: string, workflow: string, stepId: string, cfg: SourceStepConfig = makeHttpConfig()) {
   const stepDir = join(Paths.projects, project, 'workflows', workflow, 'steps', stepId)
   await fs.mkdir(join(stepDir, 'state'), { recursive: true })
   await fs.mkdir(join(stepDir, 'cards', 'ready'), { recursive: true })
   await fs.mkdir(join(stepDir, 'cards', 'archived'), { recursive: true })
   await fs.mkdir(join(stepDir, 'runs'), { recursive: true })
   await writeJson(join(stepDir, 'step.json'), cfg)
-  await fs.writeFile(join(stepDir, 'source.md'), '# Source\nFetch items.', 'utf-8')
   await writeJson(join(stepDir, 'state', 'counters.json'), { runs_total: 0, items_found: 0, items_new: 0, last_run_at: null })
-  // Also write workflow.json so project-service can resolve paths
   await writeJson(join(Paths.projects, project, 'workflows', workflow, 'workflow.json'), {
     id: workflow, name: workflow, display_name: workflow, step_ids: [stepId, '99-errors'],
   })
@@ -69,156 +98,193 @@ beforeEach(async () => {
   await fs.mkdir(Paths.projects, { recursive: true })
 })
 
-describe('sourceRunner.runSource', () => {
-  it('creates cards for new items and writes seen-ids', async () => {
-    const project = `sr-basic-${Date.now()}`
+describe('sourceRunner — HTTP GET channel', () => {
+  it('creates exactly one card per run with data.body set to the response text', async () => {
+    const project = `sr-http-basic-${Date.now()}`
     const stepId = '00-source'
-    const items = [{ id: 'a', title: 'Alpha' }, { id: 'b', title: 'Beta' }]
-    setMockScript({ output: items, exitCode: 0 })
+    await setHttpBody('{"items":[1,2,3]}')
     await setupSourceStep(project, 'wf', stepId)
 
-    await sourceRunner.runSource({ project, workflow: 'wf', stepId, stepConfig: makeConfig({ dedup: { key: 'id', max_memory: 10000, first_run: 'process_all' } }) })
+    await sourceRunner.runSource({ project, workflow: 'wf', stepId, stepConfig: makeHttpConfig() })
 
     const readyDir = join(Paths.projects, project, 'workflows', 'wf', 'steps', stepId, 'cards', 'ready')
-    const files = await fs.readdir(readyDir)
-    expect(files.filter((f) => f.endsWith('.json'))).toHaveLength(2)
+    const files = (await fs.readdir(readyDir)).filter((f) => f.endsWith('.json'))
+    expect(files).toHaveLength(1)
 
-    const seenPath = join(Paths.projects, project, 'workflows', 'wf', 'steps', stepId, 'state', 'seen-ids.json')
-    const seen = await readJson<SeenIdsEntry[]>(seenPath)
-    expect(seen.map((e) => e.id).sort()).toEqual(['a', 'b'])
+    const card = await readJson<{ data: { body: string } }>(join(readyDir, files[0]))
+    expect(card.data.body).toBe('{"items":[1,2,3]}')
   })
 
-  it('skips items already in seen set', async () => {
-    const project = `sr-dedup-${Date.now()}`
+  it('does not write seen-ids.json (no dedup for HTTP)', async () => {
+    const project = `sr-http-nodedup-${Date.now()}`
     const stepId = '00-source'
+    await setHttpBody('hello world')
     await setupSourceStep(project, 'wf', stepId)
 
-    // Seed seen-ids with 'a' already present
-    const stateDir = join(Paths.projects, project, 'workflows', 'wf', 'steps', stepId, 'state')
-    await writeJson(join(stateDir, 'seen-ids.json'), [{ id: 'a', seen_at: new Date().toISOString() }])
+    await sourceRunner.runSource({ project, workflow: 'wf', stepId, stepConfig: makeHttpConfig() })
 
-    const items = [{ id: 'a', title: 'Alpha' }, { id: 'b', title: 'Beta' }]
-    setMockScript({ output: items, exitCode: 0 })
-
-    await sourceRunner.runSource({ project, workflow: 'wf', stepId, stepConfig: makeConfig() })
-
-    const readyDir = join(Paths.projects, project, 'workflows', 'wf', 'steps', stepId, 'cards', 'ready')
-    const files = await fs.readdir(readyDir)
-    // Only 'b' should be new
-    expect(files.filter((f) => f.endsWith('.json'))).toHaveLength(1)
-  })
-
-  it('does not mutate state when AI returns invalid JSON', async () => {
-    const project = `sr-invalid-${Date.now()}`
-    const stepId = '00-source'
-    await setupSourceStep(project, 'wf', stepId)
-
-    setMockScript({ output: 'not json at all', exitCode: 0 })
-
-    await sourceRunner.runSource({ project, workflow: 'wf', stepId, stepConfig: makeConfig() })
-
-    const readyDir = join(Paths.projects, project, 'workflows', 'wf', 'steps', stepId, 'cards', 'ready')
-    const files = await fs.readdir(readyDir)
-    expect(files).toHaveLength(0)
-
-    // seen-ids should not be written
     const seenPath = join(Paths.projects, project, 'workflows', 'wf', 'steps', stepId, 'state', 'seen-ids.json')
     expect(await pathExists(seenPath)).toBe(false)
   })
 
-  it('first_run: skip_existing — no cards created but all IDs added to seen', async () => {
-    const project = `sr-skip-${Date.now()}`
+  it('creates a new card on every run (no duplicate prevention)', async () => {
+    const project = `sr-http-everyrun-${Date.now()}`
     const stepId = '00-source'
-    await setupSourceStep(project, 'wf', stepId, makeConfig({ dedup: { key: 'id', max_memory: 10000, first_run: 'skip_existing' } }))
+    const cfg = makeHttpConfig()
+    await setHttpBody('response text')
+    await setupSourceStep(project, 'wf', stepId, cfg)
 
-    const items = [{ id: 'a' }, { id: 'b' }, { id: 'c' }]
-    setMockScript({ output: items, exitCode: 0 })
+    await sourceRunner.runSource({ project, workflow: 'wf', stepId, stepConfig: cfg })
+    await sourceRunner.runSource({ project, workflow: 'wf', stepId, stepConfig: cfg })
 
-    await sourceRunner.runSource({ project, workflow: 'wf', stepId, stepConfig: makeConfig({ dedup: { key: 'id', max_memory: 10000, first_run: 'skip_existing' } }) })
+    const readyDir = join(Paths.projects, project, 'workflows', 'wf', 'steps', stepId, 'cards', 'ready')
+    const files = (await fs.readdir(readyDir)).filter((f) => f.endsWith('.json'))
+    expect(files).toHaveLength(2)
+  })
+
+  it('saves output.txt with the raw response text', async () => {
+    const project = `sr-http-output-${Date.now()}`
+    const stepId = '00-source'
+    await setHttpBody('<html>page</html>')
+    await setupSourceStep(project, 'wf', stepId)
+
+    await sourceRunner.runSource({ project, workflow: 'wf', stepId, stepConfig: makeHttpConfig() })
+
+    const runsDir = join(Paths.projects, project, 'workflows', 'wf', 'steps', stepId, 'runs')
+    const runDirs = await fs.readdir(runsDir)
+    const outputTxt = join(runsDir, runDirs[0], 'output.txt')
+    expect(await fs.readFile(outputTxt, 'utf-8')).toBe('<html>page</html>')
+  })
+
+  it('fails cleanly when channel fetch throws', async () => {
+    const project = `sr-http-fetcherr-${Date.now()}`
+    const stepId = '00-source'
+    await setHttpError('Network unreachable')
+    await setupSourceStep(project, 'wf', stepId)
+
+    await sourceRunner.runSource({ project, workflow: 'wf', stepId, stepConfig: makeHttpConfig() })
+
+    const readyDir = join(Paths.projects, project, 'workflows', 'wf', 'steps', stepId, 'cards', 'ready')
+    expect((await fs.readdir(readyDir)).filter((f) => f.endsWith('.json'))).toHaveLength(0)
+
+    const runsDir = join(Paths.projects, project, 'workflows', 'wf', 'steps', stepId, 'runs')
+    const meta = await readJson<SourceRunMeta>(join(runsDir, (await fs.readdir(runsDir))[0], 'meta.json'))
+    expect(meta.status).toBe('failed')
+    expect(meta.error).toMatch(/Network unreachable/)
+  })
+
+  it('counters reflect items_found: 1 and items_new: 1 per run', async () => {
+    const project = `sr-http-counters-${Date.now()}`
+    const stepId = '00-source'
+    await setHttpBody('data')
+    await setupSourceStep(project, 'wf', stepId)
+
+    await sourceRunner.runSource({ project, workflow: 'wf', stepId, stepConfig: makeHttpConfig() })
+
+    const counters = await readJson<{ runs_total: number; items_found: number; items_new: number }>(
+      join(Paths.projects, project, 'workflows', 'wf', 'steps', stepId, 'state', 'counters.json'),
+    )
+    expect(counters.runs_total).toBe(1)
+    expect(counters.items_found).toBe(1)
+    expect(counters.items_new).toBe(1)
+  })
+})
+
+describe('sourceRunner — IMAP channel', () => {
+  it('creates one card per email and writes seen-ids', async () => {
+    const project = `sr-imap-basic-${Date.now()}`
+    const stepId = '00-source'
+    await setImapEmails([
+      { message_id: 'msg-a', subject: 'Alpha' },
+      { message_id: 'msg-b', subject: 'Beta' },
+    ])
+    await setupSourceStep(project, 'wf', stepId, makeImapConfig())
+
+    await sourceRunner.runSource({ project, workflow: 'wf', stepId, stepConfig: makeImapConfig() })
+
+    const readyDir = join(Paths.projects, project, 'workflows', 'wf', 'steps', stepId, 'cards', 'ready')
+    expect((await fs.readdir(readyDir)).filter((f) => f.endsWith('.json'))).toHaveLength(2)
+
+    const seen = await readJson<SeenIdsEntry[]>(
+      join(Paths.projects, project, 'workflows', 'wf', 'steps', stepId, 'state', 'seen-ids.json'),
+    )
+    expect(seen.map((e) => e.id).sort()).toEqual(['msg-a', 'msg-b'])
+  })
+
+  it('skips emails already in seen set', async () => {
+    const project = `sr-imap-dedup-${Date.now()}`
+    const stepId = '00-source'
+    await setupSourceStep(project, 'wf', stepId, makeImapConfig())
+
+    const stateDir = join(Paths.projects, project, 'workflows', 'wf', 'steps', stepId, 'state')
+    await writeJson(join(stateDir, 'seen-ids.json'), [{ id: 'msg-a', seen_at: new Date().toISOString() }])
+
+    await setImapEmails([
+      { message_id: 'msg-a', subject: 'Alpha' },
+      { message_id: 'msg-b', subject: 'Beta' },
+    ])
+
+    await sourceRunner.runSource({ project, workflow: 'wf', stepId, stepConfig: makeImapConfig() })
+
+    const readyDir = join(Paths.projects, project, 'workflows', 'wf', 'steps', stepId, 'cards', 'ready')
+    expect((await fs.readdir(readyDir)).filter((f) => f.endsWith('.json'))).toHaveLength(1)
+  })
+
+  it('first_run skip_existing: no cards but all IDs added to seen', async () => {
+    const project = `sr-imap-skip-${Date.now()}`
+    const stepId = '00-source'
+    const cfg = makeImapConfig({ dedup: { key: 'message_id', max_memory: 10000, first_run: 'skip_existing' } })
+    await setupSourceStep(project, 'wf', stepId, cfg)
+    await setImapEmails([{ message_id: 'a' }, { message_id: 'b' }])
+
+    await sourceRunner.runSource({ project, workflow: 'wf', stepId, stepConfig: cfg })
 
     const readyDir = join(Paths.projects, project, 'workflows', 'wf', 'steps', stepId, 'cards', 'ready')
     expect((await fs.readdir(readyDir)).filter((f) => f.endsWith('.json'))).toHaveLength(0)
 
     const seen = await readJson<SeenIdsEntry[]>(join(Paths.projects, project, 'workflows', 'wf', 'steps', stepId, 'state', 'seen-ids.json'))
-    expect(seen).toHaveLength(3)
-  })
-
-  it('first_run: process_all — cards created for all items', async () => {
-    const project = `sr-all-${Date.now()}`
-    const stepId = '00-source'
-    await setupSourceStep(project, 'wf', stepId, makeConfig({ dedup: { key: 'id', max_memory: 10000, first_run: 'process_all' } }))
-
-    const items = [{ id: 'a' }, { id: 'b' }, { id: 'c' }]
-    setMockScript({ output: items, exitCode: 0 })
-
-    await sourceRunner.runSource({ project, workflow: 'wf', stepId, stepConfig: makeConfig({ dedup: { key: 'id', max_memory: 10000, first_run: 'process_all' } }) })
-
-    const readyDir = join(Paths.projects, project, 'workflows', 'wf', 'steps', stepId, 'cards', 'ready')
-    expect((await fs.readdir(readyDir)).filter((f) => f.endsWith('.json'))).toHaveLength(3)
-  })
-
-  it('first_run: process_last_n — creates only last N cards', async () => {
-    const project = `sr-lastn-${Date.now()}`
-    const stepId = '00-source'
-    const cfg = makeConfig({ dedup: { key: 'id', max_memory: 10000, first_run: 'process_last_n', first_run_n: 2 } })
-    await setupSourceStep(project, 'wf', stepId, cfg)
-
-    const items = [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }]
-    setMockScript({ output: items, exitCode: 0 })
-
-    await sourceRunner.runSource({ project, workflow: 'wf', stepId, stepConfig: cfg })
-
-    const readyDir = join(Paths.projects, project, 'workflows', 'wf', 'steps', stepId, 'cards', 'ready')
-    expect((await fs.readdir(readyDir)).filter((f) => f.endsWith('.json'))).toHaveLength(2)
-
-    // All 4 IDs should be in seen set (not just the 2 processed)
-    const seen = await readJson<SeenIdsEntry[]>(join(Paths.projects, project, 'workflows', 'wf', 'steps', stepId, 'state', 'seen-ids.json'))
-    expect(seen).toHaveLength(4)
+    expect(seen).toHaveLength(2)
   })
 
   it('prunes seen-ids to max_memory', async () => {
-    const project = `sr-prune-${Date.now()}`
+    const project = `sr-imap-prune-${Date.now()}`
     const stepId = '00-source'
-    const cfg = makeConfig({ dedup: { key: 'id', max_memory: 3, first_run: 'process_all' } })
+    const cfg = makeImapConfig({ dedup: { key: 'message_id', max_memory: 3, first_run: 'process_all' } })
     await setupSourceStep(project, 'wf', stepId, cfg)
 
-    // Seed with 3 existing entries
     const stateDir = join(Paths.projects, project, 'workflows', 'wf', 'steps', stepId, 'state')
-    const existing: SeenIdsEntry[] = [
+    await writeJson(join(stateDir, 'seen-ids.json'), [
       { id: 'old1', seen_at: '2020-01-01T00:00:00.000Z' },
       { id: 'old2', seen_at: '2020-01-02T00:00:00.000Z' },
       { id: 'old3', seen_at: '2020-01-03T00:00:00.000Z' },
-    ]
-    await writeJson(join(stateDir, 'seen-ids.json'), existing)
-
-    const items = [{ id: 'new1' }, { id: 'new2' }]
-    setMockScript({ output: items, exitCode: 0 })
+    ])
+    await setImapEmails([{ message_id: 'new1' }, { message_id: 'new2' }])
 
     await sourceRunner.runSource({ project, workflow: 'wf', stepId, stepConfig: cfg })
 
     const seen = await readJson<SeenIdsEntry[]>(join(stateDir, 'seen-ids.json'))
-    // max_memory = 3, we had 3 old + 2 new = 5, should prune to 3 newest
     expect(seen).toHaveLength(3)
     expect(seen.map((e) => e.id)).not.toContain('old1')
     expect(seen.map((e) => e.id)).not.toContain('old2')
   })
+})
 
-  it('counters are updated after each run', async () => {
-    const project = `sr-counters-${Date.now()}`
+describe('sourceRunner — common', () => {
+  it('fails cleanly when no channel is configured', async () => {
+    const project = `sr-nochan-${Date.now()}`
     const stepId = '00-source'
-    await setupSourceStep(project, 'wf', stepId)
+    const cfg = makeHttpConfig({ channel: null })
+    await setupSourceStep(project, 'wf', stepId, cfg)
 
-    const items = [{ id: 'x' }, { id: 'y' }]
-    setMockScript({ output: items, exitCode: 0 })
+    await sourceRunner.runSource({ project, workflow: 'wf', stepId, stepConfig: cfg })
 
-    await sourceRunner.runSource({ project, workflow: 'wf', stepId, stepConfig: makeConfig() })
+    const readyDir = join(Paths.projects, project, 'workflows', 'wf', 'steps', stepId, 'cards', 'ready')
+    expect(await fs.readdir(readyDir)).toHaveLength(0)
 
-    const countersPath = join(Paths.projects, project, 'workflows', 'wf', 'steps', stepId, 'state', 'counters.json')
-    const counters = await readJson<{ runs_total: number; items_found: number; items_new: number; last_run_at: string | null }>(countersPath)
-    expect(counters.runs_total).toBe(1)
-    expect(counters.items_found).toBe(2)
-    expect(counters.items_new).toBe(2)
-    expect(counters.last_run_at).toBeTruthy()
+    const runsDir = join(Paths.projects, project, 'workflows', 'wf', 'steps', stepId, 'runs')
+    const meta = await readJson<SourceRunMeta>(join(runsDir, (await fs.readdir(runsDir))[0], 'meta.json'))
+    expect(meta.status).toBe('failed')
+    expect(meta.error).toMatch(/No channel configured/)
   })
 })
 
@@ -228,7 +294,6 @@ describe('sourceRunner.recoverOrphanedRuns', () => {
     const stepId = '00-source'
     await setupSourceStep(project, 'wf', stepId)
 
-    // Simulate a crash: leave .tmp file
     const stateDir = join(Paths.projects, project, 'workflows', 'wf', 'steps', stepId, 'state')
     await fs.writeFile(join(stateDir, 'seen-ids.json.tmp'), '[]', 'utf-8')
 
@@ -242,7 +307,6 @@ describe('sourceRunner.recoverOrphanedRuns', () => {
     const stepId = '00-source'
     await setupSourceStep(project, 'wf', stepId)
 
-    // Simulate a run left in 'running' state
     const runDir = join(Paths.projects, project, 'workflows', 'wf', 'steps', stepId, 'runs', 'run_2026-01-01_001')
     await fs.mkdir(runDir, { recursive: true })
     const meta: SourceRunMeta = {

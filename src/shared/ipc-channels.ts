@@ -99,9 +99,8 @@ export const IPC = {
     pause: 'source:pause',
     resume: 'source:resume',
     getState: 'source:get-state',
-    readInstructions: 'source:read-instructions',
-    updateInstructions: 'source:update-instructions',
     listRuns: 'source:list-runs',
+    resetDedup: 'source:reset-dedup',
     onRunEvent: 'source:run-event',
   },
   notifications: {
@@ -112,16 +111,6 @@ export const IPC = {
   },
   notification: {
     navigate: 'notification:navigate',
-  },
-  localModel: {
-    list: 'local-model:list',
-    download: 'local-model:download',
-    cancel: 'local-model:cancel',
-    delete: 'local-model:delete',
-    recheckAdapter: 'local-model:recheck-adapter',
-    onProgress: 'local-model:progress',
-    onDownloadComplete: 'local-model:download-complete',
-    onDownloadError: 'local-model:download-error',
   },
   credential: {
     list:           'credential:list',

@@ -44,13 +44,17 @@ export interface PlanSourceStep {
   description?: string
   icon?: string
   schedule_cron: string
-  dedup: {
+  dedup?: {
     key: string
     max_memory: number
     first_run: 'skip_existing' | 'process_all' | 'process_last_n'
     first_run_n?: number
   }
-  source_md?: string
+  channel?: {
+    type: 'http_get' | 'imap'
+    credential_id: string
+    [key: string]: unknown
+  }
 }
 
 export interface PlanOutletStep {

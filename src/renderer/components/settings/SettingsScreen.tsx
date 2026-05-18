@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Bell, BellOff, Check, Download, ExternalLink, Github, RefreshCw, Trash2, Wrench, X } from 'lucide-react'
+import { ArrowLeft, Bell, BellOff, Check, ExternalLink, Github, RefreshCw, Wrench, X } from 'lucide-react'
 import { useThemeStore } from '@/stores/theme-store'
 import { useProjectStore } from '@/stores/project-store'
 import AdapterSetupWizard from '@/components/adapter/AdapterSetupWizard'
-import ModelDownloadModal from '@/components/adapter/ModelDownloadModal'
-import type { AdapterReadiness, AdapterUsageSnapshot, LocalModelEntry, NotificationSettings, Settings } from '../../../shared/types'
+import type { AdapterReadiness, AdapterUsageSnapshot, NotificationSettings, Settings } from '../../../shared/types'
 
 interface AdapterEntry {
   id: string
@@ -32,9 +31,6 @@ export default function SettingsScreen() {
   const [usageLoading, setUsageLoading] = useState(false)
   const [wizardAdapter, setWizardAdapter] = useState<AdapterEntry | null>(null)
   const [wizardOpen, setWizardOpen] = useState(false)
-  const [localModels, setLocalModels] = useState<LocalModelEntry[]>([])
-  const [localModelBusy, setLocalModelBusy] = useState<string | null>(null)
-  const [settingsDownloadOpen, setSettingsDownloadOpen] = useState(false)
 
   useEffect(() => {
     void window.trayline.settings.get().then(setSettings)
@@ -113,32 +109,6 @@ export default function SettingsScreen() {
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings?.defaultAdapterId, currentModelId])
-
-  // Load local models when the local-llm adapter is registered.
-  useEffect(() => {
-    const hasLocalLlm = adapters.some((a) => a.id === 'local-llm')
-    if (!hasLocalLlm) return
-    void window.trayline.localModel.list().then(setLocalModels)
-  }, [adapters])
-
-  async function refreshLocalModels() {
-    setLocalModels(await window.trayline.localModel.list())
-  }
-
-  async function handleDeleteLocalModel(modelId: string) {
-    setLocalModelBusy(modelId)
-    try {
-      await window.trayline.localModel.delete(modelId)
-      await refreshLocalModels()
-      // Recheck adapter readiness after deletion
-      const r = await window.trayline.localModel.recheckAdapter()
-      setAdapters((prev) => prev.map((a) =>
-        a.id === 'local-llm' ? { ...a, installed: r.installed, version: r.version, readiness: r } : a,
-      ))
-    } finally {
-      setLocalModelBusy(null)
-    }
-  }
 
   // Load usage on adapter change + when the user clicks refresh.
   useEffect(() => {
@@ -416,54 +386,6 @@ export default function SettingsScreen() {
         )}
       </Section>
 
-      {/* Local AI model management (only shown when local-llm adapter is registered) */}
-      {adapters.some((a) => a.id === 'local-llm') && (
-        <Section title="Local AI model" subtitle="Manage downloaded models. Adding or removing a model takes effect immediately.">
-          {localModels.filter((m) => m.downloaded).length === 0 ? (
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-neutral-500 dark:text-neutral-400">No local model downloaded.</p>
-              <button
-                onClick={() => setSettingsDownloadOpen(true)}
-                className="inline-flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 hover:underline"
-              >
-                <Download size={11} strokeWidth={2} /> Download now
-              </button>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-2">
-              {localModels.filter((m) => m.downloaded).map((m) => (
-                <div
-                  key={m.id}
-                  className="flex items-start justify-between gap-3 rounded-md border border-neutral-200 dark:border-neutral-800 px-3 py-2.5"
-                >
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium">{m.label}</p>
-                    <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5">
-                      {m.sizeMb.toLocaleString()} MB
-                      {m.downloadedAt ? ` · Downloaded ${new Date(m.downloadedAt).toLocaleDateString()}` : ''}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => void handleDeleteLocalModel(m.id)}
-                    disabled={localModelBusy === m.id}
-                    className="text-neutral-400 hover:text-red-500 dark:hover:text-red-400 disabled:opacity-40 shrink-0 mt-0.5"
-                    title="Delete model"
-                  >
-                    <Trash2 size={13} strokeWidth={1.75} />
-                  </button>
-                </div>
-              ))}
-              <button
-                onClick={() => setSettingsDownloadOpen(true)}
-                className="inline-flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 hover:underline w-fit mt-1"
-              >
-                <Download size={11} strokeWidth={2} /> Download another model
-              </button>
-            </div>
-          )}
-        </Section>
-      )}
-
       <Section title="Help" subtitle="">
         <div className="flex flex-wrap gap-2">
           <button
@@ -525,11 +447,6 @@ export default function SettingsScreen() {
         />
       )}
 
-      <ModelDownloadModal
-        open={settingsDownloadOpen}
-        onOpenChange={setSettingsDownloadOpen}
-        onReady={() => { setSettingsDownloadOpen(false); void refreshLocalModels() }}
-      />
     </div>
   )
 }
@@ -555,10 +472,17 @@ function UsageBar({ label, used, limit, resetsAt }: { label: string; used: numbe
   )
 }
 
-function Section({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
+function Section({ title, subtitle, children, highlight }: { title: string; subtitle?: string; children: React.ReactNode; highlight?: boolean }) {
   return (
-    <section className="mb-8">
-      <h2 className="text-sm font-medium mb-1">{title}</h2>
+    <section className={`mb-8${highlight ? ' rounded-xl border-2 border-amber-300 dark:border-amber-700/60 bg-amber-50/50 dark:bg-amber-950/20 px-4 py-4 -mx-4' : ''}`}>
+      <div className="flex items-center gap-2 mb-1">
+        <h2 className="text-sm font-medium">{title}</h2>
+        {highlight && (
+          <span className="text-[10px] uppercase tracking-wide font-medium text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/40 px-1.5 py-0.5 rounded">
+            Setup required
+          </span>
+        )}
+      </div>
       {subtitle && <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-3">{subtitle}</p>}
       {children}
     </section>

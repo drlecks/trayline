@@ -19,7 +19,7 @@ export interface CardHistoryEntry {
   at: string
   step: string
   event: CardEvent
-  by?: 'user' | 'system' | 'worker'
+  by?: 'user' | 'system' | 'worker' | 'source'
   note?: string
 }
 
