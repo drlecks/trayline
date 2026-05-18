@@ -2,7 +2,7 @@
 // by the scaffold service. Lives in shared/ so both the renderer (for previews)
 // and the main process (for scaffolding) can validate against the same shape.
 
-export type StepKind = 'tray' | 'worker' | 'source'
+export type StepKind = 'tray' | 'worker' | 'source' | 'outlet'
 
 export interface PlanFieldDef {
   id: string
@@ -53,7 +53,20 @@ export interface PlanSourceStep {
   source_md?: string
 }
 
-export type PlanStep = PlanTrayStep | PlanWorkerStep | PlanSourceStep
+export interface PlanOutletStep {
+  kind: 'outlet'
+  id: string
+  name: string
+  description?: string
+  icon?: string
+  channel: {
+    type: 'smtp' | 'http_post'
+    credential_id: string
+    [key: string]: unknown
+  }
+}
+
+export type PlanStep = PlanTrayStep | PlanWorkerStep | PlanSourceStep | PlanOutletStep
 
 export interface WorkflowPlan {
   project: {

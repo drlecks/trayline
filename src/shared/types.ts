@@ -54,6 +54,9 @@ export type AuditEvent =
   | 'source_run_completed'
   | 'source_run_failed'
   | 'source_item_new'
+  | 'outlet_run_started'
+  | 'outlet_run_completed'
+  | 'outlet_run_failed'
 
 export interface AuditRow {
   id: string
@@ -105,7 +108,7 @@ export interface WorkflowMeta {
   step_ids: string[]
 }
 
-export type StepKind = 'tray' | 'worker' | 'source'
+export type StepKind = 'tray' | 'worker' | 'source' | 'outlet'
 
 export interface StepMeta {
   id: string
@@ -114,6 +117,115 @@ export interface StepMeta {
   description?: string
   raw: Record<string, unknown>
 }
+
+// ── Credentials ───────────────────────────────────────────────────────────────
+
+export interface HttpCredential {
+  id: string
+  type: 'http'
+  name: string
+  base_url: string
+  headers: Array<{ name: string; value: string }>
+  timeout_ms: number
+}
+
+export interface ImapCredential {
+  id: string
+  type: 'imap'
+  name: string
+  host: string
+  port: number
+  secure: boolean
+  username: string
+}
+
+export interface SmtpCredential {
+  id: string
+  type: 'smtp'
+  name: string
+  host: string
+  port: number
+  secure: boolean
+  username: string
+  from_name: string
+  from_address: string
+}
+
+export type Credential = HttpCredential | ImapCredential | SmtpCredential
+export type CredentialType = 'http' | 'imap' | 'smtp'
+
+export interface CredentialSummary {
+  id: string
+  type: CredentialType
+  name: string
+}
+
+// ── Source channels ───────────────────────────────────────────────────────────
+
+export interface HttpGetChannel {
+  type: 'http_get'
+  credential_id: string
+  url_path: string
+  response_path?: string
+}
+
+export interface ImapChannel {
+  type: 'imap'
+  credential_id: string
+  folder: string
+  unseen_only: boolean
+  max_messages: number
+  subject_contains?: string
+  from_contains?: string
+}
+
+export type SourceChannel = HttpGetChannel | ImapChannel
+
+// ── Outlet types ──────────────────────────────────────────────────────────────
+
+export interface SmtpChannel {
+  type: 'smtp'
+  credential_id: string
+  to: string
+  subject: string
+  body: string
+}
+
+export interface HttpPostChannel {
+  type: 'http_post'
+  credential_id: string
+  url_path: string
+  body?: string
+  method?: 'POST' | 'PUT' | 'PATCH'
+}
+
+export type OutletChannel = SmtpChannel | HttpPostChannel
+
+export interface OutletStepConfig {
+  id: string
+  kind: 'outlet'
+  name: string
+  description?: string
+  color?: string
+  icon?: string
+  channel: OutletChannel
+  on_failure: 'send_to_errors'
+}
+
+export interface OutletRunMeta {
+  run_id: string
+  status: 'running' | 'completed' | 'failed'
+  started_at: string
+  ended_at?: string
+  card_id: string
+  channel_type: string
+  error?: string
+}
+
+export type OutletRunEvent =
+  | { type: 'started'; project: string; workflow: string; stepId: string; runId: string; cardId: string }
+  | { type: 'completed'; project: string; workflow: string; stepId: string; runId: string; cardId: string }
+  | { type: 'failed'; project: string; workflow: string; stepId: string; runId: string; cardId: string; error: string }
 
 // ── Source step types ─────────────────────────────────────────────────────────
 
@@ -140,6 +252,7 @@ export interface SourceStepConfig {
     adapter: string
   }
   paused: boolean
+  channel?: SourceChannel
 }
 
 export interface SeenIdsEntry {

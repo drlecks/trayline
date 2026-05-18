@@ -6,6 +6,7 @@ import { fsService, Paths } from './services/fs-service'
 import { auditDb } from './services/audit-db'
 import { workerRunner, setRunEventBroadcast } from './services/worker-runner'
 import { sourceRunner, setSourceEventBroadcast } from './services/source-runner'
+import { setOutletEventBroadcast } from './services/outlet-runner'
 import { orchestrator } from './services/orchestrator'
 import { setupAutoUpdater } from './services/auto-update-service'
 import { registerIpcHandlers } from './ipc/handlers'
@@ -161,6 +162,7 @@ app.whenReady().then(async () => {
 
     setRunEventBroadcast(() => BrowserWindow.getAllWindows())
     setSourceEventBroadcast(() => BrowserWindow.getAllWindows())
+    setOutletEventBroadcast(() => BrowserWindow.getAllWindows())
 
     bootstrapInfo = { dataDir: Paths.root, appVersion: app.getVersion() }
     registerIpcHandlers(ipcMain, () => bootstrapInfo)

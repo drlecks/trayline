@@ -16,10 +16,12 @@ import { adapterReadinessService } from '../services/adapter-readiness-service'
 import { queueService } from '../services/queue-service'
 import { notificationService } from '../services/notification-service'
 import { localModelService } from '../services/local-model-service'
+import { credentialService } from '../services/credential-service'
+import { outletRunner } from '../services/outlet-runner'
 import { join } from 'path'
 import fs from 'fs/promises'
 import { fsService } from '../services/fs-service'
-import type { BootstrapInfo, NotificationSettings, ProviderInstallSuggestion, ProviderReadyResult, ExportOptions, ImportSuccess, SourceStepConfig } from '../../shared/types'
+import type { BootstrapInfo, NotificationSettings, ProviderInstallSuggestion, ProviderReadyResult, ExportOptions, ImportSuccess, SourceStepConfig, Credential, OutletStepConfig } from '../../shared/types'
 import type { CardStatus } from '../../shared/card'
 
 export type { BootstrapInfo }
@@ -150,7 +152,7 @@ export function registerIpcHandlers(
     }
   })
 
-  ipcMain.handle('project:check-readiness', async (_: unknown, projectName: string) => {
+  ipcMain.handle('project:check-readiness', async (_: unknown, _projectName: string) => {
     const blockers: string[] = []
 
     let adapterOk = false
@@ -495,5 +497,28 @@ export function registerIpcHandlers(
 
   ipcMain.handle('local-model:recheck-adapter', () =>
     adapterReadinessService.recheck('local-llm'),
+  )
+
+  // ── Credentials ───────────────────────────────────────────────────────────
+  ipcMain.handle('credential:list', async () => {
+    const all = await credentialService.list()
+    return all.map(credentialService.toSummary)
+  })
+  ipcMain.handle('credential:get', (_: unknown, id: string) => credentialService.get(id))
+  ipcMain.handle('credential:save', (_: unknown, credential: Credential) => credentialService.save(credential))
+  ipcMain.handle('credential:delete', (_: unknown, id: string) => credentialService.delete(id))
+  ipcMain.handle('credential:save-secret', (_: unknown, credentialId: string, account: string, value: string) =>
+    credentialService.saveSecret(credentialId, account, value),
+  )
+  ipcMain.handle('credential:test-connection', (_: unknown, id: string) =>
+    credentialService.testConnection(id),
+  )
+
+  // ── Outlet ────────────────────────────────────────────────────────────────
+  ipcMain.handle('outlet:run-now', (_: unknown, project: string, workflow: string, stepId: string, cardId: string, prevStepId: string, config: OutletStepConfig) =>
+    outletRunner.runOutlet(project, workflow, stepId, config, cardId, prevStepId),
+  )
+  ipcMain.handle('outlet:list-runs', (_: unknown, project: string, workflow: string, stepId: string) =>
+    outletRunner.listOutletRuns(project, workflow, stepId),
   )
 }

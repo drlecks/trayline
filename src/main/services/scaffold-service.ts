@@ -2,7 +2,7 @@ import { app } from 'electron'
 import { join } from 'path'
 import fs from 'fs/promises'
 import { Paths } from './fs-service'
-import type { WorkflowPlan, PlanStep } from '../../shared/workflow-plan'
+import type { WorkflowPlan, PlanStep, PlanOutletStep } from '../../shared/workflow-plan'
 import type { ProjectMeta } from '../../shared/types'
 
 function templatePath(name: string): string {
@@ -37,6 +37,7 @@ function defaultIcon(step: PlanStep): string {
   if (step.icon) return step.icon
   if (step.kind === 'tray') return 'inbox'
   if (step.kind === 'source') return 'rss'
+  if (step.kind === 'outlet') return 'send'
   return 'cpu'
 }
 
@@ -100,6 +101,7 @@ async function scaffold(plan: WorkflowPlan, options: ScaffoldOptions = {}): Prom
   const trayTemplate = await readTemplate('tray.step.json')
   const workerTemplate = await readTemplate('worker.step.json')
   const sourceTemplate = await readTemplate('source.step.json')
+  const outletTemplate = await readTemplate('outlet.step.json')
   const sourceMdTemplate = await readTemplate('source.md')
   const processTemplate = await readTemplate('process.md')
   const workflowTemplate = await readTemplate('workflow.json')
@@ -157,6 +159,18 @@ async function scaffold(plan: WorkflowPlan, options: ScaffoldOptions = {}): Prom
         JSON.stringify({ runs_total: 0, items_found: 0, items_new: 0, last_run_at: null }, null, 2),
       )
       await writeFileAtomic(join(stepPath, 'state', 'seen-ids.json'), '[]')
+    } else if (step.kind === 'outlet') {
+      const outletStep = step as PlanOutletStep
+      const json = JSON.parse(fillTemplate(outletTemplate, {
+        id: step.id,
+        name: step.name,
+        description: step.description ?? '',
+      }))
+      json.icon = defaultIcon(step)
+      json.channel = outletStep.channel
+
+      await writeFileAtomic(join(stepPath, 'step.json'), JSON.stringify(json, null, 2))
+      await fs.mkdir(join(stepPath, 'runs'), { recursive: true })
     } else {
       const json = JSON.parse(fillTemplate(workerTemplate, {
         id: step.id,

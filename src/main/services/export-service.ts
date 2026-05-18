@@ -6,13 +6,11 @@ import { app } from 'electron'
 import archiver from 'archiver'
 import AdmZip from 'adm-zip'
 import { Paths } from './fs-service'
-import { auditProject } from './security-audit-service'
 import type {
   ExportManifest,
   ExportOptions,
   ImportResult,
   ImportSuccess,
-  ImportNeedsReview,
 } from '../../shared/types'
 
 async function pathExists(p: string): Promise<boolean> {
@@ -98,10 +96,6 @@ type PendingImport = {
 // In-memory map of pending imports awaiting user confirmation
 const pendingImports = new Map<string, PendingImport>()
 
-function makeToken(): string {
-  return `import_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
-}
-
 async function extractAndValidate(zipPath: string): Promise<{
   tempDir: string
   extractedPath: string
@@ -143,23 +137,6 @@ async function importProject(zipPath: string): Promise<ImportResult> {
   let cleanupTemp = true
 
   try {
-    const { findings, summary } = await auditProject(extractedPath)
-
-    if (findings.length > 0) {
-      const token = makeToken()
-      pendingImports.set(token, { tempDir, extractedPath, projectName })
-      cleanupTemp = false  // temp is now owned by pendingImports entry
-      const result: ImportNeedsReview = {
-        ok: 'needs_review',
-        token,
-        projectName,
-        securityFindings: findings,
-        projectSummary: summary,
-      }
-      return result
-    }
-
-    // Clean — commit immediately
     await fs.cp(extractedPath, join(Paths.projects, projectName), { recursive: true })
     return { ok: true, projectName }
   } finally {
