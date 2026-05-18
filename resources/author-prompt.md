@@ -75,6 +75,10 @@ You MUST output a single JSON object matching this schema, and nothing else:
         "id": "03-<kebab-case>",
         "name": "<Human-readable name>",
         "description": "<one-line description>",
+        "trigger": {
+          "mode": "on_ready | scheduled | manual",
+          "schedule_cron": "<5-field cron, only required when mode is 'scheduled'>"
+        },
         "channel": {
           "type": "smtp | http_post",
           "credential_id": "",
@@ -98,6 +102,11 @@ You MUST output a single JSON object matching this schema, and nothing else:
 4. **Use `00-` for Source steps, `01-`, `02-`, etc. for all other steps** in order.
 5. **Manual approval** for trays where a human should review before the workflow continues. **Auto** when the previous worker produced a definitive result.
 6. **Use an Outlet step** (`kind: "outlet"`) when the workflow should automatically send a result without human review — e.g. send an email, post to a webhook. Outlet steps require a credential to be configured by the user after scaffolding (`credential_id` is always left empty in the plan). Leave `channel.type` set to whichever matches what the user described (`smtp` for email, `http_post` for webhooks/APIs). Template tokens `{{card.data.field}}`, `{{card.data}}`, and `{{card.data | json}}` are supported in `to`, `subject`, `body`, and `url_path`.
+
+   **Outlet trigger modes** — every outlet must include a `trigger` object:
+   - `on_ready` (default): fires immediately when a card lands in the previous tray's `ready/` folder. Use this for item-by-item dispatch (e.g. send each approved reply as soon as it's ready).
+   - `scheduled`: fires on a cron schedule, picking up **all** ready cards from the previous tray at once. Use this for batch sends — daily digests, weekly reports, aggregated notifications. Set `schedule_cron` accordingly. **Required when the preceding worker uses `batch_mode: true`.**
+   - `manual`: only fires when the user manually triggers it. Use this when the user needs to review the queue before bulk-sending.
 7. **Source steps are channel-based — no AI involved.** The source runner fetches data directly; AI processing belongs in the Worker step that follows.
    - **`http_get`**: one fetch per scheduled run → **one card** created. The full response text (whatever it is — JSON, HTML, plain text) becomes `card.data.body`. No JSON parsing, no dedup. Do NOT include a `dedup` block for http_get sources.
    - **`imap`**: one card per email, deduplicated by message ID. Include a `dedup` block with `key: "message_id"`.
@@ -125,6 +134,7 @@ You MUST output a single JSON object matching this schema, and nothing else:
 8. **Batch workers** (`batch_mode: true`) receive all ready cards as a single JSON object `{ cards: [...], count: N }` and produce one output card. Use this when the user wants to summarise, digest, or aggregate many items into one (e.g. "daily digest", "summary email", "weekly report"). Set `batch_max` to a reasonable limit (e.g. 50 for a daily email digest). Batch workers must NOT use `on_ready` trigger mode — use `scheduled` or `manual`.
 
 9. **Don't invent steps the user didn't ask for** — keep workflows minimal. The user can always add more later.
+10. **Workers must be sandwiched between trays.** Every worker must have a regular tray step immediately before it AND a regular tray step immediately after it. A source step directly before a worker is invalid — there must always be a tray in between. Similarly, a worker cannot be the last step; it must be followed by a tray (or tray → outlet). This is enforced by the app and will be rejected if violated.
 
 ## When to use Source steps
 
@@ -155,18 +165,18 @@ Use `batch_mode: true` on a worker when:
 ## Examples of good naming
 
 - "Monitor a GitHub repo for new issues and triage them" → `01-new-issues` (tray, auto) → `02-triage` (worker) → `03-review` (tray, manual) → `04-archive` (tray, auto)
-- "Monitor Hacker News and send a daily digest" → `00-hn-source` (source, `*/30 * * * *`, skip_existing) → `01-stories` (tray, auto) → `02-digest` (worker, batch_mode: true, batch_max: 50, scheduled daily) → `03-sent` (tray, auto)
-- "Poll Instagram comments and draft replies" → `00-comments` (source, `*/5 * * * *`, skip_existing) → `01-new-comments` (tray, auto) → `02-draft-reply` (worker) → `03-review` (tray, manual)
+- "Monitor Hacker News and send a daily digest" → `00-hn-source` (source, `*/30 * * * *`, skip_existing) → `01-stories` (tray, auto) → `02-digest` (worker, batch_mode: true, batch_max: 50, scheduled daily) → `03-review` (tray, auto) → `04-send-digest` (outlet, smtp, trigger: scheduled `0 8 * * *`)
+- "Poll Instagram comments and draft replies" → `00-comments` (source, `*/5 * * * *`, skip_existing) → `01-new-comments` (tray, auto) → `02-draft-reply` (worker) → `03-review` (tray, manual) → `04-send-reply` (outlet, smtp, trigger: on_ready)
 - "Process PDF invoices" → `01-invoice-intake` (tray) → `02-extract-data` (worker) → `03-validate` (tray, manual) → `04-archive` (tray, auto)
-- "Fetch new support tickets and email a summary to the team" → `00-tickets` (source, hourly) → `01-new-tickets` (tray, auto) → `02-summarise` (worker) → `03-notify` (outlet, smtp, `to: {{card.data.team_email}}`)
+- "Fetch new support tickets and email a summary to the team" → `00-tickets` (source, hourly) → `01-new-tickets` (tray, auto) → `02-summarise` (worker) → `03-ready-to-send` (tray, auto) → `04-notify` (outlet, smtp, trigger: on_ready, `to: {{card.data.team_email}}`)
 
 ### Canonical persona workflows (always generate plans that satisfy these)
 
-- "Read emails from support@mycompany.com, classify as urgent / normal / question, draft a reply, and put critical ones in a review queue" → `00-support-inbox` (source, imap channel, `*/10 * * * *`, skip_existing, folder: INBOX, unseen_only: true, max_messages: 50) → `01-incoming` (tray, auto) → `02-classify-and-draft` (worker) → `03-review-critical` (tray, manual) → `04-send-reply` (outlet, smtp)
-- "Every morning summarise overnight emails and send me a digest" → `00-inbox` (source, imap channel, `0 7 * * *`, skip_existing, folder: INBOX, unseen_only: true, max_messages: 100) → `01-emails` (tray, auto) → `02-summarise` (worker, batch_mode: true) → `03-digest-sent` (outlet, smtp, to the user's own address)
+- "Read emails from support@mycompany.com, classify as urgent / normal / question, draft a reply, and put critical ones in a review queue" → `00-support-inbox` (source, imap channel, `*/10 * * * *`, skip_existing, folder: INBOX, unseen_only: true, max_messages: 50) → `01-incoming` (tray, auto) → `02-classify-and-draft` (worker) → `03-review-critical` (tray, manual) → `04-send-reply` (outlet, smtp, trigger: on_ready)
+- "Every morning summarise overnight emails and send me a digest" → `00-inbox` (source, imap channel, `0 7 * * *`, skip_existing, folder: INBOX, unseen_only: true, max_messages: 100) → `01-emails` (tray, auto) → `02-summarise` (worker, batch_mode: true) → `03-digest-ready` (tray, auto) → `04-digest-sent` (outlet, smtp, trigger: scheduled `0 8 * * *`, to the user's own address)
 - "I paste a meeting transcript and need a 5-line summary plus per-person task list" → `01-transcript-intake` (tray, manual, input_schema with a `transcript` textarea field) → `02-extract` (worker) → `03-review` (tray, manual)
 - "Translate text I paste to English, Spanish, French, and Italian as i18n JSON" → `01-source-text` (tray, manual, schema: `text` textarea + `key` text) → `02-translate` (worker, outputs `{ "key": { "en": "...", "es": "...", "fr": "...", "it": "..." } }`) → `03-review` (tray, manual)
-- "Fetch top 10 Hacker News stories every day and email me a digest" → `00-hn-stories` (source, http_get channel, `url_path: /v0/topstories.json`, `0 8 * * *`, no dedup) → `01-stories` (tray, auto) → `02-digest` (worker, receives `{{card.data.body}}` containing the raw JSON text, batch_mode: false, parses and summarises the top stories) → `03-send-digest` (outlet, smtp)
+- "Fetch top 10 Hacker News stories every day and email me a digest" → `00-hn-stories` (source, http_get channel, `url_path: /v0/topstories.json`, `0 8 * * *`, no dedup) → `01-stories` (tray, auto) → `02-digest` (worker, receives `{{card.data.body}}` containing the raw JSON text, batch_mode: false, parses and summarises the top stories) → `03-digest-ready` (tray, auto) → `04-send-digest` (outlet, smtp, trigger: on_ready)
 
 ## Output
 

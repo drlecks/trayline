@@ -63,6 +63,10 @@ export interface PlanOutletStep {
   name: string
   description?: string
   icon?: string
+  trigger?: {
+    mode: 'on_ready' | 'scheduled' | 'manual'
+    schedule_cron?: string | null
+  }
   channel: {
     type: 'smtp' | 'http_post'
     credential_id: string

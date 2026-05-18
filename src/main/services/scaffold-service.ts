@@ -173,6 +173,9 @@ async function scaffold(plan: WorkflowPlan, options: ScaffoldOptions = {}): Prom
       }))
       json.icon = defaultIcon(step)
       json.channel = outletStep.channel
+      if (outletStep.trigger) {
+        json.trigger = outletStep.trigger
+      }
 
       await writeFileAtomic(join(stepPath, 'step.json'), JSON.stringify(json, null, 2))
       await fs.mkdir(join(stepPath, 'runs'), { recursive: true })

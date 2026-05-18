@@ -10,6 +10,8 @@ import fs from 'fs/promises'
 import { projectService } from './project-service'
 import { fsService } from './fs-service'
 import { workerRunner } from './worker-runner'
+import { outletRunner } from './outlet-runner'
+import type { OutletStepConfig } from '../../shared/types'
 
 interface WorkflowJson {
   step_ids: string[]
@@ -17,7 +19,7 @@ interface WorkflowJson {
 
 interface StepJson {
   id: string
-  kind: 'tray' | 'worker'
+  kind: 'tray' | 'worker' | 'outlet'
   trigger?: { mode?: 'on_ready' | 'scheduled' | 'manual'; schedule_cron?: string | null }
 }
 
@@ -48,37 +50,73 @@ async function mountWorkflow(project: string, workflow: string): Promise<void> {
     const stepJson = await readJsonSafe<StepJson>(
       join(projectService.paths.stepDir(project, workflow, stepId), 'step.json'),
     )
-    if (!stepJson || stepJson.kind !== 'worker') continue
-    if (stepJson.trigger?.mode !== 'scheduled') continue
+    if (!stepJson) continue
 
-    const expr = stepJson.trigger?.schedule_cron
-    if (!expr || !cron.validate(expr)) continue
+    if (stepJson.kind === 'worker') {
+      if (stepJson.trigger?.mode !== 'scheduled') continue
 
-    const k = taskKey(project, workflow, stepId)
-    // Stop any previous task for this step before re-registering.
-    tasks.get(k)?.stop()
+      const expr = stepJson.trigger?.schedule_cron
+      if (!expr || !cron.validate(expr)) continue
 
-    const prevStepId = i > 0 ? wf.step_ids[i - 1] : null
-    if (!prevStepId) continue
+      const k = taskKey(project, workflow, stepId)
+      tasks.get(k)?.stop()
 
-    const task = cron.schedule(expr, async () => {
-      const readyDir = join(
-        projectService.paths.stepDir(project, workflow, prevStepId),
-        'cards', 'ready',
-      )
-      if (!(await pathExists(readyDir))) return
-      const files = await fs.readdir(readyDir)
-      for (const f of files) {
-        if (!f.endsWith('.json') || f.endsWith('.tmp')) continue
-        const cardId = f.replace(/\.json$/, '')
-        void workerRunner.triggerRun({ project, workflow, stepId, cardId }).catch((err) => {
-          // eslint-disable-next-line no-console
-          console.error(`[scheduler] triggerRun failed for ${cardId}:`, err)
-        })
-      }
-    })
+      const prevStepId = i > 0 ? wf.step_ids[i - 1] : null
+      if (!prevStepId) continue
 
-    tasks.set(k, task)
+      const task = cron.schedule(expr, async () => {
+        const readyDir = join(
+          projectService.paths.stepDir(project, workflow, prevStepId),
+          'cards', 'ready',
+        )
+        if (!(await pathExists(readyDir))) return
+        const files = await fs.readdir(readyDir)
+        for (const f of files) {
+          if (!f.endsWith('.json') || f.endsWith('.tmp')) continue
+          const cardId = f.replace(/\.json$/, '')
+          void workerRunner.triggerRun({ project, workflow, stepId, cardId }).catch((err) => {
+            // eslint-disable-next-line no-console
+            console.error(`[scheduler] triggerRun failed for ${cardId}:`, err)
+          })
+        }
+      })
+
+      tasks.set(k, task)
+    } else if (stepJson.kind === 'outlet') {
+      if (stepJson.trigger?.mode !== 'scheduled') continue
+
+      const expr = stepJson.trigger?.schedule_cron
+      if (!expr || !cron.validate(expr)) continue
+
+      const k = taskKey(project, workflow, stepId)
+      tasks.get(k)?.stop()
+
+      const prevStepId = i > 0 ? wf.step_ids[i - 1] : null
+      if (!prevStepId) continue
+
+      const task = cron.schedule(expr, async () => {
+        const readyDir = join(
+          projectService.paths.stepDir(project, workflow, prevStepId),
+          'cards', 'ready',
+        )
+        if (!(await pathExists(readyDir))) return
+        const cfg = await readJsonSafe<OutletStepConfig>(
+          join(projectService.paths.stepDir(project, workflow, stepId), 'step.json'),
+        )
+        if (!cfg) return
+        const files = await fs.readdir(readyDir)
+        for (const f of files) {
+          if (!f.endsWith('.json') || f.endsWith('.tmp')) continue
+          const cardId = f.replace(/\.json$/, '')
+          void outletRunner.runOutlet(project, workflow, stepId, cfg, cardId, prevStepId).catch((err) => {
+            // eslint-disable-next-line no-console
+            console.error(`[scheduler] outlet run failed for ${cardId}:`, err)
+          })
+        }
+      })
+
+      tasks.set(k, task)
+    }
   }
 }
 
