@@ -12,5 +12,6 @@
     "first_run": "{{first_run}}"
   },
   "paused": false,
-  "channel": null
+  "channel": null,
+  "prompt": null
 }

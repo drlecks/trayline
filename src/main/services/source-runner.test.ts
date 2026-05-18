@@ -19,6 +19,7 @@ vi.mock('./credential-service', () => ({
 
 vi.mock('./http-channel', () => ({ fetchHttp: vi.fn() }))
 vi.mock('./imap-channel', () => ({ fetchEmails: vi.fn() }))
+vi.mock('./ai-step-helper', () => ({ runAIStep: vi.fn() }))
 
 async function setHttpBody(text: string) {
   const mod = await import('./http-channel')
@@ -33,6 +34,16 @@ async function setHttpError(message: string) {
 async function setImapEmails(emails: unknown[]) {
   const mod = await import('./imap-channel')
   vi.mocked(mod.fetchEmails).mockResolvedValue(emails as never)
+}
+
+async function setAIOutput(output: object | string) {
+  const mod = await import('./ai-step-helper')
+  vi.mocked(mod.runAIStep).mockResolvedValue({ output, terminalLog: '' })
+}
+
+async function setAIError(message: string) {
+  const mod = await import('./ai-step-helper')
+  vi.mocked(mod.runAIStep).mockRejectedValue(new Error(message))
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -320,6 +331,74 @@ describe('sourceRunner.recoverOrphanedRuns', () => {
     const recovered = await readJson<SourceRunMeta>(join(runDir, 'meta.json'))
     expect(recovered.status).toBe('failed')
     expect(recovered.error).toMatch(/interrupted/)
+  })
+})
+
+describe('sourceRunner — prompt (AI processing)', () => {
+  it('HTTP GET: uses AI output as card.data when prompt is set', async () => {
+    const project = `sr-http-prompt-${Date.now()}`
+    const stepId = '00-source'
+    await setHttpBody('<html>article page</html>')
+    await setAIOutput({ title: 'Hello', author: 'Alex', published_at: '2026-01-01' })
+    const cfg = makeHttpConfig({ prompt: 'Extract title, author, published_at from HTML. Return JSON.' })
+    await setupSourceStep(project, 'wf', stepId, cfg)
+
+    await sourceRunner.runSource({ project, workflow: 'wf', stepId, stepConfig: cfg })
+
+    const readyDir = join(Paths.projects, project, 'workflows', 'wf', 'steps', stepId, 'cards', 'ready')
+    const files = (await fs.readdir(readyDir)).filter((f) => f.endsWith('.json'))
+    expect(files).toHaveLength(1)
+    const card = await readJson<{ data: Record<string, unknown> }>(join(readyDir, files[0]))
+    expect(card.data).toEqual({ title: 'Hello', author: 'Alex', published_at: '2026-01-01' })
+  })
+
+  it('HTTP GET: wraps string AI output under ai_output key', async () => {
+    const project = `sr-http-prompt-str-${Date.now()}`
+    const stepId = '00-source'
+    await setHttpBody('raw content')
+    await setAIOutput('formatted text result')
+    const cfg = makeHttpConfig({ prompt: 'Summarise this.' })
+    await setupSourceStep(project, 'wf', stepId, cfg)
+
+    await sourceRunner.runSource({ project, workflow: 'wf', stepId, stepConfig: cfg })
+
+    const readyDir = join(Paths.projects, project, 'workflows', 'wf', 'steps', stepId, 'cards', 'ready')
+    const files = (await fs.readdir(readyDir)).filter((f) => f.endsWith('.json'))
+    const card = await readJson<{ data: Record<string, unknown> }>(join(readyDir, files[0]))
+    expect(card.data).toEqual({ ai_output: 'formatted text result' })
+  })
+
+  it('HTTP GET: falls back to verbatim card when prompt is absent', async () => {
+    const project = `sr-http-noprompt-${Date.now()}`
+    const stepId = '00-source'
+    await setHttpBody('plain text')
+    const cfg = makeHttpConfig({ prompt: null })
+    await setupSourceStep(project, 'wf', stepId, cfg)
+
+    await sourceRunner.runSource({ project, workflow: 'wf', stepId, stepConfig: cfg })
+
+    const readyDir = join(Paths.projects, project, 'workflows', 'wf', 'steps', stepId, 'cards', 'ready')
+    const files = (await fs.readdir(readyDir)).filter((f) => f.endsWith('.json'))
+    const card = await readJson<{ data: Record<string, unknown> }>(join(readyDir, files[0]))
+    expect(card.data).toEqual({ body: 'plain text' })
+  })
+
+  it('HTTP GET: run fails when AI step throws', async () => {
+    const project = `sr-http-aierr-${Date.now()}`
+    const stepId = '00-source'
+    await setHttpBody('some data')
+    await setAIError('adapter not installed')
+    const cfg = makeHttpConfig({ prompt: 'Do something.' })
+    await setupSourceStep(project, 'wf', stepId, cfg)
+
+    await sourceRunner.runSource({ project, workflow: 'wf', stepId, stepConfig: cfg })
+
+    const readyDir = join(Paths.projects, project, 'workflows', 'wf', 'steps', stepId, 'cards', 'ready')
+    expect((await fs.readdir(readyDir)).filter((f) => f.endsWith('.json'))).toHaveLength(0)
+    const runsDir = join(Paths.projects, project, 'workflows', 'wf', 'steps', stepId, 'runs')
+    const meta = await readJson<{ status: string; error: string }>(join(runsDir, (await fs.readdir(runsDir))[0], 'meta.json'))
+    expect(meta.status).toBe('failed')
+    expect(meta.error).toMatch(/adapter not installed/)
   })
 })
 

@@ -209,6 +209,7 @@ export interface OutletStepConfig {
   icon?: string
   channel: OutletChannel
   on_failure: 'send_to_errors'
+  prompt?: string | null
 }
 
 export interface OutletRunMeta {
@@ -248,6 +249,7 @@ export interface SourceStepConfig {
   dedup?: SourceDedup
   paused: boolean
   channel: SourceChannel | null
+  prompt?: string | null
 }
 
 export interface SeenIdsEntry {
