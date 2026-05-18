@@ -25,15 +25,15 @@ This phase has eight work areas:
 
 ### N11-A — Remove Local LLM
 
-- [ ] **A1** Remove `src/main/ai-terminals/local-llm.ts` and its test `local-llm.test.ts`.
-- [ ] **A2** Remove `src/main/services/local-model-service.ts` and its test (if any).
-- [ ] **A3** Remove `src/renderer/components/adapter/ModelDownloadModal.tsx`.
-- [ ] **A4** Remove `ModelDownloadModal` references from `AdapterSetupScreen.tsx` and `SettingsScreen.tsx`.
-- [ ] **A5** Remove the `local-llm` entry from `src/main/ai-terminals/registry.ts`.
-- [ ] **A6** Remove `local-models.json` from `resources/` (if present) and from any bundling config in `vite.config.ts` / `electron-builder` config.
-- [ ] **A7** Remove `node-llama-cpp` and `@electron/rebuild` from `package.json` and run `npm install` to clean `package-lock.json`.
-- [ ] **A8** Remove the "Local AI model" section from `SettingsScreen.tsx` (the download/delete UI).
-- [ ] **A9** Remove the local-llm warning note from `WorkflowAuthorScreen.tsx`.
+- [x] **A1** Remove `src/main/ai-terminals/local-llm.ts` and its test `local-llm.test.ts`.
+- [x] **A2** Remove `src/main/services/local-model-service.ts` and its test (if any).
+- [x] **A3** Remove `src/renderer/components/adapter/ModelDownloadModal.tsx`.
+- [x] **A4** Remove `ModelDownloadModal` references from `AdapterSetupScreen.tsx` and `SettingsScreen.tsx`.
+- [x] **A5** Remove the `local-llm` entry from `src/main/ai-terminals/registry.ts`.
+- [x] **A6** Remove `local-models.json` from `resources/` (if present) and from any bundling config in `vite.config.ts` / `electron-builder` config.
+- [x] **A7** Remove `node-llama-cpp` and `@electron/rebuild` from `package.json` and run `npm install` to clean `package-lock.json`.
+- [x] **A8** Remove the "Local AI model" section from `SettingsScreen.tsx` (the download/delete UI).
+- [x] **A9** Remove the local-llm warning note from `WorkflowAuthorScreen.tsx`.
 - [ ] **A10** Update `docs/tech-stack.md` — remove `node-llama-cpp`, `@electron/rebuild`, and the local-llm adapter from all descriptions. Update the adapter list (only Claude Code ships; architecture still supports future adapters).
 - [ ] **A11** Update `docs/features.md` — remove section 7.18 "Local AI Model — Download & Management" and section 7.20 "AI Setup Screen (N10)" reference to local-llm being "Recommended". Claude Code is now the sole default adapter.
 - [ ] **A12** Update `docs/app-description.md` — remove local-llm from the "Why This Will Work" and vocabulary sections; keep the note that the architecture supports future adapters.
@@ -188,11 +188,11 @@ Keep the existing `AdapterSetupScreen` / `AdapterSetupWizard` abstraction — fu
 
 #### Tasks
 
-- [ ] **F1** In `AdapterSetupScreen.tsx`: remove the `isLocalLlm` conditional branches, the `ModelDownloadModal` import and usage, the local-llm sort priority, and the "Recommended" / "Power user" badge logic. Render all production adapters through a single generic card template.
-- [ ] **F2** In `AdapterSetupScreen.tsx`: update the header subtitle copy (see above).
-- [ ] **F3** In `AdapterSetupScreen.tsx`: filter the adapter list to `kind === 'production'` only — `kind: 'mock'` adapters must never appear.
-- [ ] **F4** In `src/main/ai-terminals/registry.ts` (or wherever `adapters:list` is handled): ensure the IPC handler already filters mock adapters before returning, so no renderer code needs to defend against it independently.
-- [ ] **F5** In `SettingsScreen.tsx`: remove any `local-llm`-specific UI blocks (Local AI model section, download/delete model links). The provider dropdown already reads from the registry, so it will naturally show only Claude Code once local-llm is removed in N11-A.
+- [x] **F1** In `AdapterSetupScreen.tsx`: remove the `isLocalLlm` conditional branches, the `ModelDownloadModal` import and usage, the local-llm sort priority, and the "Recommended" / "Power user" badge logic. Render all production adapters through a single generic card template.
+- [x] **F2** In `AdapterSetupScreen.tsx`: update the header subtitle copy (see above).
+- [x] **F3** In `AdapterSetupScreen.tsx`: filter the adapter list to `kind === 'production'` only — `kind: 'mock'` adapters must never appear.
+- [x] **F4** In `src/main/ai-terminals/registry.ts` (or wherever `adapters:list` is handled): ensure the IPC handler already filters mock adapters before returning, so no renderer code needs to defend against it independently.
+- [x] **F5** In `SettingsScreen.tsx`: remove any `local-llm`-specific UI blocks (Local AI model section, download/delete model links). The provider dropdown already reads from the registry, so it will naturally show only Claude Code once local-llm is removed in N11-A.
 - [ ] **F6** Update `docs/user-flows.md` — update flow 6.14 "AI Setup — First Launch": remove local-llm card description, describe the generic single-card layout, note that currently only Claude Code is shown.
 - [ ] **F7** Update `docs/features.md` — update section 7.20 "AI Setup Screen": remove local-llm "Recommended" / CLI "Power user" distinction; describe the generic card; note current adapter set is Claude Code only.
 
