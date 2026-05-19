@@ -1,7 +1,6 @@
 import type { AITerminalAdapter } from './adapter'
 import { claudeCodeAdapter } from './claude-code'
 import { mockAdapter } from './mock'
-import { localLlmAdapter } from './local-llm'
 
 const adapters = new Map<string, AITerminalAdapter>()
 
@@ -17,9 +16,9 @@ function list(): AITerminalAdapter[] {
   return [...adapters.values()]
 }
 
-// Default registrations. Adding a new adapter is one new file plus one line here.
+// Production adapters only. Adding a new adapter is one new file plus one line here.
+// Mock adapter is registered separately and filtered from any user-facing list.
 register(claudeCodeAdapter)
-register(localLlmAdapter)
 register(mockAdapter)
 
 export const adapterRegistry = { register, get, list }

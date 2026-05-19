@@ -25,6 +25,8 @@ export const IPC = {
     create: 'project:create',
     delete: 'project:delete',
     setStatus: 'project:setStatus',
+    updateMeta: 'project:updateMeta',
+    updatePermissions: 'project:updatePermissions',
     getOrchestration: 'project:getOrchestration',
     onStatusChanged: 'project:onStatusChanged',
     liveStats: 'project:live-stats',
@@ -63,10 +65,12 @@ export const IPC = {
     addTray: 'step:addTray',
     addWorker: 'step:addWorker',
     addSource: 'step:addSource',
+    addOutlet: 'step:addOutlet',
     update: 'step:update',
     delete: 'step:delete',
     readProcess: 'step:readProcess',
     updateProcess: 'step:updateProcess',
+    moveUp: 'step:moveUp',
   },
   worker: {
     triggerRun: 'worker:triggerRun',
@@ -99,9 +103,8 @@ export const IPC = {
     pause: 'source:pause',
     resume: 'source:resume',
     getState: 'source:get-state',
-    readInstructions: 'source:read-instructions',
-    updateInstructions: 'source:update-instructions',
     listRuns: 'source:list-runs',
+    resetDedup: 'source:reset-dedup',
     onRunEvent: 'source:run-event',
   },
   notifications: {
@@ -112,16 +115,6 @@ export const IPC = {
   },
   notification: {
     navigate: 'notification:navigate',
-  },
-  localModel: {
-    list: 'local-model:list',
-    download: 'local-model:download',
-    cancel: 'local-model:cancel',
-    delete: 'local-model:delete',
-    recheckAdapter: 'local-model:recheck-adapter',
-    onProgress: 'local-model:progress',
-    onDownloadComplete: 'local-model:download-complete',
-    onDownloadError: 'local-model:download-error',
   },
   credential: {
     list:           'credential:list',
@@ -137,5 +130,13 @@ export const IPC = {
     onStarted:   'outlet:run-started',
     onCompleted: 'outlet:run-completed',
     onFailed:    'outlet:run-failed',
+  },
+  ai: {
+    query:   'ai:query',
+    abort:   'ai:abort',
+    onChunk: 'ai:query-chunk',
+  },
+  aiLog: {
+    getLines: 'ai-log:get-lines',
   },
 } as const

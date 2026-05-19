@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Folder, Sparkles, FolderOpen, Package } from 'lucide-react'
+import iconUrl from '../../../../resources/icon-128.png'
 import { Button } from '@/components/ui/button'
 import { useProjectStore } from '@/stores/project-store'
 import type { BootstrapInfo } from '../../../shared/types'
@@ -50,9 +51,7 @@ export default function WelcomeSplash() {
 
   return (
     <div className="flex flex-col items-center justify-center w-full max-w-2xl mx-auto px-8">
-      <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-neutral-100 dark:bg-neutral-900 mb-6">
-        <Sparkles size={22} className="text-neutral-700 dark:text-neutral-300" strokeWidth={1.5} />
-      </div>
+      <img src={iconUrl} alt="" className="w-16 h-16 mb-6 select-none" draggable={false} />
 
       <h1 className="text-2xl font-semibold tracking-tight mb-2">Welcome to Trayline</h1>
       <p className="text-sm text-neutral-500 dark:text-neutral-400 text-center max-w-md mb-10 leading-relaxed">

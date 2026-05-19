@@ -57,6 +57,7 @@ export type AuditEvent =
   | 'outlet_run_started'
   | 'outlet_run_completed'
   | 'outlet_run_failed'
+  | 'ai_permission_auto_accepted'
 
 export interface AuditRow {
   id: string
@@ -81,6 +82,15 @@ export interface BootstrapInfo {
 
 export type ProjectStatus = 'active' | 'inactive'
 
+export interface ProjectPermissions {
+  allow_network: boolean
+  allow_shell: boolean
+  /** IDs of credentials the AI may reference by name in its context. */
+  credential_ids: string[]
+  /** Free-text instructions passed to the AI about what tools are available. */
+  notes?: string
+}
+
 export interface ProjectMeta {
   id: string
   name: string
@@ -99,6 +109,8 @@ export interface ProjectMeta {
    * list screen. Defaults to `created_at` on read when absent.
    */
   updated_at: string
+  /** Optional AI permission block. Controls which tools the AI adapter may use. */
+  permissions?: ProjectPermissions
 }
 
 export interface WorkflowMeta {
@@ -166,7 +178,6 @@ export interface HttpGetChannel {
   type: 'http_get'
   credential_id: string
   url_path: string
-  response_path?: string
 }
 
 export interface ImapChannel {
@@ -208,8 +219,13 @@ export interface OutletStepConfig {
   description?: string
   color?: string
   icon?: string
+  trigger?: {
+    mode: 'on_ready' | 'scheduled' | 'manual'
+    schedule_cron?: string | null
+  }
   channel: OutletChannel
   on_failure: 'send_to_errors'
+  prompt?: string | null
 }
 
 export interface OutletRunMeta {
@@ -246,13 +262,10 @@ export interface SourceStepConfig {
   color: string
   icon: string
   schedule_cron: string
-  dedup: SourceDedup
-  execution: {
-    timeout_seconds: number
-    adapter: string
-  }
+  dedup?: SourceDedup
   paused: boolean
-  channel?: SourceChannel
+  channel: SourceChannel | null
+  prompt?: string | null
 }
 
 export interface SeenIdsEntry {
@@ -267,6 +280,15 @@ export interface SourceCounters {
   last_run_at: string | null
 }
 
+export interface HttpErrorDetail {
+  /** The full URL that was attempted. */
+  url: string
+  status: number
+  statusText: string
+  /** First 4 KB of the response body. */
+  responseBody: string
+}
+
 export interface SourceRunMeta {
   run_id: string
   step_id: string
@@ -278,6 +300,8 @@ export interface SourceRunMeta {
   items_found?: number
   items_new?: number
   error?: string
+  /** Set when the failure was an HTTP non-2xx response, for richer error display. */
+  http_error?: HttpErrorDetail
   elapsed_ms?: number
 }
 
@@ -312,7 +336,6 @@ export interface UsageSnapshot {
 
 export type AdapterBlockerKind =
   | 'not_installed'
-  | 'model_not_downloaded'  // local-llm: runtime present but no GGUF model file on disk
 
 export interface AdapterBlocker {
   kind: AdapterBlockerKind
@@ -333,29 +356,6 @@ export interface AdapterReadiness {
   /** All current blockers. Empty array means ready to run. */
   blockers: AdapterBlocker[]
   checkedAt: number
-}
-
-export interface LocalModelEntry {
-  id: string
-  label: string
-  description: string
-  filename: string
-  sizeMb: number
-  sizeBytes: number
-  recommended: boolean
-  minRamMb: number
-  /** True when the GGUF file is present in userData/trayline-models/. */
-  downloaded: boolean
-  /** ms timestamp of when the file was last modified (proxy for download time). */
-  downloadedAt?: number
-}
-
-export interface ModelDownloadProgress {
-  modelId: string
-  downloadedBytes: number
-  totalBytes: number
-  /** 0–100 */
-  percent: number
 }
 
 export interface ProviderInstallSuggestion {

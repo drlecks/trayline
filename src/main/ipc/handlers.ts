@@ -15,12 +15,16 @@ import { orchestrator } from '../services/orchestrator'
 import { adapterReadinessService } from '../services/adapter-readiness-service'
 import { queueService } from '../services/queue-service'
 import { notificationService } from '../services/notification-service'
-import { localModelService } from '../services/local-model-service'
 import { credentialService } from '../services/credential-service'
 import { outletRunner } from '../services/outlet-runner'
+import { aiOutputLog } from '../services/ai-output-log'
 import { join } from 'path'
+import os from 'os'
 import fs from 'fs/promises'
 import { fsService } from '../services/fs-service'
+import type { AISession } from '../ai-terminals/adapter'
+import { ANSI_RE } from '../ai-terminals/prompt-utils'
+import { IPC } from '../../shared/ipc-channels'
 import type { BootstrapInfo, NotificationSettings, ProviderInstallSuggestion, ProviderReadyResult, ExportOptions, ImportSuccess, SourceStepConfig, Credential, OutletStepConfig } from '../../shared/types'
 import type { CardStatus } from '../../shared/card'
 
@@ -101,6 +105,17 @@ export function registerIpcHandlers(
     }
     return result
   })
+  ipcMain.handle('project:updateMeta', async (
+    _: unknown,
+    name: string,
+    patch: { display_name?: string; description?: string },
+  ) => projectService.updateMeta(name, patch))
+  ipcMain.handle('project:updatePermissions', async (
+    _: unknown,
+    name: string,
+    permissions: import('../../shared/types').ProjectPermissions,
+  ) => projectService.updatePermissions(name, permissions))
+
   ipcMain.handle('project:setStatus', async (_: unknown, name: string, status: 'active' | 'inactive') => {
     const meta = await projectService.setStatus(name, status)
     if (status === 'active') {
@@ -330,6 +345,11 @@ export function registerIpcHandlers(
     await remount(input)
     return r
   })
+  ipcMain.handle('step:addOutlet', async (_: unknown, input: Parameters<typeof stepService.addOutlet>[0]) => {
+    const r = await stepService.addOutlet(input)
+    await remount(input)
+    return r
+  })
   ipcMain.handle('step:update', async (_: unknown, input: Parameters<typeof stepService.updateStep>[0]) => {
     await stepService.updateStep(input)
     await remount(input)
@@ -344,6 +364,26 @@ export function registerIpcHandlers(
   ipcMain.handle('step:updateProcess', (_: unknown, input: Parameters<typeof stepService.updateWorkerProcess>[0]) =>
     stepService.updateWorkerProcess(input),
   )
+  ipcMain.handle('step:moveUp', async (_: unknown, input: { project: string; workflow: string; stepId: string }) => {
+    // Guard: no in-flight runs on the step being moved or the one directly above it
+    const steps = await projectService.listSteps(input.project, input.workflow)
+    const idx = steps.findIndex((s) => s.id === input.stepId)
+    if (idx > 0) {
+      const aboveId = steps[idx - 1].id
+      if (workerRunner.hasInFlightForStep(input.project, input.workflow, aboveId)) {
+        throw new Error(`Cannot reorder: a worker run is in flight on "${steps[idx - 1].name}"`)
+      }
+    }
+    if (workerRunner.hasInFlightForStep(input.project, input.workflow, input.stepId)) {
+      throw new Error('Cannot reorder: a worker run is in flight for this step')
+    }
+    // Unmount watchers first to release chokidar file handles (required on Windows
+    // before fs.rename — held handles cause EPERM on directory renames).
+    await orchestrator.unmountWorkflow(input.project, input.workflow)
+    const result = await stepService.moveStepUp(input)
+    await remount(input)
+    return result
+  })
 
   // ── Source steps ──────────────────────────────────────────────────────────
   ipcMain.handle('source:create', async (_: unknown, input: Parameters<typeof stepService.addSource>[0]) => {
@@ -378,14 +418,11 @@ export function registerIpcHandlers(
       nextRunAt: sourceScheduler.getNextRunAt(project, workflow, stepId),
     }
   })
-  ipcMain.handle('source:read-instructions', (_: unknown, project: string, workflow: string, stepId: string) =>
-    stepService.readSourceInstructions(project, workflow, stepId),
-  )
-  ipcMain.handle('source:update-instructions', (_: unknown, input: Parameters<typeof stepService.updateSourceInstructions>[0]) =>
-    stepService.updateSourceInstructions(input),
-  )
   ipcMain.handle('source:list-runs', (_: unknown, project: string, workflow: string, stepId: string) =>
     sourceRunner.listRuns(project, workflow, stepId),
+  )
+  ipcMain.handle('source:reset-dedup', (_: unknown, project: string, workflow: string, stepId: string) =>
+    sourceRunner.resetDedup(project, workflow, stepId),
   )
 
   // ── Worker runs ───────────────────────────────────────────────────────────
@@ -466,39 +503,6 @@ export function registerIpcHandlers(
     notificationService.getCurrentBadgeCount(),
   )
 
-  // ── Local model management ────────────────────────────────────────────────
-  ipcMain.handle('local-model:list', () => localModelService.listWithStatus())
-
-  ipcMain.handle('local-model:download', async (_: unknown, modelId: string) => {
-    const broadcast = (channel: string, payload: unknown) => {
-      for (const win of BrowserWindow.getAllWindows()) {
-        if (!win.isDestroyed()) win.webContents.send(channel, payload)
-      }
-    }
-    try {
-      await localModelService.downloadModel(modelId, (progress) => {
-        broadcast('local-model:progress', { ...progress, modelId })
-      })
-      broadcast('local-model:download-complete', { modelId })
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      broadcast('local-model:download-error', { modelId, error: message })
-      throw err
-    }
-  })
-
-  ipcMain.handle('local-model:cancel', (_: unknown, modelId: string) => {
-    localModelService.cancelDownload(modelId)
-  })
-
-  ipcMain.handle('local-model:delete', (_: unknown, modelId: string) =>
-    localModelService.deleteModel(modelId),
-  )
-
-  ipcMain.handle('local-model:recheck-adapter', () =>
-    adapterReadinessService.recheck('local-llm'),
-  )
-
   // ── Credentials ───────────────────────────────────────────────────────────
   ipcMain.handle('credential:list', async () => {
     const all = await credentialService.list()
@@ -521,4 +525,62 @@ export function registerIpcHandlers(
   ipcMain.handle('outlet:list-runs', (_: unknown, project: string, workflow: string, stepId: string) =>
     outletRunner.listOutletRuns(project, workflow, stepId),
   )
+
+  // ── Quick AI Console ──────────────────────────────────────────────────────
+
+  let activeAiSession: AISession | null = null
+
+  ipcMain.handle(IPC.ai.query, async (event, prompt: string) => {
+    // Kill any stale session from a previous request
+    if (activeAiSession) {
+      await activeAiSession.kill().catch(() => {})
+      activeAiSession = null
+    }
+
+    const adapterId = settingsStore.get('defaultAdapterId') ?? 'claude-code'
+    const adapter = adapterRegistry.get(adapterId) ?? adapterRegistry.get('claude-code')
+    if (!adapter) throw new Error('No AI adapter available')
+
+    const tmpDir = await fs.mkdtemp(join(os.tmpdir(), 'trayline-ai-'))
+    const promptFile = join(tmpDir, 'process.md')
+    await fs.writeFile(promptFile, prompt, 'utf-8')
+
+    try {
+      const session = await adapter.spawn({
+        processFile: promptFile,
+        cardData: {},
+        contextPacks: [],
+        workingDir: tmpDir,
+        timeout: 120_000,
+      })
+      activeAiSession = session
+
+      // Stream chunks to renderer while session runs
+      void (async () => {
+        try {
+          for await (const chunk of session.stdout) {
+            if (!event.sender.isDestroyed()) {
+              const clean = chunk.replace(ANSI_RE, '')
+              if (clean) event.sender.send(IPC.ai.onChunk, clean)
+            }
+          }
+        } catch { /* ignore */ }
+      })()
+
+      await session.result()
+    } finally {
+      activeAiSession = null
+      await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {})
+    }
+  })
+
+  ipcMain.on(IPC.ai.abort, async () => {
+    if (activeAiSession) {
+      await activeAiSession.kill().catch(() => {})
+      activeAiSession = null
+    }
+  })
+
+  // ── AI output log ─────────────────────────────────────────────────────────
+  ipcMain.handle(IPC.aiLog.getLines, () => aiOutputLog.getLines())
 }

@@ -102,7 +102,6 @@ async function scaffold(plan: WorkflowPlan, options: ScaffoldOptions = {}): Prom
   const workerTemplate = await readTemplate('worker.step.json')
   const sourceTemplate = await readTemplate('source.step.json')
   const outletTemplate = await readTemplate('outlet.step.json')
-  const sourceMdTemplate = await readTemplate('source.md')
   const processTemplate = await readTemplate('process.md')
   const workflowTemplate = await readTemplate('workflow.json')
 
@@ -136,21 +135,25 @@ async function scaffold(plan: WorkflowPlan, options: ScaffoldOptions = {}): Prom
       )
     } else if (step.kind === 'source') {
       hasSourceStep = true
+      const isImap = step.channel?.type === 'imap'
+      const dedup = step.dedup ?? (isImap ? { key: 'message_id', max_memory: 10000, first_run: 'skip_existing' as const } : undefined)
       const json = JSON.parse(fillTemplate(sourceTemplate, {
         id: step.id,
         name: step.name,
         description: step.description ?? '',
         schedule_cron: step.schedule_cron,
-        dedup_key: step.dedup.key,
-        first_run: step.dedup.first_run,
+        dedup_key: dedup?.key ?? 'message_id',
+        first_run: dedup?.first_run ?? 'skip_existing',
       }))
-      if (step.dedup.first_run_n != null) json.dedup.first_run_n = step.dedup.first_run_n
+      if (!isImap) {
+        // HTTP GET sources don't use dedup — remove it from the scaffolded step.json
+        delete json.dedup
+      } else {
+        if (dedup?.first_run_n != null) json.dedup.first_run_n = dedup.first_run_n
+      }
+      json.channel = step.channel ?? null
 
       await writeFileAtomic(join(stepPath, 'step.json'), JSON.stringify(json, null, 2))
-      await writeFileAtomic(
-        join(stepPath, 'source.md'),
-        step.source_md && step.source_md.trim().length > 0 ? step.source_md : sourceMdTemplate,
-      )
       await fs.mkdir(join(stepPath, 'cards', 'ready'), { recursive: true })
       await fs.mkdir(join(stepPath, 'cards', 'archived'), { recursive: true })
       await fs.mkdir(join(stepPath, 'runs'), { recursive: true })
@@ -158,7 +161,9 @@ async function scaffold(plan: WorkflowPlan, options: ScaffoldOptions = {}): Prom
         join(stepPath, 'state', 'counters.json'),
         JSON.stringify({ runs_total: 0, items_found: 0, items_new: 0, last_run_at: null }, null, 2),
       )
-      await writeFileAtomic(join(stepPath, 'state', 'seen-ids.json'), '[]')
+      if (isImap) {
+        await writeFileAtomic(join(stepPath, 'state', 'seen-ids.json'), '[]')
+      }
     } else if (step.kind === 'outlet') {
       const outletStep = step as PlanOutletStep
       const json = JSON.parse(fillTemplate(outletTemplate, {
@@ -168,6 +173,9 @@ async function scaffold(plan: WorkflowPlan, options: ScaffoldOptions = {}): Prom
       }))
       json.icon = defaultIcon(step)
       json.channel = outletStep.channel
+      if (outletStep.trigger) {
+        json.trigger = outletStep.trigger
+      }
 
       await writeFileAtomic(join(stepPath, 'step.json'), JSON.stringify(json, null, 2))
       await fs.mkdir(join(stepPath, 'runs'), { recursive: true })

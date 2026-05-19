@@ -6,6 +6,7 @@ import type {
   AuditRow,
   BootstrapInfo,
   ProjectMeta,
+  ProjectPermissions,
   ProjectStatus,
   WorkflowMeta,
   StepMeta,
@@ -19,8 +20,6 @@ import type {
   ImportSuccess,
   ProjectLiveStats,
   ProjectReadiness,
-  LocalModelEntry,
-  ModelDownloadProgress,
   SourceStepConfig,
   SourceState,
   SourceRunMeta,
@@ -81,6 +80,10 @@ const api = {
     delete: (name: string): Promise<void> => ipcRenderer.invoke(IPC.project.delete, name),
     setStatus: (name: string, status: ProjectStatus): Promise<ProjectMeta> =>
       ipcRenderer.invoke(IPC.project.setStatus, name, status),
+    updateMeta: (name: string, patch: { display_name?: string; description?: string }): Promise<ProjectMeta> =>
+      ipcRenderer.invoke(IPC.project.updateMeta, name, patch),
+    updatePermissions: (name: string, permissions: ProjectPermissions): Promise<ProjectMeta> =>
+      ipcRenderer.invoke(IPC.project.updatePermissions, name, permissions),
     getOrchestration: (name: string): Promise<{ name: string; mounted: boolean }> =>
       ipcRenderer.invoke(IPC.project.getOrchestration, name),
     onStatusChanged: (
@@ -178,6 +181,13 @@ const api = {
       dedup_key?: string
     }): Promise<SourceStepConfig & { id: string }> =>
       ipcRenderer.invoke(IPC.step.addSource, input),
+    addOutlet: (input: {
+      project: string
+      workflow: string
+      name: string
+      description?: string
+    }): Promise<OutletStepConfig & { id: string }> =>
+      ipcRenderer.invoke(IPC.step.addOutlet, input),
     readProcess: (project: string, workflow: string, stepId: string): Promise<string> =>
       ipcRenderer.invoke(IPC.step.readProcess, project, workflow, stepId),
     updateProcess: (input: {
@@ -186,6 +196,12 @@ const api = {
       stepId: string
       processMd: string
     }): Promise<void> => ipcRenderer.invoke(IPC.step.updateProcess, input),
+    moveUp: (input: {
+      project: string
+      workflow: string
+      stepId: string
+    }): Promise<{ newStepId: string; displacedStepId: string }> =>
+      ipcRenderer.invoke(IPC.step.moveUp, input),
   },
   worker: {
     triggerRun: (project: string, workflow: string, stepId: string, cardId: string): Promise<{ runId: string }> =>
@@ -255,12 +271,10 @@ const api = {
       ipcRenderer.invoke(IPC.source.resume, project, workflow, stepId),
     getState: (project: string, workflow: string, stepId: string): Promise<SourceState> =>
       ipcRenderer.invoke(IPC.source.getState, project, workflow, stepId),
-    readInstructions: (project: string, workflow: string, stepId: string): Promise<string> =>
-      ipcRenderer.invoke(IPC.source.readInstructions, project, workflow, stepId),
-    updateInstructions: (input: { project: string; workflow: string; stepId: string; content: string }): Promise<void> =>
-      ipcRenderer.invoke(IPC.source.updateInstructions, input),
     listRuns: (project: string, workflow: string, stepId: string): Promise<SourceRunMeta[]> =>
       ipcRenderer.invoke(IPC.source.listRuns, project, workflow, stepId),
+    resetDedup: (project: string, workflow: string, stepId: string): Promise<void> =>
+      ipcRenderer.invoke(IPC.source.resetDedup, project, workflow, stepId),
     onRunEvent: (handler: (event: SourceRunEvent) => void): (() => void) => {
       const listener = (_e: unknown, ev: SourceRunEvent) => handler(ev)
       ipcRenderer.on(IPC.source.onRunEvent, listener)
@@ -280,33 +294,6 @@ const api = {
       const listener = (_e: unknown, payload: { projectName: string; workflowName: string; cardId: string }) => handler(payload)
       ipcRenderer.on(IPC.notification.navigate, listener)
       return () => ipcRenderer.off(IPC.notification.navigate, listener)
-    },
-  },
-  localModel: {
-    list: (): Promise<LocalModelEntry[]> =>
-      ipcRenderer.invoke(IPC.localModel.list),
-    download: (modelId: string): Promise<void> =>
-      ipcRenderer.invoke(IPC.localModel.download, modelId),
-    cancel: (modelId: string): Promise<void> =>
-      ipcRenderer.invoke(IPC.localModel.cancel, modelId),
-    delete: (modelId: string): Promise<void> =>
-      ipcRenderer.invoke(IPC.localModel.delete, modelId),
-    recheckAdapter: (): Promise<AdapterReadiness> =>
-      ipcRenderer.invoke(IPC.localModel.recheckAdapter),
-    onProgress: (handler: (p: ModelDownloadProgress) => void): (() => void) => {
-      const listener = (_e: unknown, p: ModelDownloadProgress) => handler(p)
-      ipcRenderer.on(IPC.localModel.onProgress, listener)
-      return () => ipcRenderer.off(IPC.localModel.onProgress, listener)
-    },
-    onDownloadComplete: (handler: (payload: { modelId: string }) => void): (() => void) => {
-      const listener = (_e: unknown, payload: { modelId: string }) => handler(payload)
-      ipcRenderer.on(IPC.localModel.onDownloadComplete, listener)
-      return () => ipcRenderer.off(IPC.localModel.onDownloadComplete, listener)
-    },
-    onDownloadError: (handler: (payload: { modelId: string; error: string }) => void): (() => void) => {
-      const listener = (_e: unknown, payload: { modelId: string; error: string }) => handler(payload)
-      ipcRenderer.on(IPC.localModel.onDownloadError, listener)
-      return () => ipcRenderer.off(IPC.localModel.onDownloadError, listener)
     },
   },
   credential: {
@@ -339,6 +326,18 @@ const api = {
       ipcRenderer.on(IPC.outlet.onFailed, listener)
       return () => ipcRenderer.off(IPC.outlet.onFailed, listener)
     },
+  },
+  ai: {
+    query: (prompt: string): Promise<void> => ipcRenderer.invoke(IPC.ai.query, prompt),
+    abort: (): void => ipcRenderer.send(IPC.ai.abort),
+    onChunk: (handler: (chunk: string) => void): (() => void) => {
+      const listener = (_e: unknown, chunk: string) => handler(chunk)
+      ipcRenderer.on(IPC.ai.onChunk, listener)
+      return () => ipcRenderer.off(IPC.ai.onChunk, listener)
+    },
+  },
+  aiLog: {
+    getLines: (): Promise<string[]> => ipcRenderer.invoke(IPC.aiLog.getLines),
   },
   platform: process.platform as NodeJS.Platform,
 }

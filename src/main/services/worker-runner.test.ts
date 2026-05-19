@@ -3,7 +3,10 @@ import fs from 'node:fs/promises'
 import { join } from 'node:path'
 import { Paths } from './fs-service'
 import { auditDb } from './audit-db'
-import { setMockScript, getMockClearContextCalls, resetMockClearContextCalls } from '../ai-terminals/mock'
+import {
+  setMockScript, getMockClearContextCalls, resetMockClearContextCalls,
+  setPermissionPromptChunks, getSendInputCalls, resetPermissionState,
+} from '../ai-terminals/mock'
 import { workerRunner } from './worker-runner'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -218,6 +221,83 @@ describe('workerRunner', () => {
     const runDir = join(stepsDir, '02-worker', 'runs', runId)
     const resolvedExists = await pathExists(join(runDir, 'process.md'))
     expect(resolvedExists).toBe(false)
+  })
+
+  describe('permission auto-accept', () => {
+    beforeEach(() => {
+      resetPermissionState()
+      setMockScript({ output: { summary: 'ok' }, exitCode: 0 })
+    })
+
+    it('auto-accepts a single permission prompt and logs the audit event', async () => {
+      setPermissionPromptChunks(['Allow this tool? [y/N] '])
+      const project = `perm-ok-${Date.now()}`
+      const { stepsDir } = await buildWorkflow({ name: project, trayId: '01-src', workerId: '02-worker', nextTrayId: '03-next' })
+      await seedReadyCard(stepsDir, '01-src', 'card_p_001')
+
+      const { runId } = await workerRunner.triggerRun({
+        project, workflow: 'wf', stepId: '02-worker', cardId: 'card_p_001',
+      })
+
+      // Run succeeded (permission was auto-accepted)
+      const runDir = join(stepsDir, '02-worker', 'runs', runId)
+      const meta = JSON.parse(await fs.readFile(join(runDir, 'meta.json'), 'utf-8'))
+      expect(meta.status).toBe('succeeded')
+
+      // sendInput was called with 'y\n'
+      expect(getSendInputCalls()).toEqual(['y\n'])
+
+      // Audit event logged
+      const rows = auditDb.query({ project_id: project, event: 'ai_permission_auto_accepted' })
+      expect(rows.length).toBe(1)
+      const details = JSON.parse(rows[0].details_json)
+      expect(details.retry).toBe(1)
+    })
+
+    it('fails with max_permission_retries_exceeded after 4 prompts (max 3 retries)', async () => {
+      // 4 permission prompt chunks → 3 auto-accepts, 4th triggers abort
+      setPermissionPromptChunks([
+        'Allow? [y/N] ',
+        'Allow? [y/N] ',
+        'Allow? [y/N] ',
+        'Allow? [y/N] ',
+      ])
+      const project = `perm-max-${Date.now()}`
+      const { stepsDir } = await buildWorkflow({ name: project, trayId: '01-src', workerId: '02-worker', nextTrayId: '03-next' })
+      await seedReadyCard(stepsDir, '01-src', 'card_p_002')
+
+      await workerRunner.triggerRun({
+        project, workflow: 'wf', stepId: '02-worker', cardId: 'card_p_002',
+      })
+
+      // Run failed with max_permission_retries_exceeded
+      const runs = await workerRunner.listRuns(project, 'wf', '02-worker')
+      const meta = runs[0]
+      expect(meta.status).toBe('failed')
+      expect(meta.error).toBe('max_permission_retries_exceeded')
+
+      // Exactly 3 sendInput calls (retries 1–3); 4th triggered abort
+      expect(getSendInputCalls()).toHaveLength(3)
+      expect(getSendInputCalls().every(r => r === 'y\n')).toBe(true)
+
+      // Card moved to 99-errors
+      const errPending = await fs.readdir(join(stepsDir, '99-errors', 'cards', 'pending'))
+      expect(errPending).toContain('card_p_002.json')
+    })
+
+    it('does not log permission events when no prompt is present', async () => {
+      const project = `perm-none-${Date.now()}`
+      const { stepsDir } = await buildWorkflow({ name: project, trayId: '01-src', workerId: '02-worker', nextTrayId: '03-next' })
+      await seedReadyCard(stepsDir, '01-src', 'card_p_003')
+
+      await workerRunner.triggerRun({
+        project, workflow: 'wf', stepId: '02-worker', cardId: 'card_p_003',
+      })
+
+      expect(getSendInputCalls()).toHaveLength(0)
+      const rows = auditDb.query({ project_id: project, event: 'ai_permission_auto_accepted' })
+      expect(rows.length).toBe(0)
+    })
   })
 
   it('marks orphaned running runs as interrupted', async () => {

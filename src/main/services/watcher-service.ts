@@ -83,6 +83,7 @@ async function mountWorkflow(project: string, workflow: string): Promise<void> {
       })
       watchers.push(watcher)
     } else if (stepJson.kind === 'outlet') {
+      if ((stepJson.trigger?.mode ?? 'on_ready') !== 'on_ready') continue
       if (!prevId) continue
       const readyDir = join(projectService.paths.stepDir(project, workflow, prevId), 'cards', 'ready')
       if (!(await pathExists(readyDir))) {

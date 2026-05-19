@@ -1,6 +1,6 @@
 import { spawn as childSpawn } from 'child_process'
 import fs from 'fs/promises'
-import { join } from 'path'
+import { join, relative } from 'path'
 import * as pty from 'node-pty'
 import type {
   AITerminalAdapter,
@@ -12,19 +12,29 @@ import type {
   AdapterUsageSnapshot,
   AdapterReadiness,
 } from './adapter'
-import { renderProcessTemplate } from './prompt-utils'
+import { renderProcessTemplate, ANSI_RE } from './prompt-utils'
+import { Paths } from '../services/fs-service'
 
-// Strip ANSI escape sequences before trying to parse output as JSON. The PTY
-// preserves cursor moves, colour codes, AND OSC title sequences from the
-// underlying CLI, but the worker contract treats stdout as the agent's reply
-// text. Handles:
-//   - CSI:   ESC [ ... <final-byte>
-//   - OSC:   ESC ] ... (BEL | ESC \)        ← e.g. \x1B]0;claude\x07
-//   - other: ESC <single-char>
-// Also drops stray BEL (\x07) bytes left after partial parses, plus any C1
-// control characters that conpty/Windows occasionally injects.
-// eslint-disable-next-line no-control-regex
-const ANSI_RE = /\x1B\][^\x07\x1B]*(?:\x07|\x1B\\)|\x1B\[[0-?]*[ -/]*[@-~]|\x1B[@-Z\\-_]|[\x07\x00-\x06\x0E-\x1A\x1C-\x1F]/g
+async function savePromptToDisk(prompt: string, workingDir: string): Promise<void> {
+  try {
+    const rel = relative(Paths.projects, workingDir).replace(/\\/g, '/')
+    const parts = rel.split('/')
+    const project = parts[0]
+    if (!project || project.startsWith('..')) return
+
+    // parts: [project, workflows, <wf>, steps, <step>, runs, <runId>]
+    const runId = parts[parts.length - 1] ?? 'run'
+    const stepPart = parts.length >= 3 ? parts[parts.length - 3] : ''
+    const wfPart = parts.length >= 5 ? parts[parts.length - 5] : ''
+    const label = [wfPart, stepPart, runId].filter(Boolean).join('__')
+
+    const debugDir = join(Paths.projects, project, 'debug')
+    await fs.mkdir(debugDir, { recursive: true })
+    await fs.writeFile(join(debugDir, `${label}.log`), prompt, 'utf-8')
+  } catch {
+    // Debug logging — never let this fail a run
+  }
+}
 
 // Lightweight heuristic: trailing prompt characters with no following newline
 // suggest the CLI is waiting on input. Conservative on purpose — Claude in
@@ -106,10 +116,13 @@ class ClaudePtySession implements AISession {
           const cleaned = this.terminalLog.replace(ANSI_RE, '').trim()
           let output: object | string | null = cleaned || null
           if (typeof output === 'string') {
-            // Try to find the last balanced JSON object/array in the output.
             const jsonGuess = extractTrailingJson(cleaned)
             if (jsonGuess) {
-              try { output = JSON.parse(jsonGuess) } catch { /* keep as string */ }
+              try {
+                output = JSON.parse(jsonGuess)
+              } catch {
+                try { output = JSON.parse(sanitizeJsonStrings(jsonGuess)) } catch { /* keep as string */ }
+              }
             }
           }
           resolve({
@@ -218,11 +231,16 @@ class ClaudePtySession implements AISession {
 /**
  * Pull a JSON value out of a text blob even when it's wrapped in markdown
  * code fences or sandwiched between prose. Returns the slice between the
- * first `{`/`[` and the matching last `}`/`]`, so trailing ```` ``` ```` /
+ * first `{`/`[` and the matching last `}`/`]`, so trailing ``` /
  * commentary / banner text doesn't break JSON.parse downstream.
  */
 function extractTrailingJson(s: string): string | null {
-  const trimmed = s.trim()
+  // Strip markdown code fences (```json ... ``` or ``` ... ```) before searching.
+  const stripped = s.trim()
+    .replace(/^```(?:json|JSON)?\s*\n?/m, '')
+    .replace(/\n?```\s*$/m, '')
+    .trim()
+  const trimmed = stripped || s.trim()
   if (!trimmed) return null
   const firstObj = trimmed.indexOf('{')
   const firstArr = trimmed.indexOf('[')
@@ -236,6 +254,60 @@ function extractTrailingJson(s: string): string | null {
   const end = trimmed.lastIndexOf(closeChar)
   if (end <= start) return null
   return trimmed.slice(start, end + 1)
+}
+
+/**
+ * Escape raw control characters that appear inside JSON string values.
+ * The AI sometimes emits literal newlines inside strings, producing invalid
+ * JSON that JSON.parse rejects outright.
+ */
+function sanitizeJsonStrings(raw: string): string {
+  let out = ''
+  let inString = false
+  let i = 0
+  while (i < raw.length) {
+    const ch = raw[i]
+    if (inString) {
+      if (ch === '\\') {
+        out += ch; i++
+        if (i < raw.length) out += raw[i]
+      } else if (ch === '"') {
+        inString = false; out += ch
+      } else if (ch === '\n') { out += '\\n'
+      } else if (ch === '\r') { out += '\\r'
+      } else if (ch === '\t') { out += '\\t'
+      } else { out += ch }
+    } else {
+      if (ch === '"') inString = true
+      out += ch
+    }
+    i++
+  }
+  return out
+}
+
+/**
+ * Returns true when the accumulated PTY output contains a Claude Code
+ * permission-request prompt waiting for user confirmation. Strips ANSI
+ * escape sequences before pattern matching.
+ */
+export function detectPermissionPrompt(rawText: string): boolean {
+  const text = rawText.replace(ANSI_RE, '')
+  // Classic [y/N] / [Y/n] yes-or-no prompts
+  if (/\[y\/N\]|\[Y\/n\]/i.test(text)) return true
+  // Claude Code TUI numbered-choice box: "1. Yes … 2. No"
+  if (/1\.\s*Yes[^\n]*2\.\s*No/i.test(text)) return true
+  return false
+}
+
+/**
+ * Returns the appropriate terminal input to confirm the detected permission
+ * prompt: "y\n" for classic yes/no, "1\n" for numbered-choice TUI.
+ */
+export function permissionPromptResponse(rawText: string): string {
+  const text = rawText.replace(ANSI_RE, '')
+  if (/\[y\/N\]|\[Y\/n\]/i.test(text)) return 'y\n'
+  return '1\n'
 }
 
 // Claude Code's published models. We keep this list curated here because the
@@ -329,6 +401,23 @@ export const claudeCodeAdapter: AITerminalAdapter = {
     const processBody = await fs.readFile(opts.processFile, 'utf-8')
 
     const promptParts: string[] = []
+
+    // Permissions preamble — emitted before fetched data so the AI knows what
+    // tools and credentials are available for this run.
+    if (opts.permissions) {
+      const p = opts.permissions
+      const lines: string[] = []
+      if (p.notes) lines.push(p.notes)
+      if (p.credential_ids.length > 0) {
+        lines.push(`Available credentials: ${p.credential_ids.join(', ')}`)
+      }
+      if (p.allow_network) lines.push('Network access is allowed (curl/fetch).')
+      if (p.allow_shell) lines.push('Shell commands are allowed.')
+      if (lines.length > 0) {
+        promptParts.push(`## Permissions\n\n${lines.join('\n')}`)
+      }
+    }
+
     if (opts.prefetchedData) {
       promptParts.push(`## Fetched data\n\n${opts.prefetchedData}`)
     }
@@ -345,6 +434,21 @@ export const claudeCodeAdapter: AITerminalAdapter = {
     const promptFile = join(opts.workingDir, 'prompt.txt')
     await fs.writeFile(promptFile, prompt, 'utf-8')
 
+    if (process.env.SAVE_PROMPTS_ON_DISK === 'true') {
+      void savePromptToDisk(prompt, opts.workingDir)
+    }
+
+    // Build --allowedTools flags from project permissions
+    const allowedToolParts: string[] = []
+    if (opts.permissions?.allow_shell) {
+      allowedToolParts.push('Bash')
+    } else if (opts.permissions?.allow_network) {
+      allowedToolParts.push('Bash(curl:*)', 'Bash(wget:*)', 'WebFetch')
+    }
+    const allowedToolsFlag = allowedToolParts.length > 0
+      ? ` --allowedTools "${allowedToolParts.join(',')}"`
+      : ''
+
     const isWin = process.platform === 'win32'
     const shell = isWin ? 'cmd.exe' : '/bin/sh'
     // On Windows, pass the command line as a single raw string to bypass
@@ -354,8 +458,8 @@ export const claudeCodeAdapter: AITerminalAdapter = {
     // "filename/directory/volume label syntax is incorrect". `/s /c "<cmd>"`
     // tells cmd to use everything between the outer quotes verbatim.
     const shellArgs: string | string[] = isWin
-      ? `/s /c "claude -p < "${promptFile}""`
-      : ['-c', `claude -p < "${promptFile}"`]
+      ? `/s /c "claude -p${allowedToolsFlag} < "${promptFile}""`
+      : ['-c', `claude -p${allowedToolsFlag} < "${promptFile}"`]
 
     // Use a very wide PTY so the CLI does not soft-wrap its stdout. ConPTY on
     // Windows emits awkward last-column autowrap artifacts that split JSON
