@@ -14,7 +14,7 @@
     "build": "npm run typecheck && vite build",
     "preview": "vite preview",
     "rebuild:electron": "electron-builder install-app-deps",
-    "rebuild:node": "npm rebuild better-sqlite3",
+    "rebuild:node": "cd node_modules/better-sqlite3 && npx node-gyp rebuild --release",
     "postinstall": "electron-builder install-app-deps",
     "pretest": "npm run rebuild:node",
     "posttest": "npm run rebuild:electron",
