@@ -347,6 +347,84 @@ async function insertSourceIntoWorkflow(project: string, workflow: string, sourc
   await fsService.writeJsonAtomic(wfPath, { ...wf, step_ids: [sourceId, ...existing] })
 }
 
+interface MoveStepUpInput {
+  project: string
+  workflow: string
+  stepId: string
+}
+
+/**
+ * Moves a tray step one position up in the workflow by swapping its folder
+ * prefix with the step immediately above it. Both step.json id fields and
+ * workflow.json step_ids are updated atomically. Callers must remount the
+ * workflow watchers + scheduler after this returns.
+ *
+ * Guards:
+ *  - target step must be kind === 'tray'
+ *  - step above must not be kind === 'source' or 'outlet'
+ *  - '99-errors' is never a valid target
+ */
+async function moveStepUp(input: MoveStepUpInput): Promise<{ newStepId: string; displacedStepId: string }> {
+  const { project, workflow, stepId } = input
+
+  if (stepId === '99-errors') throw new Error('Cannot reorder the errors tray')
+
+  const stepsRoot = join(projectService.paths.workflowDir(project, workflow), 'steps')
+  const entries = await fs.readdir(stepsRoot, { withFileTypes: true })
+  const dirs = entries.filter((e) => e.isDirectory()).map((e) => e.name).sort()
+
+  const idx = dirs.indexOf(stepId)
+  if (idx <= 0) return { newStepId: stepId, displacedStepId: stepId } // already first — no-op
+
+  const aboveId = dirs[idx - 1]
+
+  // Kind guards
+  const targetJson = await fsService.readJson<Record<string, unknown>>(join(stepsRoot, stepId, 'step.json'))
+  if (targetJson.kind !== 'tray') throw new Error('Only tray steps can be reordered with move-up')
+
+  const aboveJson = await fsService.readJson<Record<string, unknown>>(join(stepsRoot, aboveId, 'step.json'))
+  if (aboveJson.kind === 'source' || aboveJson.kind === 'outlet') {
+    throw new Error(`Cannot move past a ${aboveJson.kind as string} step`)
+  }
+
+  // Parse "XX-suffix" prefix format
+  function parseParts(id: string): { prefix: string; suffix: string } {
+    const m = id.match(/^(\d{2,3})-(.+)$/)
+    if (!m) throw new Error(`Unrecognised step id format: ${id}`)
+    return { prefix: m[1], suffix: m[2] }
+  }
+
+  const { prefix: prefixA, suffix: suffixA } = parseParts(stepId)  // moving up
+  const { prefix: prefixB, suffix: suffixB } = parseParts(aboveId) // displaced down
+
+  const newStepId  = `${prefixB}-${suffixA}` // stepId gets above's prefix
+  const newAboveId = `${prefixA}-${suffixB}` // above gets stepId's prefix
+  // Unique tmp name that can't clash with any real step
+  const tmpDir = join(stepsRoot, `zzztmp-${Date.now()}`)
+
+  // Triple-rename: stepId → tmp, above → newAbove, tmp → newStep
+  await fs.rename(join(stepsRoot, stepId),  tmpDir)
+  await fs.rename(join(stepsRoot, aboveId), join(stepsRoot, newAboveId))
+  await fs.rename(tmpDir,                   join(stepsRoot, newStepId))
+
+  // Update id field inside each step.json
+  const stepJson  = await fsService.readJson<Record<string, unknown>>(join(stepsRoot, newStepId,  'step.json'))
+  const aboveStep = await fsService.readJson<Record<string, unknown>>(join(stepsRoot, newAboveId, 'step.json'))
+  await fsService.writeJsonAtomic(join(stepsRoot, newStepId,  'step.json'), { ...stepJson,  id: newStepId  })
+  await fsService.writeJsonAtomic(join(stepsRoot, newAboveId, 'step.json'), { ...aboveStep, id: newAboveId })
+
+  // Update workflow.json step_ids: replace old IDs then swap their positions
+  const wfPath = join(projectService.paths.workflowDir(project, workflow), 'workflow.json')
+  const wf = await fsService.readJson<{ id: string; name: string; display_name: string; step_ids: string[] }>(wfPath)
+  const next = wf.step_ids.map((id) => id === stepId ? newStepId : id === aboveId ? newAboveId : id)
+  const posA = next.indexOf(newStepId)
+  const posB = next.indexOf(newAboveId)
+  if (posA !== -1 && posB !== -1) [next[posA], next[posB]] = [next[posB], next[posA]]
+  await fsService.writeJsonAtomic(wfPath, { ...wf, step_ids: next })
+
+  return { newStepId, displacedStepId: newAboveId }
+}
+
 export const stepService = {
   addTray,
   addWorker,
@@ -355,4 +433,5 @@ export const stepService = {
   updateWorkerProcess,
   readWorkerProcess,
   deleteStep,
+  moveStepUp,
 }

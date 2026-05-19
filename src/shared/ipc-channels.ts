@@ -69,6 +69,7 @@ export const IPC = {
     delete: 'step:delete',
     readProcess: 'step:readProcess',
     updateProcess: 'step:updateProcess',
+    moveUp: 'step:moveUp',
   },
   worker: {
     triggerRun: 'worker:triggerRun',

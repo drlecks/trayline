@@ -189,6 +189,12 @@ const api = {
       stepId: string
       processMd: string
     }): Promise<void> => ipcRenderer.invoke(IPC.step.updateProcess, input),
+    moveUp: (input: {
+      project: string
+      workflow: string
+      stepId: string
+    }): Promise<{ newStepId: string; displacedStepId: string }> =>
+      ipcRenderer.invoke(IPC.step.moveUp, input),
   },
   worker: {
     triggerRun: (project: string, workflow: string, stepId: string, cardId: string): Promise<{ runId: string }> =>

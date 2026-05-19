@@ -357,6 +357,23 @@ export function registerIpcHandlers(
   ipcMain.handle('step:updateProcess', (_: unknown, input: Parameters<typeof stepService.updateWorkerProcess>[0]) =>
     stepService.updateWorkerProcess(input),
   )
+  ipcMain.handle('step:moveUp', async (_: unknown, input: { project: string; workflow: string; stepId: string }) => {
+    // Guard: no in-flight runs on the step being moved or the one directly above it
+    const steps = await projectService.listSteps(input.project, input.workflow)
+    const idx = steps.findIndex((s) => s.id === input.stepId)
+    if (idx > 0) {
+      const aboveId = steps[idx - 1].id
+      if (workerRunner.hasInFlightForStep(input.project, input.workflow, aboveId)) {
+        throw new Error(`Cannot reorder: a worker run is in flight on "${steps[idx - 1].name}"`)
+      }
+    }
+    if (workerRunner.hasInFlightForStep(input.project, input.workflow, input.stepId)) {
+      throw new Error('Cannot reorder: a worker run is in flight for this step')
+    }
+    const result = await stepService.moveStepUp(input)
+    await remount(input)
+    return result
+  })
 
   // ── Source steps ──────────────────────────────────────────────────────────
   ipcMain.handle('source:create', async (_: unknown, input: Parameters<typeof stepService.addSource>[0]) => {
