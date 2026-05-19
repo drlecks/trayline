@@ -276,6 +276,7 @@ function SourceConfigTab({
       await window.trayline.step.update({ project, workflow, stepId: step.id, patch })
       setConfig((c) => ({ ...c, ...patch }))
       await onStateChange()
+      void refreshSteps()
     } finally {
       setSaving(false)
     }

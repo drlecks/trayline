@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Send } from 'lucide-react'
+import { Send, RotateCcw } from 'lucide-react'
 import { useProjectStore } from '@/stores/project-store'
 import type { StepMeta, OutletStepConfig, OutletRunMeta, OutletRunEvent, CredentialSummary } from '../../../shared/types'
 
@@ -12,6 +12,7 @@ interface Props {
 export default function OutletDetailPanel({ step }: Props) {
   const active = useProjectStore((s) => s.active)
   const workflow = useProjectStore((s) => s.workflow)
+  const steps = useProjectStore((s) => s.steps)
   const [tab, setTab] = useState<Tab>('config')
   const [config, setConfig] = useState<OutletStepConfig | null>(null)
   const [runs, setRuns] = useState<OutletRunMeta[]>([])
@@ -48,11 +49,14 @@ export default function OutletDetailPanel({ step }: Props) {
     return () => { offC(); offF() }
   }, [step.id, loadRuns])
 
+  const refreshSteps = useProjectStore((s) => s.refreshSteps)
+
   async function save(patch: Record<string, unknown>) {
     if (!active || !workflow) return
     try {
       await window.trayline.step.update({ project: active.name, workflow: workflow.name, stepId: step.id, patch })
       setConfig((c) => c ? { ...c, ...patch } as OutletStepConfig : c)
+      void refreshSteps()
     } catch { /* ignore */ }
   }
 
@@ -61,6 +65,15 @@ export default function OutletDetailPanel({ step }: Props) {
     const next = { ...config.channel, ...channelPatch } as OutletStepConfig['channel']
     setConfig({ ...config, channel: next })
     void save({ channel: next })
+  }
+
+  async function retryRun(run: OutletRunMeta) {
+    if (!active || !workflow || !config) return
+    const idx = steps.findIndex((s) => s.id === step.id)
+    const prevStep = idx > 0 ? steps[idx - 1] : null
+    if (!prevStep) return
+    await window.trayline.outlet.runNow(active.name, workflow.name, step.id, run.card_id, prevStep.id, config)
+    void loadRuns()
   }
 
   const channelType = config?.channel?.type ?? 'smtp'
@@ -204,10 +217,21 @@ export default function OutletDetailPanel({ step }: Props) {
                       <td className="py-2 font-mono text-neutral-600 dark:text-neutral-400 truncate max-w-[120px]">{r.card_id}</td>
                       <td className="py-2 text-neutral-500">{r.channel_type}</td>
                       <td className="py-2">
-                        <span className={`px-1.5 py-0.5 rounded-full font-medium ${r.status === 'completed' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' : r.status === 'failed' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' : 'bg-neutral-100 text-neutral-600'}`}>
-                          {r.status}
-                        </span>
-                        {r.error && <span className="ml-2 text-red-500 truncate max-w-[200px] inline-block align-bottom" title={r.error}>{r.error}</span>}
+                        <div className="flex items-center gap-2">
+                          <span className={`px-1.5 py-0.5 rounded-full font-medium ${r.status === 'completed' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' : r.status === 'failed' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' : 'bg-neutral-100 text-neutral-600'}`}>
+                            {r.status}
+                          </span>
+                          {r.status === 'failed' && (
+                            <button
+                              title="Retry"
+                              onClick={() => void retryRun(r)}
+                              className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+                            >
+                              <RotateCcw size={10} strokeWidth={2} /> Retry
+                            </button>
+                          )}
+                          {r.error && <span className="text-red-500 truncate max-w-[180px] inline-block align-bottom" title={r.error}>{r.error}</span>}
+                        </div>
                       </td>
                     </tr>
                   ))}
