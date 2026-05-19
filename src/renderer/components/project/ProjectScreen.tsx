@@ -1,15 +1,19 @@
 import { useEffect, useState } from 'react'
-import { Inbox, Cpu, AlertTriangle, RefreshCw, AlertCircle, Plus, FileText, ChevronDown, ChevronRight, Rss, Layers } from 'lucide-react'
+import { Inbox, Cpu, AlertTriangle, RefreshCw, Plus, FileText, Settings, ChevronDown, ChevronRight, Rss, Layers, Send, ArrowUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useProjectStore } from '@/stores/project-store'
 import AddTrayDialog from './AddTrayDialog'
 import AddWorkerDialog from './AddWorkerDialog'
 import AddSourceDialog from './AddSourceDialog'
+import AddOutletDialog from './AddOutletDialog'
 import AddStepDialog from './AddStepDialog'
 import TrayDetailPanel from './TrayDetailPanel'
 import WorkerDetailPanel from './WorkerDetailPanel'
 import SourceDetailPanel from './SourceDetailPanel'
+import OutletDetailPanel from './OutletDetailPanel'
 import ContextPackEditor from './ContextPackEditor'
+import ProjectSettingsPanel from './ProjectSettingsPanel'
+import FirstProjectGuide from '../onboarding/FirstProjectGuide'
 import type { StepMeta, SourceRunEvent } from '../../../shared/types'
 import type { CardCounts } from '../../../shared/card'
 import type { WorkerRunEvent, WorkerRunStatus } from '../../../shared/worker-run'
@@ -20,9 +24,8 @@ export default function ProjectScreen() {
   const steps = useProjectStore((s) => s.steps)
   const selectedStepId = useProjectStore((s) => s.selectedStepId)
   const setSelectedStepId = useProjectStore((s) => s.setSelectedStepId)
-  const unconfiguredMcps = useProjectStore((s) => s.unconfiguredMcps)
-  const missingSkillsByStep = useProjectStore((s) => s.missingSkillsByStep)
-  const unconfiguredMcpsByStep = useProjectStore((s) => s.unconfiguredMcpsByStep)
+  const justCreatedProject = useProjectStore((s) => s.justCreatedProject)
+  const setJustCreatedProject = useProjectStore((s) => s.setJustCreatedProject)
   const setScreen = useProjectStore((s) => s.setScreen)
   const setRegenerateOf = useProjectStore((s) => s.setRegenerateOf)
   const refreshSteps = useProjectStore((s) => s.refreshSteps)
@@ -31,7 +34,9 @@ export default function ProjectScreen() {
   const [addTrayOpen, setAddTrayOpen] = useState(false)
   const [addWorkerOpen, setAddWorkerOpen] = useState(false)
   const [addSourceOpen, setAddSourceOpen] = useState(false)
+  const [addOutletOpen, setAddOutletOpen] = useState(false)
   const [showContextEditor, setShowContextEditor] = useState(false)
+  const [showProjectSettings, setShowProjectSettings] = useState(false)
   const [errorsExpanded, setErrorsExpanded] = useState(false)
 
   // Refresh steps whenever the active project changes
@@ -43,23 +48,19 @@ export default function ProjectScreen() {
 
   const selectedStep = steps.find((s) => s.id === selectedStepId) ?? null
 
+  async function handleMoveUp(stepId: string) {
+    if (!active || !workflow) return
+    try {
+      const { newStepId } = await window.trayline.step.moveUp({ project: active.name, workflow: workflow.name, stepId })
+      await refreshSteps()
+      setSelectedStepId(newStepId)
+    } catch {
+      // service guards reject invalid moves silently; nothing to surface here
+    }
+  }
+
   return (
     <div className="flex flex-col w-full h-full">
-      {unconfiguredMcps.length > 0 && (
-        <div className="
-          flex items-center gap-2 px-6 py-2.5 shrink-0
-          bg-amber-50 dark:bg-amber-950/30
-          border-b border-amber-200/60 dark:border-amber-900/40
-          text-xs text-amber-900 dark:text-amber-300
-        ">
-          <AlertCircle size={13} strokeWidth={1.75} />
-          <span>
-            Here's a starting point. To run it, set up{' '}
-            <strong>{unconfiguredMcps.join(', ')}</strong> — click any worker with a ⚠ to start.
-          </span>
-        </div>
-      )}
-
       <div className="flex flex-1 min-h-0">
         {/* Left rail */}
         <aside data-tour="left-rail" className="w-72 shrink-0 border-r border-black/[0.06] dark:border-white/[0.06] overflow-y-auto py-5 px-3 flex flex-col">
@@ -71,16 +72,42 @@ export default function ProjectScreen() {
           </div>
 
           <div className="flex flex-col gap-2 flex-1">
-            {steps.filter((s) => s.id !== '99-errors').map((step) => (
-              <StepCard
-                key={step.id}
-                step={step}
-                selected={step.id === selectedStepId && !showContextEditor}
-                missingSkills={missingSkillsByStep[step.id] ?? []}
-                unconfiguredMcps={unconfiguredMcpsByStep[step.id] ?? []}
-                onClick={() => { setSelectedStepId(step.id); setShowContextEditor(false) }}
-              />
-            ))}
+            {steps.filter((s) => s.id !== '99-errors').map((step, idx, arr) => {
+              // Up-arrow: trays and workers, not if already first, not if the step above is a source or outlet
+              const canMoveUp = (step.kind === 'tray' || step.kind === 'worker')
+                && idx > 0
+                && arr[idx - 1].kind !== 'source'
+                && arr[idx - 1].kind !== 'outlet'
+              return (
+                <div key={step.id} className="relative group/rail-item">
+                  <StepCard
+                    step={step}
+                    selected={step.id === selectedStepId && !showContextEditor}
+                    onClick={() => { setSelectedStepId(step.id); setShowContextEditor(false); setShowProjectSettings(false) }}
+                  />
+                  {canMoveUp && (
+                    <button
+                      type="button"
+                      title="Move up"
+                      onClick={(e) => { e.stopPropagation(); void handleMoveUp(step.id) }}
+                      className="
+                        absolute top-1.5 right-1.5 z-10
+                        w-5 h-5 flex items-center justify-center
+                        rounded border border-neutral-200 dark:border-neutral-700
+                        bg-white/90 dark:bg-neutral-900/90 shadow-sm
+                        text-neutral-500 dark:text-neutral-400
+                        hover:bg-neutral-100 dark:hover:bg-neutral-800
+                        hover:text-neutral-800 dark:hover:text-neutral-200
+                        opacity-0 group-hover/rail-item:opacity-100
+                        transition-opacity
+                      "
+                    >
+                      <ArrowUp size={10} strokeWidth={2.5} />
+                    </button>
+                  )}
+                </div>
+              )
+            })}
 
             <Button
               variant="ghost"
@@ -99,7 +126,7 @@ export default function ProjectScreen() {
                 expanded={errorsExpanded}
                 selected={selectedStepId === '99-errors' && !showContextEditor}
                 onToggle={() => setErrorsExpanded((v) => !v)}
-                onSelect={() => { setSelectedStepId('99-errors'); setShowContextEditor(false) }}
+                onSelect={() => { setSelectedStepId('99-errors'); setShowContextEditor(false); setShowProjectSettings(false) }}
               />
             )}
           </div>
@@ -107,7 +134,20 @@ export default function ProjectScreen() {
           <div className="mt-auto pt-4 border-t border-black/[0.06] dark:border-white/[0.06] px-2 flex flex-col gap-2">
             <button
               type="button"
-              onClick={() => { setShowContextEditor(true); setSelectedStepId(null) }}
+              onClick={() => { setShowProjectSettings(true); setShowContextEditor(false); setSelectedStepId(null) }}
+              className={`
+                flex items-center gap-2 w-full px-2 py-1.5 rounded text-[13px] text-left transition-colors
+                ${showProjectSettings
+                  ? 'bg-neutral-100 dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200'
+                  : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-neutral-50 dark:hover:bg-neutral-900'}
+              `}
+            >
+              <Settings size={14} strokeWidth={1.75} />
+              Project settings
+            </button>
+            <button
+              type="button"
+              onClick={() => { setShowContextEditor(true); setShowProjectSettings(false); setSelectedStepId(null) }}
               className={`
                 flex items-center gap-2 w-full px-2 py-1.5 rounded text-[13px] text-left transition-colors
                 ${showContextEditor
@@ -132,19 +172,34 @@ export default function ProjectScreen() {
 
         {/* Right canvas */}
         <section data-tour="detail-panel" className="flex-1 min-w-0 overflow-hidden">
-          {showContextEditor && active ? (
+          {showProjectSettings ? (
+            <ProjectSettingsPanel />
+          ) : showContextEditor && active ? (
             <ContextPackEditor project={active.name} />
           ) : selectedStep
             ? (selectedStep.kind === 'worker'
                 ? <WorkerDetailPanel step={selectedStep} />
                 : selectedStep.kind === 'source'
                   ? <SourceDetailPanel step={selectedStep} />
-                  : <TrayDetailPanel step={selectedStep} />)
-            : (
-              <div className="h-full flex items-center justify-center text-sm text-neutral-400 dark:text-neutral-600">
-                Select a step on the left to see details
-              </div>
-            )}
+                  : selectedStep.kind === 'outlet'
+                    ? <OutletDetailPanel step={selectedStep} />
+                    : <TrayDetailPanel step={selectedStep} />)
+            : active?.name === justCreatedProject
+              ? (
+                <FirstProjectGuide
+                  hasSourceStep={steps.some((s) => s.kind === 'source')}
+                  sourceStepId={steps.find((s) => s.kind === 'source')?.id}
+                  firstTrayId={steps.find((s) => s.kind === 'tray')?.id}
+                  onSelectStep={(id) => { setSelectedStepId(id); setShowContextEditor(false); setShowProjectSettings(false) }}
+                  onDismiss={() => setJustCreatedProject(null)}
+                  onTour={() => window.dispatchEvent(new Event('trayline:open-tour'))}
+                />
+              )
+              : (
+                <div className="h-full flex items-center justify-center text-sm text-neutral-400 dark:text-neutral-600">
+                  Select a step on the left to see details
+                </div>
+              )}
         </section>
       </div>
 
@@ -155,12 +210,14 @@ export default function ProjectScreen() {
           setPickOpen(false)
           if (kind === 'tray') setAddTrayOpen(true)
           else if (kind === 'worker') setAddWorkerOpen(true)
+          else if (kind === 'outlet') setAddOutletOpen(true)
           else setAddSourceOpen(true)
         }}
       />
       <AddTrayDialog open={addTrayOpen} onOpenChange={setAddTrayOpen} />
       <AddWorkerDialog open={addWorkerOpen} onOpenChange={setAddWorkerOpen} />
       <AddSourceDialog open={addSourceOpen} onOpenChange={setAddSourceOpen} />
+      <AddOutletDialog open={addOutletOpen} onOpenChange={setAddOutletOpen} />
     </div>
   )
 }
@@ -267,8 +324,6 @@ function ErrorTraySection({
           <StepCard
             step={step}
             selected={selected}
-            missingSkills={[]}
-            unconfiguredMcps={[]}
             onClick={onSelect}
           />
         </div>
@@ -277,20 +332,39 @@ function ErrorTraySection({
   )
 }
 
-function StepCard({ step, selected, missingSkills, unconfiguredMcps, onClick }: { step: StepMeta; selected: boolean; missingSkills: string[]; unconfiguredMcps: string[]; onClick: () => void }) {
+function stepConfigWarning(step: StepMeta): string | null {
+  if (step.kind === 'source') {
+    const ch = (step.raw as { channel?: { type?: string; credential_id?: string } }).channel
+    if (ch?.type === 'imap' && !ch.credential_id) return 'IMAP credential not configured'
+  }
+  if (step.kind === 'outlet') {
+    const ch = (step.raw as { channel?: { type?: string; credential_id?: string; to?: string } }).channel
+    if (ch?.type === 'smtp') {
+      if (!ch.credential_id) return 'SMTP credential not configured'
+      if (!ch.to) return '"To" address not configured'
+    }
+  }
+  return null
+}
+
+function StepCard({ step, selected, onClick }: { step: StepMeta; selected: boolean; onClick: () => void }) {
   const isBatch = step.kind === 'worker' && !!(step.raw as { batch_mode?: boolean }).batch_mode
   const Icon = step.kind === 'source'
     ? Rss
-    : step.kind === 'tray'
-      ? (step.id === '99-errors' ? AlertTriangle : Inbox)
-      : isBatch ? Layers : Cpu
+    : step.kind === 'outlet'
+      ? Send
+      : step.kind === 'tray'
+        ? (step.id === '99-errors' ? AlertTriangle : Inbox)
+        : isBatch ? Layers : Cpu
   const isError = step.id === '99-errors'
+  const configWarning = stepConfigWarning(step)
 
   const [counts, setCounts] = useState<CardCounts | null>(null)
   const [workerStatus, setWorkerStatus] = useState<WorkerRunStatus | 'idle'>('idle')
   const [lastBatchCount, setLastBatchCount] = useState<number | null>(null)
   const [sourceRunning, setSourceRunning] = useState(false)
   const [sourceCardCount, setSourceCardCount] = useState<number | null>(null)
+  const [outletStatus, setOutletStatus] = useState<'idle' | 'running' | 'done' | 'failed'>('idle')
   const active = useProjectStore((s) => s.active)
   const workflow = useProjectStore((s) => s.workflow)
 
@@ -322,6 +396,25 @@ function StepCard({ step, selected, missingSkills, unconfiguredMcps, onClick }: 
       }
     })
     return () => { cancelled = true; off() }
+  }, [active, workflow, step.id, step.kind])
+
+  // Outlet: listen for run events
+  useEffect(() => {
+    if (!active || !workflow || step.kind !== 'outlet') return
+    const offStarted = window.trayline.outlet.onStarted((ev) => {
+      if (ev.stepId !== step.id) return
+      setOutletStatus('running')
+    })
+    const offCompleted = window.trayline.outlet.onCompleted((ev) => {
+      if (ev.stepId !== step.id) return
+      setOutletStatus('done')
+      setTimeout(() => setOutletStatus('idle'), 30000)
+    })
+    const offFailed = window.trayline.outlet.onFailed((ev) => {
+      if (ev.stepId !== step.id) return
+      setOutletStatus('failed')
+    })
+    return () => { offStarted(); offCompleted(); offFailed() }
   }, [active, workflow, step.id, step.kind])
 
   // Source: poll card count + listen for run events
@@ -360,6 +453,14 @@ function StepCard({ step, selected, missingSkills, unconfiguredMcps, onClick }: 
         ring: 'ring-worker/40',
         label: 'Worker',
       }
+    : step.kind === 'outlet'
+    ? {
+        strip: 'bg-teal-500',
+        stripText: 'text-white',
+        tint: 'bg-teal-50/50 dark:bg-teal-950/15',
+        ring: 'ring-teal-400/40',
+        label: 'Outlet',
+      }
     : step.kind === 'source'
     ? {
         strip: 'bg-emerald-500',
@@ -380,7 +481,7 @@ function StepCard({ step, selected, missingSkills, unconfiguredMcps, onClick }: 
     <button
       onClick={onClick}
       className={`
-        group relative overflow-hidden rounded-lg border text-left
+        group relative overflow-hidden rounded-lg border text-left w-full
         transition-all duration-150
         ${isError
           ? 'border-dashed border-neutral-200 dark:border-neutral-800 opacity-80 hover:opacity-100'
@@ -420,6 +521,21 @@ function StepCard({ step, selected, missingSkills, unconfiguredMcps, onClick }: 
               {step.kind === 'source' && !sourceRunning && sourceCardCount !== null && sourceCardCount > 0 && (
                 <span>· {sourceCardCount} ready</span>
               )}
+              {step.kind === 'outlet' && outletStatus === 'running' && (
+                <span className="text-[10px] font-medium px-1.5 py-0 rounded-full bg-teal-100 text-teal-800 dark:bg-teal-950/60 dark:text-teal-300 animate-pulse">
+                  Sending…
+                </span>
+              )}
+              {step.kind === 'outlet' && outletStatus === 'done' && (
+                <span className="text-[10px] font-medium px-1.5 py-0 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+                  Sent
+                </span>
+              )}
+              {step.kind === 'outlet' && outletStatus === 'failed' && (
+                <span className="text-[10px] font-medium px-1.5 py-0 rounded-full bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300">
+                  Failed
+                </span>
+              )}
             </div>
           </div>
           {counts && counts.pending > 0 && step.kind === 'tray' && !isError && (
@@ -427,19 +543,20 @@ function StepCard({ step, selected, missingSkills, unconfiguredMcps, onClick }: 
               {counts.pending}
             </span>
           )}
-          {step.kind === 'worker' && missingSkills.length > 0 && (
-            <span title="Missing skill" className="shrink-0">
-              <AlertTriangle size={13} strokeWidth={2} className="text-amber-500" />
-            </span>
-          )}
-          {step.kind === 'worker' && unconfiguredMcps.length > 0 && (
-            <span title={`${unconfiguredMcps.join(', ')} needs setup`} className="shrink-0">
-              <AlertTriangle size={13} strokeWidth={2} className="text-amber-500" />
-            </span>
-          )}
           {step.kind === 'worker' && <WorkerStatusBubble status={workerStatus} />}
           {step.kind === 'source' && sourceRunning && (
             <span className="shrink-0 inline-block w-[11px] h-[11px] mt-1 rounded-full bg-emerald-500 animate-pulse" />
+          )}
+          {step.kind === 'outlet' && outletStatus === 'running' && (
+            <span className="shrink-0 inline-block w-[11px] h-[11px] mt-1 rounded-full bg-teal-500 animate-pulse" />
+          )}
+          {step.kind === 'outlet' && outletStatus === 'failed' && (
+            <span className="shrink-0 inline-block w-[11px] h-[11px] mt-1 rounded-full bg-red-500" />
+          )}
+          {configWarning && (
+            <span title={configWarning} className="shrink-0 flex items-center justify-center w-[18px] h-[18px] mt-0.5 rounded-full bg-amber-100 dark:bg-amber-950/60">
+              <AlertTriangle size={11} className="text-amber-600 dark:text-amber-400" strokeWidth={2.5} />
+            </span>
           )}
         </div>
       </div>

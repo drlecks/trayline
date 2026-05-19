@@ -1,14 +1,15 @@
-import { useEffect, useState, useMemo, useCallback } from 'react'
-import { Rss, Play, Pause, RotateCcw, AlertTriangle, Trash2 } from 'lucide-react'
+import { useEffect, useState, useCallback } from 'react'
+import { Rss, Play, Pause, RotateCcw, AlertTriangle, Trash2, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { CopyButton } from '@/components/ui/copy-button'
 import SchedulePicker from '@/components/shared/SchedulePicker'
 import { useProjectStore } from '@/stores/project-store'
 import { useProviderGuard } from '@/stores/provider-guard-store'
-import type { StepMeta, SourceState, SourceRunMeta, SourceRunEvent, SourceStepConfig, InstalledMcpRow, McpHealthState } from '../../../shared/types'
+import type { StepMeta, SourceState, SourceRunMeta, SourceRunEvent, SourceStepConfig, CredentialSummary } from '../../../shared/types'
 
-type Tab = 'source' | 'config' | 'runs'
+type Tab = 'config' | 'runs'
 
 interface SourceDetailPanelProps {
   step: StepMeta
@@ -17,9 +18,11 @@ interface SourceDetailPanelProps {
 export default function SourceDetailPanel({ step }: SourceDetailPanelProps) {
   const active = useProjectStore((s) => s.active)
   const workflow = useProjectStore((s) => s.workflow)
-  const [tab, setTab] = useState<Tab>('source')
+  const setScreen = useProjectStore((s) => s.setScreen)
+  const [tab, setTab] = useState<Tab>('config')
   const [sourceState, setSourceState] = useState<SourceState | null>(null)
   const [runNowBusy, setRunNowBusy] = useState(false)
+  const [runTriggerError, setRunTriggerError] = useState<string | null>(null)
 
   const loadState = useCallback(async () => {
     if (!active || !workflow) return
@@ -57,10 +60,13 @@ export default function SourceDetailPanel({ step }: SourceDetailPanelProps) {
   async function handleRunNow() {
     if (!active || !workflow) return
     setRunNowBusy(true)
+    setRunTriggerError(null)
     try {
       const ok = await useProviderGuard.getState().ensureReady()
       if (!ok) return
       await window.trayline.source.runNow(active.name, workflow.name, step.id)
+    } catch (err) {
+      setRunTriggerError(err instanceof Error ? err.message : String(err))
     } finally {
       setRunNowBusy(false)
     }
@@ -117,16 +123,36 @@ export default function SourceDetailPanel({ step }: SourceDetailPanelProps) {
         {sourceState && (
           <div className="mt-3 flex gap-6 text-[12px] text-neutral-500 dark:text-neutral-400">
             <span><strong className="text-neutral-700 dark:text-neutral-300">{sourceState.counters.runs_total}</strong> runs</span>
-            <span><strong className="text-neutral-700 dark:text-neutral-300">{sourceState.counters.items_new}</strong> items created</span>
-            <span><strong className="text-neutral-700 dark:text-neutral-300">{sourceState.seenCount}</strong> seen</span>
+            <span><strong className="text-neutral-700 dark:text-neutral-300">{sourceState.counters.items_new}</strong> cards created</span>
+            {(step.raw as { channel?: { type?: string } }).channel?.type === 'imap' && (
+              <span><strong className="text-neutral-700 dark:text-neutral-300">{sourceState.seenCount}</strong> seen</span>
+            )}
             {sourceState.nextRunAt && !sourceState.paused && (
               <NextRunCountdown nextRunAt={sourceState.nextRunAt} />
             )}
           </div>
         )}
 
+        {runTriggerError && (
+          <div className="
+            flex items-start gap-2 mt-3 px-3 py-2.5 rounded-md
+            border border-red-200 dark:border-red-800/60
+            bg-red-50 dark:bg-red-950/30
+            text-xs text-red-800 dark:text-red-300
+          ">
+            <XCircle size={13} strokeWidth={1.75} className="mt-0.5 shrink-0 text-red-500" />
+            <span className="flex-1">{runTriggerError}</span>
+            <button
+              className="shrink-0 text-red-600 dark:text-red-400 hover:underline font-medium"
+              onClick={() => setScreen('settings')}
+            >
+              Go to Settings
+            </button>
+          </div>
+        )}
+
         <div className="flex gap-1 mt-4 -mb-5">
-          {(['source', 'config', 'runs'] as Tab[]).map((t) => (
+          {(['config', 'runs'] as Tab[]).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -144,9 +170,6 @@ export default function SourceDetailPanel({ step }: SourceDetailPanelProps) {
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        {tab === 'source' && active && workflow && (
-          <SourceInstructionsTab project={active.name} workflow={workflow.name} stepId={step.id} />
-        )}
         {tab === 'config' && active && workflow && (
           <SourceConfigTab project={active.name} workflow={workflow.name} step={step} onStateChange={loadState} />
         )}
@@ -211,98 +234,7 @@ function NextRunCountdown({ nextRunAt }: { nextRunAt: string }) {
   return <span>next in <strong className="text-neutral-700 dark:text-neutral-300">{display}</strong></span>
 }
 
-// ── Instructions tab ──────────────────────────────────────────────────────────
-
-function SourceInstructionsTab({ project, workflow, stepId }: { project: string; workflow: string; stepId: string }) {
-  const [body, setBody] = useState('')
-  const [saved, setSaved] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [loaded, setLoaded] = useState(false)
-
-  useEffect(() => {
-    let cancelled = false
-    void (async () => {
-      const md = await window.trayline.source.readInstructions(project, workflow, stepId)
-      if (cancelled) return
-      setBody(md)
-      setSaved(md)
-      setLoaded(true)
-    })()
-    return () => { cancelled = true }
-  }, [project, workflow, stepId])
-
-  const dirty = body !== saved
-
-  async function save() {
-    setBusy(true)
-    try {
-      await window.trayline.source.updateInstructions({ project, workflow, stepId, content: body })
-      setSaved(body)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  if (!loaded) return <div className="p-6 text-xs text-neutral-500">Loading…</div>
-
-  const isEmpty = body.trim().length === 0
-
-  return (
-    <div className="p-6 flex flex-col gap-3 h-full">
-      <div className="text-[11px] uppercase tracking-wider text-neutral-400">Source instructions (source.md)</div>
-      {isEmpty && (
-        <div className="flex items-start gap-2 rounded-md bg-neutral-50 dark:bg-neutral-900/40 border border-neutral-200 dark:border-neutral-800 px-4 py-3 text-xs text-neutral-500">
-          <AlertTriangle size={14} strokeWidth={1.75} className="shrink-0 mt-0.5" />
-          Write instructions for what the AI should fetch. Specify the JSON output format and which field is the unique ID.
-        </div>
-      )}
-      <div className="grid grid-cols-2 gap-3 flex-1 min-h-0">
-        <textarea
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-          className="
-            w-full h-full rounded-md border border-neutral-200 dark:border-neutral-800
-            bg-white dark:bg-neutral-950 px-3 py-2 text-xs font-mono
-            focus:outline-none focus:ring-2 focus:ring-neutral-300 dark:focus:ring-neutral-700
-            resize-none
-          "
-        />
-        <div className="
-          w-full h-full overflow-auto rounded-md border border-neutral-200 dark:border-neutral-800
-          bg-neutral-50 dark:bg-neutral-900/40 px-4 py-3 text-xs leading-relaxed
-        ">
-          <MarkdownPreview source={body} />
-        </div>
-      </div>
-      <div className="flex justify-end gap-2">
-        <Button size="sm" variant="ghost" disabled={!dirty || busy} onClick={() => setBody(saved)}>
-          Reset
-        </Button>
-        <Button size="sm" disabled={!dirty || busy} onClick={save}>
-          {busy ? 'Saving…' : 'Save'}
-        </Button>
-      </div>
-    </div>
-  )
-}
-
 // ── Config tab ────────────────────────────────────────────────────────────────
-
-const MCP_HEALTH_LABEL: Record<McpHealthState, string> = {
-  ready: 'Ready',
-  unconfigured: 'Needs setup',
-  error: 'Error',
-  unknown: 'Not checked',
-  disabled: 'Disabled',
-}
-
-const MCP_HEALTH_CLASS: Record<McpHealthState, string> = {
-  ready: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300',
-  unconfigured: 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300',
-  error: 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300',
-  unknown: 'bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400',
-  disabled: 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-500',
-}
 
 function SourceConfigTab({
   project, workflow, step, onStateChange,
@@ -318,13 +250,9 @@ function SourceConfigTab({
   const [config, setConfig] = useState<Partial<SourceStepConfig>>({})
   const [loaded, setLoaded] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [resetting, setResetting] = useState(false)
 
-  // MCPs
-  const [installedMcps, setInstalledMcps] = useState<InstalledMcpRow[]>([])
-  const [selectedMcps, setSelectedMcps] = useState<string[]>([])
-
-  // Adapters
-  const [installedAdapters, setInstalledAdapters] = useState<{ id: string; displayName: string }[]>([])
+  const [credentials, setCredentials] = useState<CredentialSummary[]>([])
 
   useEffect(() => {
     let cancelled = false
@@ -335,11 +263,9 @@ function SourceConfigTab({
       if (found) {
         const raw = found.raw as Partial<SourceStepConfig>
         setConfig(raw)
-        setSelectedMcps(raw.mcps ?? [])
       }
       setLoaded(true)
-      void window.trayline.mcp.listInstalled().then(setInstalledMcps)
-      void window.trayline.adapters.list().then(setInstalledAdapters)
+      void window.trayline.credential.list().then(setCredentials)
     })()
     return () => { cancelled = true }
   }, [project, workflow, step.id])
@@ -350,22 +276,10 @@ function SourceConfigTab({
       await window.trayline.step.update({ project, workflow, stepId: step.id, patch })
       setConfig((c) => ({ ...c, ...patch }))
       await onStateChange()
+      void refreshSteps()
     } finally {
       setSaving(false)
     }
-  }
-
-  async function addMcp(id: string) {
-    if (!id || selectedMcps.includes(id)) return
-    const next = [...selectedMcps, id]
-    setSelectedMcps(next)
-    await save({ mcps: next })
-  }
-
-  async function removeMcp(id: string) {
-    const next = selectedMcps.filter((m) => m !== id)
-    setSelectedMcps(next)
-    await save({ mcps: next })
   }
 
   async function handleDelete() {
@@ -381,18 +295,166 @@ function SourceConfigTab({
     }
   }
 
-  const mcpsToAdd = installedMcps.filter((m) => !selectedMcps.includes(m.manifest.id))
-  const selectedMcpEntries = selectedMcps.map((id) => {
-    const row = installedMcps.find((m) => m.manifest.id === id)
-    return row
-      ? { found: true as const, id, row }
-      : { found: false as const, id }
-  })
-
   if (!loaded) return <div className="p-6 text-xs text-neutral-500">Loading…</div>
+
+  const channelType = config.channel?.type ?? null
 
   return (
     <div className="p-6 flex flex-col gap-6 max-w-xl">
+
+      {/* Channel — required, shown prominently first */}
+      <div className={`flex flex-col gap-3 rounded-md border p-4 ${
+        !channelType
+          ? 'border-amber-300 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-950/20'
+          : 'border-neutral-200 dark:border-neutral-800'
+      }`}>
+        <div className="flex items-center gap-2">
+          <div className="text-[11px] uppercase tracking-wider text-neutral-400">Data channel</div>
+          {!channelType && (
+            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300">
+              Required
+            </span>
+          )}
+        </div>
+
+        {!channelType && (
+          <div className="flex items-start gap-2 text-xs text-amber-800 dark:text-amber-300">
+            <AlertTriangle size={13} strokeWidth={1.75} className="shrink-0 mt-0.5" />
+            Choose a channel so this source knows where to fetch data from.
+          </div>
+        )}
+
+        <div className="flex flex-col gap-1.5">
+          <Label className="text-xs">Channel type</Label>
+          <select
+            value={channelType ?? ''}
+            onChange={(e) => {
+              const t = e.target.value
+              if (!t) {
+                void save({ channel: null })
+              } else if (t === 'http_get') {
+                void save({ channel: { type: 'http_get', credential_id: '', url_path: '' } })
+              } else if (t === 'imap') {
+                void save({ channel: { type: 'imap', credential_id: '', folder: 'INBOX', unseen_only: true, max_messages: 50 } })
+              }
+            }}
+            className="h-8 w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-2 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-300 dark:focus:ring-neutral-700"
+          >
+            <option value="">— Select channel —</option>
+            <option value="http_get">HTTP GET</option>
+            <option value="imap">IMAP inbox</option>
+          </select>
+        </div>
+
+        {config.channel?.type === 'http_get' && (
+          <>
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs">HTTP credential</Label>
+              <select
+                value={config.channel.credential_id}
+                onChange={(e) => void save({ channel: { ...config.channel, credential_id: e.target.value } })}
+                className="h-8 w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-2 text-sm"
+              >
+                <option value="">— Select credential —</option>
+                {credentials.filter((c) => c.type === 'http').map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+              {credentials.filter((c) => c.type === 'http').length === 0 && (
+                <p className="text-xs text-neutral-400">
+                  No HTTP credentials —{' '}
+                  <button className="text-emerald-600 hover:underline" onClick={() => setScreen('credentials')}>add one</button>
+                </p>
+              )}
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs">URL path</Label>
+              <Input
+                defaultValue={config.channel.url_path}
+                onBlur={(e) => void save({ channel: { ...config.channel, url_path: e.target.value } })}
+                className="h-8 text-sm font-mono"
+                placeholder="/endpoint?since={{last_run_at}}"
+              />
+              <p className="text-xs text-neutral-500">Appended to the credential&apos;s base URL. Use <code className="font-mono">{'{{last_run_at}}'}</code> for incremental fetches. The full response text becomes <code className="font-mono">card.data.body</code> in the next tray.</p>
+            </div>
+          </>
+        )}
+
+        {config.channel?.type === 'imap' && (
+          <>
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs">IMAP credential</Label>
+              <select
+                value={config.channel.credential_id}
+                onChange={(e) => void save({ channel: { ...config.channel, credential_id: e.target.value } })}
+                className="h-8 w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-2 text-sm"
+              >
+                <option value="">— Select credential —</option>
+                {credentials.filter((c) => c.type === 'imap').map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+              {credentials.filter((c) => c.type === 'imap').length === 0 && (
+                <p className="text-xs text-neutral-400">
+                  No IMAP credentials —{' '}
+                  <button className="text-emerald-600 hover:underline" onClick={() => setScreen('credentials')}>add one</button>
+                </p>
+              )}
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="flex flex-col gap-1.5 flex-1">
+                <Label className="text-xs">Folder</Label>
+                <Input
+                  defaultValue={config.channel.folder ?? 'INBOX'}
+                  onBlur={(e) => void save({ channel: { ...config.channel, folder: e.target.value } })}
+                  className="h-8 text-sm"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5 w-28">
+                <Label className="text-xs">Max messages</Label>
+                <Input
+                  type="number"
+                  defaultValue={config.channel.max_messages ?? 50}
+                  onBlur={(e) => {
+                    const n = parseInt(e.target.value, 10)
+                    if (!isNaN(n) && n > 0) void save({ channel: { ...config.channel, max_messages: n } })
+                  }}
+                  className="h-8 text-sm"
+                />
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="unseen-only"
+                checked={config.channel.unseen_only ?? true}
+                onChange={(e) => void save({ channel: { ...config.channel, unseen_only: e.target.checked } })}
+                className="rounded"
+              />
+              <label htmlFor="unseen-only" className="text-xs">Unread messages only</label>
+            </div>
+            <div className="flex gap-3">
+              <div className="flex flex-col gap-1.5 flex-1">
+                <Label className="text-xs">Subject contains (optional)</Label>
+                <Input
+                  defaultValue={config.channel.subject_contains ?? ''}
+                  onBlur={(e) => void save({ channel: { ...config.channel, subject_contains: e.target.value } })}
+                  className="h-8 text-sm"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5 flex-1">
+                <Label className="text-xs">From contains (optional)</Label>
+                <Input
+                  defaultValue={config.channel.from_contains ?? ''}
+                  onBlur={(e) => void save({ channel: { ...config.channel, from_contains: e.target.value } })}
+                  className="h-8 text-sm"
+                />
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+
       <div className="flex flex-col gap-1.5">
         <Label className="text-xs">Name</Label>
         <Input
@@ -417,167 +479,100 @@ function SourceConfigTab({
         onChange={(cron) => void save({ schedule_cron: cron })}
       />
 
-      <div className="flex flex-col gap-3 rounded-md border border-neutral-200 dark:border-neutral-800 p-4">
-        <div className="text-[11px] uppercase tracking-wider text-neutral-400">Deduplication</div>
+      {channelType === 'imap' && (
+        <div className="flex flex-col gap-3 rounded-md border border-neutral-200 dark:border-neutral-800 p-4">
+          <div className="text-[11px] uppercase tracking-wider text-neutral-400">Deduplication</div>
 
-        <div className="flex flex-col gap-1.5">
-          <Label className="text-xs">Dedup key</Label>
-          <Input
-            defaultValue={config.dedup?.key ?? 'id'}
-            onBlur={(e) => { void save({ dedup: { ...config.dedup, key: e.target.value } }) }}
-            className="h-8 text-sm font-mono"
-            placeholder="id"
-          />
-          <p className="text-xs text-neutral-500">JSON field used to identify unique items</p>
-        </div>
-
-        <div className="flex flex-col gap-1.5">
-          <Label className="text-xs">Max memory</Label>
-          <Input
-            type="number"
-            defaultValue={config.dedup?.max_memory ?? 10000}
-            onBlur={(e) => {
-              const n = parseInt(e.target.value, 10)
-              if (!isNaN(n) && n > 0) void save({ dedup: { ...config.dedup, max_memory: n } })
-            }}
-            className="h-8 text-sm"
-          />
-          <p className="text-xs text-neutral-500">Maximum number of item IDs to remember</p>
-        </div>
-
-        <div className="flex flex-col gap-1.5">
-          <Label className="text-xs">First run policy</Label>
-          <select
-            value={config.dedup?.first_run ?? 'skip_existing'}
-            onChange={(e) => void save({ dedup: { ...config.dedup, first_run: e.target.value } })}
-            className="h-8 w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-2 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-300 dark:focus:ring-neutral-700"
-          >
-            <option value="skip_existing">Skip existing (no cards on first run)</option>
-            <option value="process_all">Process all (create cards for everything)</option>
-            <option value="process_last_n">Process last N items</option>
-          </select>
-        </div>
-
-        {config.dedup?.first_run === 'process_last_n' && (
           <div className="flex flex-col gap-1.5">
-            <Label className="text-xs">N (last N items on first run)</Label>
+            <Label className="text-xs">Dedup key</Label>
+            <Input
+              defaultValue={config.dedup?.key ?? 'message_id'}
+              onBlur={(e) => { void save({ dedup: { ...config.dedup, key: e.target.value } }) }}
+              className="h-8 text-sm font-mono"
+              placeholder="message_id"
+            />
+            <p className="text-xs text-neutral-500">JSON field used to identify unique emails</p>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-xs">Max memory</Label>
             <Input
               type="number"
-              defaultValue={config.dedup?.first_run_n ?? 10}
+              defaultValue={config.dedup?.max_memory ?? 10000}
               onBlur={(e) => {
                 const n = parseInt(e.target.value, 10)
-                if (!isNaN(n) && n > 0) void save({ dedup: { ...config.dedup, first_run_n: n } })
+                if (!isNaN(n) && n > 0) void save({ dedup: { ...config.dedup, max_memory: n } })
               }}
               className="h-8 text-sm"
             />
+            <p className="text-xs text-neutral-500">Maximum number of message IDs to remember</p>
           </div>
-        )}
-      </div>
 
-      <div className="flex flex-col gap-3 rounded-md border border-neutral-200 dark:border-neutral-800 p-4">
-        <div className="text-[11px] uppercase tracking-wider text-neutral-400">Execution</div>
-
-        {installedAdapters.length > 0 && (
           <div className="flex flex-col gap-1.5">
-            <Label className="text-xs">Adapter</Label>
+            <Label className="text-xs">First run policy</Label>
             <select
-              value={config.execution?.adapter ?? 'claude-code'}
-              onChange={(e) => void save({ execution: { ...config.execution, adapter: e.target.value } })}
+              value={config.dedup?.first_run ?? 'skip_existing'}
+              onChange={(e) => void save({ dedup: { ...config.dedup, first_run: e.target.value } })}
               className="h-8 w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-2 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-300 dark:focus:ring-neutral-700"
             >
-              {installedAdapters.map((a) => (
-                <option key={a.id} value={a.id}>{a.displayName}</option>
-              ))}
+              <option value="skip_existing">Skip existing (no cards on first run)</option>
+              <option value="process_all">Process all (create cards for everything)</option>
+              <option value="process_last_n">Process last N emails</option>
             </select>
           </div>
-        )}
 
-        <div className="flex flex-col gap-1.5">
-          <Label className="text-xs">Timeout (seconds)</Label>
-          <Input
-            type="number"
-            defaultValue={config.execution?.timeout_seconds ?? 60}
-            onBlur={(e) => {
-              const n = parseInt(e.target.value, 10)
-              if (!isNaN(n) && n > 0) void save({ execution: { ...config.execution, timeout_seconds: n } })
-            }}
-            className="h-8 text-sm"
-          />
+          {config.dedup?.first_run === 'process_last_n' && (
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs">N (last N emails on first run)</Label>
+              <Input
+                type="number"
+                defaultValue={config.dedup?.first_run_n ?? 10}
+                onBlur={(e) => {
+                  const n = parseInt(e.target.value, 10)
+                  if (!isNaN(n) && n > 0) void save({ dedup: { ...config.dedup, first_run_n: n } })
+                }}
+                className="h-8 text-sm"
+              />
+            </div>
+          )}
+
+          <div className="flex items-center justify-between pt-1">
+            <p className="text-xs text-neutral-500">Reset seen-IDs so the next run processes all emails as new.</p>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={resetting || saving}
+              onClick={async () => {
+                setResetting(true)
+                try {
+                  await window.trayline.source.resetDedup(project, workflow, step.id)
+                  await onStateChange()
+                } finally {
+                  setResetting(false)
+                }
+              }}
+              className="shrink-0 ml-3 text-amber-600 border-amber-300 hover:bg-amber-50 dark:text-amber-400 dark:border-amber-700 dark:hover:bg-amber-950/40"
+            >
+              <RotateCcw size={13} strokeWidth={1.75} />
+              {resetting ? 'Resetting…' : 'Reset dedup'}
+            </Button>
+          </div>
         </div>
-      </div>
+      )}
 
-      <div className="flex flex-col gap-3 rounded-md border border-neutral-200 dark:border-neutral-800 p-4">
-        <div className="text-[11px] uppercase tracking-wider text-neutral-400">MCPs</div>
-        <p className="text-xs text-neutral-500 -mt-1">Tools the AI can use while fetching data.</p>
-
-        {mcpsToAdd.length > 0 && (
-          <select
-            defaultValue=""
-            onChange={(e) => { void addMcp(e.target.value); e.target.value = '' }}
-            className="rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-3 py-1.5 text-xs"
-          >
-            <option value="" disabled>Add an MCP…</option>
-            {mcpsToAdd.map((m) => (
-              <option key={m.manifest.id} value={m.manifest.id}>{m.manifest.name}</option>
-            ))}
-          </select>
-        )}
-
-        {selectedMcpEntries.length > 0 ? (
-          <ul className="flex flex-col gap-1">
-            {selectedMcpEntries.map((entry) => (
-              <li
-                key={entry.id}
-                className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md border bg-white dark:bg-neutral-950 ${
-                  entry.found
-                    ? 'border-neutral-200 dark:border-neutral-800'
-                    : 'border-amber-300 dark:border-amber-700/60 bg-amber-50/50 dark:bg-amber-950/20'
-                }`}
-              >
-                {!entry.found && (
-                  <AlertTriangle size={13} strokeWidth={1.75} className="shrink-0 text-amber-500 dark:text-amber-400" />
-                )}
-                <div className="flex-1 min-w-0 flex items-baseline gap-1.5 overflow-hidden">
-                  {entry.found ? (
-                    <>
-                      <span className="text-xs font-medium shrink-0">{entry.row.manifest.name}</span>
-                      <span className={`text-[10px] font-medium px-1.5 py-0 rounded-full shrink-0 ${MCP_HEALTH_CLASS[entry.row.healthState]}`}>
-                        {MCP_HEALTH_LABEL[entry.row.healthState]}
-                      </span>
-                      {entry.row.healthState !== 'ready' && (
-                        <button
-                          type="button"
-                          onClick={() => setScreen('mcps')}
-                          className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline shrink-0"
-                        >
-                          Configure →
-                        </button>
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      <span className="text-xs font-medium font-mono">{entry.id}</span>
-                      <span className="text-xs text-amber-600 dark:text-amber-400 ml-1.5">Not installed</span>
-                    </>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => void removeMcp(entry.id)}
-                  className="shrink-0 text-neutral-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
-                >
-                  <Trash2 size={13} strokeWidth={1.75} />
-                </button>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          installedMcps.length === 0 && mcpsToAdd.length === 0 && (
-            <p className="text-xs text-neutral-400 dark:text-neutral-600 italic">
-              No MCPs installed — visit the MCPs screen to add integrations.
-            </p>
-          )
-        )}
+      <div className="flex flex-col gap-1.5">
+        <Label className="text-xs">Instructions (optional)</Label>
+        <textarea
+          defaultValue={config.prompt ?? ''}
+          onBlur={(e) => {
+            const v = e.target.value.trim()
+            if (v !== (config.prompt ?? '').trim()) void save({ prompt: v || null })
+          }}
+          rows={4}
+          className="w-full text-sm rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-neutral-300 dark:focus:ring-neutral-700 resize-none font-normal"
+          placeholder="e.g. Extract the title, author, and date from the fetched HTML. Return JSON with keys: title, author, published_at."
+        />
+        <p className="text-xs text-neutral-500">If set, the AI will parse the raw fetched data using these instructions before creating the card.</p>
       </div>
 
       <div className="flex items-center justify-between pt-2">
@@ -671,9 +666,38 @@ function SourceRunsTab({ project, workflow, stepId }: { project: string; workflo
                   <tr key={`${run.run_id}-detail`} className="bg-neutral-50 dark:bg-neutral-900/40">
                     <td colSpan={5} className="px-3 py-2">
                       {run.error && (
-                        <div className="flex items-start gap-2 text-red-600 dark:text-red-400">
-                          <AlertTriangle size={12} className="shrink-0 mt-0.5" />
-                          <span>{run.error}</span>
+                        <div className="flex flex-col gap-2">
+                          <div className="flex items-start gap-2">
+                            <AlertTriangle size={12} className="shrink-0 mt-0.5 text-red-500" />
+                            <pre className="flex-1 min-w-0 text-[11px] font-mono text-red-700 dark:text-red-400 whitespace-pre-wrap break-all leading-relaxed">
+                              {run.error}
+                            </pre>
+                            <CopyButton
+                              value={() => {
+                                if (!run.http_error) return run.error!
+                                const { url, status, statusText, responseBody } = run.http_error
+                                return `${run.error}\n\nURL: ${url}\nStatus: ${status} ${statusText}\n\n--- Response body ---\n${responseBody}`
+                              }}
+                              title="Copy error details"
+                              className="shrink-0 text-red-600 dark:text-red-400"
+                            />
+                          </div>
+                          {run.http_error && (
+                            <div className="ml-4 flex flex-col gap-1.5 text-[11px]">
+                              <div className="font-mono text-neutral-500 dark:text-neutral-400 break-all">
+                                <span className="text-neutral-400 dark:text-neutral-500 select-none">URL  </span>
+                                {run.http_error.url}
+                              </div>
+                              <details>
+                                <summary className="cursor-pointer text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 select-none">
+                                  Response body ({run.http_error.status} {run.http_error.statusText})
+                                </summary>
+                                <pre className="mt-1 font-mono text-neutral-600 dark:text-neutral-400 whitespace-pre-wrap break-all leading-relaxed max-h-48 overflow-y-auto border-t border-neutral-200 dark:border-neutral-700 pt-1">
+                                  {run.http_error.responseBody || '(empty)'}
+                                </pre>
+                              </details>
+                            </div>
+                          )}
                         </div>
                       )}
                       {!run.error && (
@@ -691,34 +715,3 @@ function SourceRunsTab({ project, workflow, stepId }: { project: string; workflo
   )
 }
 
-// ── Markdown preview (shared with WorkerDetailPanel) ──────────────────────────
-
-function MarkdownPreview({ source }: { source: string }) {
-  const blocks = useMemo(() => renderMarkdown(source), [source])
-  return <div className="prose-sm dark:prose-invert max-w-none">{blocks}</div>
-}
-
-function renderMarkdown(src: string): React.ReactNode[] {
-  const out: React.ReactNode[] = []
-  const lines = src.split('\n')
-  let i = 0
-  let key = 0
-  while (i < lines.length) {
-    const line = lines[i]
-    if (line.startsWith('```')) {
-      const buf: string[] = []
-      i++
-      while (i < lines.length && !lines[i].startsWith('```')) { buf.push(lines[i]); i++ }
-      i++
-      out.push(<pre key={key++} className="bg-neutral-100 dark:bg-neutral-800 rounded p-2 my-2 overflow-auto text-[11px]"><code>{buf.join('\n')}</code></pre>)
-      continue
-    }
-    if (line.startsWith('### ')) { out.push(<h3 key={key++} className="text-sm font-semibold mt-3 mb-1">{line.slice(4)}</h3>); i++; continue }
-    if (line.startsWith('## ')) { out.push(<h2 key={key++} className="text-sm font-bold mt-4 mb-1">{line.slice(3)}</h2>); i++; continue }
-    if (line.startsWith('# ')) { out.push(<h1 key={key++} className="text-base font-bold mt-4 mb-2">{line.slice(2)}</h1>); i++; continue }
-    if (line.trim() === '') { out.push(<br key={key++} />); i++; continue }
-    out.push(<p key={key++} className="mb-1 leading-snug">{line}</p>)
-    i++
-  }
-  return out
-}

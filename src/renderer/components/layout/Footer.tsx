@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
+import { ScrollText } from 'lucide-react'
 import { useProjectStore } from '@/stores/project-store'
+import AILogViewer from './AILogViewer'
 import type { AdapterUsageSnapshot, Settings } from '../../../shared/types'
 
 interface AdapterMeta { id: string; displayName: string }
@@ -18,6 +20,7 @@ export default function Footer() {
   const [effortLabel, setEffortLabel] = useState<string | null>(null)
   const [usage, setUsage] = useState<AdapterUsageSnapshot | null>(null)
   const [appVersion, setAppVersion] = useState<string | null>(null)
+  const [logOpen, setLogOpen] = useState(false)
 
   // Load adapter list and app version once.
   useEffect(() => {
@@ -92,32 +95,42 @@ export default function Footer() {
   }
 
   return (
-    <footer
-      className="
-        flex items-center justify-between shrink-0
-        h-7 px-4
-        border-t border-black/[0.06] dark:border-white/[0.06]
-        bg-[var(--bg)]
-        text-[11px] text-neutral-500 dark:text-neutral-400
-        font-mono tabular-nums
-        select-none
-      "
-    >
-      {appVersion && (
-        <span className="text-neutral-400 dark:text-neutral-500">v{appVersion}</span>
-      )}
-      <button
-        onClick={() => setScreen('settings')}
-        title="Open AI Terminal settings"
-        className="flex items-center gap-3 cursor-pointer hover:text-neutral-700 dark:hover:text-neutral-200 ml-auto"
+    <>
+      {logOpen && <AILogViewer onClose={() => setLogOpen(false)} />}
+      <footer
+        className="
+          flex items-center justify-between shrink-0
+          h-7 px-4
+          border-t border-black/[0.06] dark:border-white/[0.06]
+          bg-[var(--bg)]
+          text-[11px] text-neutral-500 dark:text-neutral-400
+          font-mono tabular-nums
+          select-none
+        "
       >
-        {segments.map((seg, i) => (
-          <span key={i} className="flex items-center gap-3">
-            {i > 0 && <span className="text-neutral-300 dark:text-neutral-700">·</span>}
-            {seg}
-          </span>
-        ))}
-      </button>
-    </footer>
+        {appVersion && (
+          <span className="text-neutral-400 dark:text-neutral-500">v{appVersion}</span>
+        )}
+        <button
+          onClick={() => setScreen('settings')}
+          title="Open AI Terminal settings"
+          className="flex items-center gap-3 cursor-pointer hover:text-neutral-700 dark:hover:text-neutral-200 ml-auto"
+        >
+          {segments.map((seg, i) => (
+            <span key={i} className="flex items-center gap-3">
+              {i > 0 && <span className="text-neutral-300 dark:text-neutral-700">·</span>}
+              {seg}
+            </span>
+          ))}
+        </button>
+        <button
+          onClick={() => setLogOpen(true)}
+          title="View AI output log"
+          className="ml-3 flex items-center gap-1 cursor-pointer hover:text-neutral-700 dark:hover:text-neutral-200 transition-colors"
+        >
+          <ScrollText size={12} strokeWidth={1.75} />
+        </button>
+      </footer>
+    </>
   )
 }

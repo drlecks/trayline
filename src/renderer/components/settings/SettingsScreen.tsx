@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Check, ExternalLink, Github, RefreshCw, X } from 'lucide-react'
+import { ArrowLeft, Bell, BellOff, Check, ExternalLink, Github, RefreshCw, Wrench, X } from 'lucide-react'
 import { useThemeStore } from '@/stores/theme-store'
 import { useProjectStore } from '@/stores/project-store'
-import type { AdapterUsageSnapshot, Settings } from '../../../shared/types'
+import AdapterSetupWizard from '@/components/adapter/AdapterSetupWizard'
+import type { AdapterReadiness, AdapterUsageSnapshot, NotificationSettings, Settings } from '../../../shared/types'
 
 interface AdapterEntry {
   id: string
@@ -10,6 +11,7 @@ interface AdapterEntry {
   installed: boolean
   version: string | null
   installUrl: string | null
+  readiness: AdapterReadiness | null
 }
 
 interface ModelEntry { id: string; label: string; description?: string }
@@ -21,25 +23,51 @@ export default function SettingsScreen() {
   const all = useProjectStore((s) => s.all)
   const { theme, setTheme } = useThemeStore()
   const [settings, setSettings] = useState<Settings | null>(null)
+  const [notifSettings, setNotifSettings] = useState<NotificationSettings | null>(null)
   const [adapters, setAdapters] = useState<AdapterEntry[]>([])
   const [models, setModels] = useState<ModelEntry[]>([])
   const [efforts, setEfforts] = useState<EffortEntry[]>([])
   const [usage, setUsage] = useState<AdapterUsageSnapshot | null>(null)
   const [usageLoading, setUsageLoading] = useState(false)
+  const [wizardAdapter, setWizardAdapter] = useState<AdapterEntry | null>(null)
+  const [wizardOpen, setWizardOpen] = useState(false)
 
   useEffect(() => {
     void window.trayline.settings.get().then(setSettings)
+    void window.trayline.notifications.getSettings().then(setNotifSettings)
     ;(async () => {
-      const list = await window.trayline.adapters.list()
-      const detailed: AdapterEntry[] = await Promise.all(
-        list.map(async (a) => {
-          const det = await window.trayline.adapters.detect(a.id)
-          return { id: a.id, displayName: a.displayName, installUrl: a.installUrl ?? null, installed: det.installed, version: det.version }
-        }),
-      )
+      const [list, readinessMap] = await Promise.all([
+        window.trayline.adapters.list(),
+        window.trayline.adapter.checkReadiness(),
+      ])
+      const detailed: AdapterEntry[] = list.map((a) => {
+        const r = readinessMap[a.id] ?? null
+        return {
+          id: a.id,
+          displayName: a.displayName,
+          installUrl: a.installUrl ?? null,
+          installed: r?.installed ?? false,
+          version: r?.version ?? null,
+          readiness: r,
+        }
+      })
       setAdapters(detailed)
     })()
   }, [])
+
+  function openSetupWizard(adapter: AdapterEntry) {
+    setWizardAdapter(adapter)
+    setWizardOpen(true)
+  }
+
+  async function handleWizardComplete() {
+    // Refresh adapter readiness after wizard completes
+    const readinessMap = await window.trayline.adapter.checkReadiness()
+    setAdapters((prev) => prev.map((a) => {
+      const r = readinessMap[a.id] ?? null
+      return r ? { ...a, installed: r.installed, version: r.version, readiness: r } : a
+    }))
+  }
 
   // Refresh model list whenever the active adapter changes.
   useEffect(() => {
@@ -113,6 +141,21 @@ export default function SettingsScreen() {
     setSettings(next)
   }
 
+  async function updateNotifSettings(partial: Partial<NotificationSettings>) {
+    const next = await window.trayline.notifications.updateSettings(partial)
+    setNotifSettings(next)
+  }
+
+  function toggleProjectNotifications(projectName: string) {
+    if (!notifSettings) return
+    const disabled = notifSettings.disabledProjects.includes(projectName)
+    void updateNotifSettings({
+      disabledProjects: disabled
+        ? notifSettings.disabledProjects.filter((p) => p !== projectName)
+        : [...notifSettings.disabledProjects, projectName],
+    })
+  }
+
   async function persistEffort(effortId: string | null) {
     if (!settings) return
     const map = { ...(settings.defaultEffortByAdapter ?? {}) }
@@ -159,34 +202,58 @@ export default function SettingsScreen() {
       </Section>
 
       {/* Notifications */}
-      <Section title="Notifications" subtitle="System alerts for worker failures.">
-        <label className="flex items-center gap-3 cursor-pointer">
-          <div
-            role="checkbox"
-            aria-checked={settings.notificationsEnabled}
-            onClick={async () => {
-              const next = await window.trayline.settings.set('notificationsEnabled', !settings.notificationsEnabled)
-              setSettings(next)
-            }}
-            className={`
-              relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent
-              transition-colors duration-150 focus:outline-none
-              ${settings.notificationsEnabled
-                ? 'bg-neutral-900 dark:bg-neutral-100'
-                : 'bg-neutral-200 dark:bg-neutral-700'}
-            `}
-          >
-            <span
-              className={`
-                pointer-events-none inline-block h-4 w-4 rounded-full bg-white dark:bg-neutral-900 shadow
-                ring-0 transition-transform duration-150
-                ${settings.notificationsEnabled ? 'translate-x-4' : 'translate-x-0'}
-              `}
-            />
+      {notifSettings && (
+        <Section title="Notifications" subtitle="OS alerts and dock badge when cards need your review.">
+          <div className="flex flex-col gap-3">
+            {/* Global toggle */}
+            <label className="flex items-center gap-3 cursor-pointer">
+              <Toggle
+                checked={notifSettings.enabled}
+                onChange={() => void updateNotifSettings({ enabled: !notifSettings.enabled })}
+              />
+              <div className="flex items-center gap-1.5">
+                {notifSettings.enabled
+                  ? <Bell size={13} strokeWidth={1.75} className="text-neutral-600 dark:text-neutral-400" />
+                  : <BellOff size={13} strokeWidth={1.75} className="text-neutral-400" />
+                }
+                <span className="text-xs">Notify when cards need review</span>
+              </div>
+            </label>
+
+            {/* Per-project toggles — only visible when global is on */}
+            {notifSettings.enabled && all.length > 0 && (
+              <div className="ml-12 flex flex-col gap-1.5 border-l border-neutral-200 dark:border-neutral-800 pl-3">
+                <p className="text-[11px] uppercase tracking-wide text-neutral-500 dark:text-neutral-400 mb-1">Per-project</p>
+                {all.map((project) => {
+                  const muted = notifSettings.disabledProjects.includes(project.name)
+                  return (
+                    <label key={project.name} className="flex items-center gap-2.5 cursor-pointer">
+                      <Toggle
+                        checked={!muted}
+                        onChange={() => toggleProjectNotifications(project.name)}
+                      />
+                      <span className={`text-xs ${muted ? 'text-neutral-400 dark:text-neutral-600' : ''}`}>
+                        {project.display_name}
+                      </span>
+                    </label>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* Clear dedup set */}
+            <button
+              type="button"
+              onClick={async () => {
+                await window.trayline.notifications.clearAllNotified()
+              }}
+              className="self-start text-[11px] text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200 underline-offset-2 hover:underline"
+            >
+              Clear notification history
+            </button>
           </div>
-          <span className="text-xs">Notify when a worker run fails</span>
-        </label>
-      </Section>
+        </Section>
+      )}
 
       {/* AI Terminal */}
       <Section title="AI Terminal" subtitle="Which CLI agent runs your workers, plus the model and effort it should use.">
@@ -228,6 +295,14 @@ export default function SettingsScreen() {
                     >
                       Install instructions <ExternalLink size={10} strokeWidth={2} />
                     </a>
+                  )}
+                  {!a.installed && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); openSetupWizard(a) }}
+                      className="inline-flex items-center gap-1 text-[11px] text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200 mt-0.5"
+                    >
+                      <Wrench size={10} strokeWidth={2} /> Re-run setup
+                    </button>
                   )}
                 </div>
                 {selected && (
@@ -354,6 +429,24 @@ export default function SettingsScreen() {
           </a>
         </div>
       </Section>
+
+      {wizardAdapter && (
+        <AdapterSetupWizard
+          adapterId={wizardAdapter.id}
+          displayName={wizardAdapter.displayName}
+          readiness={wizardAdapter.readiness ?? {
+            adapterId: wizardAdapter.id,
+            installed: false,
+            version: null,
+            blockers: [{ kind: 'not_installed', message: 'Not installed', fixUrl: wizardAdapter.installUrl ?? undefined }],
+            checkedAt: Date.now(),
+          }}
+          open={wizardOpen}
+          onOpenChange={setWizardOpen}
+          onComplete={() => void handleWizardComplete()}
+        />
+      )}
+
     </div>
   )
 }
@@ -379,13 +472,43 @@ function UsageBar({ label, used, limit, resetsAt }: { label: string; used: numbe
   )
 }
 
-function Section({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
+function Section({ title, subtitle, children, highlight }: { title: string; subtitle?: string; children: React.ReactNode; highlight?: boolean }) {
   return (
-    <section className="mb-8">
-      <h2 className="text-sm font-medium mb-1">{title}</h2>
+    <section className={`mb-8${highlight ? ' rounded-xl border-2 border-amber-300 dark:border-amber-700/60 bg-amber-50/50 dark:bg-amber-950/20 px-4 py-4 -mx-4' : ''}`}>
+      <div className="flex items-center gap-2 mb-1">
+        <h2 className="text-sm font-medium">{title}</h2>
+        {highlight && (
+          <span className="text-[10px] uppercase tracking-wide font-medium text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/40 px-1.5 py-0.5 rounded">
+            Setup required
+          </span>
+        )}
+      </div>
       {subtitle && <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-3">{subtitle}</p>}
       {children}
     </section>
+  )
+}
+
+function Toggle({ checked, onChange }: { checked: boolean; onChange: () => void }) {
+  return (
+    <div
+      role="checkbox"
+      aria-checked={checked}
+      onClick={onChange}
+      className={`
+        relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent
+        transition-colors duration-150 focus:outline-none
+        ${checked ? 'bg-neutral-900 dark:bg-neutral-100' : 'bg-neutral-200 dark:bg-neutral-700'}
+      `}
+    >
+      <span
+        className={`
+          pointer-events-none inline-block h-4 w-4 rounded-full bg-white dark:bg-neutral-900 shadow
+          ring-0 transition-transform duration-150
+          ${checked ? 'translate-x-4' : 'translate-x-0'}
+        `}
+      />
+    </div>
   )
 }
 

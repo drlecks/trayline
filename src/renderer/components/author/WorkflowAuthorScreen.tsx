@@ -6,30 +6,41 @@ import { useProjectStore } from '@/stores/project-store'
 import type { ProjectCreateOutcome, ProjectCreateSuccess } from '../../../shared/types'
 
 const EXAMPLES = [
-  'Monitor a GitHub repo for new issues and triage them.',
-  'Browse competitor websites weekly and summarise price changes.',
-  'Turn long YouTube videos into short-form scripts.',
-  'Process PDF invoices and post them to my accounting tool.',
-  'Triage support tickets and draft responses.',
-  'Poll Instagram comments every hour and draft a reply for each new one.',
-  'Fetch the top Hacker News stories every 30 minutes and send a daily digest.',
+  'Read emails from support@mycompany.com, classify each as urgent / normal / question, draft a reply, and put anything urgent in a review queue.',
+  'Every morning, pull new emails from my inbox, summarise which ones need a decision, and send me the digest.',
+  'I paste a meeting transcript and the app gives me a 5-line summary plus a task list for each person mentioned.',
+  'Translate any text I paste into English, Spanish, French, and Italian, and return a valid i18n JSON file.',
+  'Fetch the top 10 Hacker News stories once a day and email me the summary immediately.',
+  'Read new customer support emails every 10 minutes, draft a first reply, and email me anything critical immediately.',
 ]
 
 const LOADING_MESSAGES = [
   'Imagining your workflow…',
   'Sketching out the trays…',
   'Wiring up the workers…',
-  'Picking the right skills…',
   'Setting up your data source…',
   'Configuring the schedule…',
   'Wiring up deduplication…',
+  'Naming your steps…',
+  'Drafting the worker instructions…',
+  'Thinking about edge cases…',
+  'Laying out the folder structure…',
+  'Picking the right triggers…',
+  'Deciding how cards should flow…',
+  'Mapping inputs to outputs…',
+  'Tuning the context window…',
+  'Checking for missing steps…',
+  'Finalising the tray order…',
+  'Connecting the pieces…',
+  'Reviewing the generated plan…',
+  'Writing the scaffold to disk…',
   'Almost there…',
 ]
 
 export default function WorkflowAuthorScreen() {
   const setScreen = useProjectStore((s) => s.setScreen)
   const setActive = useProjectStore((s) => s.setActive)
-  const setUnconfiguredMcps = useProjectStore((s) => s.setUnconfiguredMcps)
+  const setJustCreatedProject = useProjectStore((s) => s.setJustCreatedProject)
   const refreshProjects = useProjectStore((s) => s.refreshProjects)
   const regenerateOf = useProjectStore((s) => s.regenerateOf)
   const setRegenerateOf = useProjectStore((s) => s.setRegenerateOf)
@@ -73,12 +84,12 @@ export default function WorkflowAuthorScreen() {
       return
     }
     await refreshProjects()
-    setUnconfiguredMcps(outcome.unconfiguredMcps)
     setPostGenOutcome(outcome)
   }
 
   function openProject() {
     if (!postGenOutcome) return
+    setJustCreatedProject(postGenOutcome.project.name)
     setActive(postGenOutcome.project)
   }
 
@@ -86,6 +97,7 @@ export default function WorkflowAuthorScreen() {
   if (postGenOutcome) return <PostGenBanner outcome={postGenOutcome} onOpen={openProject} />
 
   return (
+  <>
     <div className="flex flex-col items-center justify-center w-full max-w-2xl mx-auto px-8">
       <button
         onClick={() => setScreen(all.length > 0 ? 'projectList' : 'splash')}
@@ -181,6 +193,8 @@ export default function WorkflowAuthorScreen() {
         <ArrowRight size={14} strokeWidth={1.75} />
       </Button>
     </div>
+
+  </>
   )
 }
 
@@ -205,19 +219,10 @@ function LoadingPanel() {
 }
 
 function PostGenBanner({ outcome, onOpen }: { outcome: ProjectCreateSuccess; onOpen: () => void }) {
-  const hasMcps = outcome.unconfiguredMcps.length > 0
   const hasSource = outcome.hasSourceStep
-
-  let body: string
-  if (hasSource && hasMcps) {
-    body = `Set up ${outcome.unconfiguredMcps.join(', ')} and configure your source step to get started.`
-  } else if (hasSource) {
-    body = "Click your source step to write your fetch instructions and set the schedule."
-  } else if (hasMcps) {
-    body = `To run it, set up ${outcome.unconfiguredMcps.join(', ')} — click any worker with a ⚠ to start.`
-  } else {
-    body = "Edit anything you want, then click Run to process your first card."
-  }
+  const body = hasSource
+    ? "Click your source step to write your fetch instructions and set the schedule."
+    : "Edit anything you want, then click Run to process your first card."
 
   return (
     <div className="flex flex-col items-center justify-center w-full max-w-lg mx-auto px-8 text-center">
@@ -229,11 +234,6 @@ function PostGenBanner({ outcome, onOpen }: { outcome: ProjectCreateSuccess; onO
       </div>
       <h2 className="text-xl font-semibold tracking-tight mb-2">{"Here's a starting point."}</h2>
       <p className="text-sm text-neutral-500 dark:text-neutral-400 mb-8 leading-relaxed">{body}</p>
-      {hasMcps && (
-        <div className="w-full rounded-lg border border-amber-200 dark:border-amber-800/40 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 mb-6 text-xs text-amber-800 dark:text-amber-300 text-left">
-          <strong>MCPs needed:</strong> {outcome.unconfiguredMcps.join(', ')} — set them up in the MCPs screen before running.
-        </div>
-      )}
       <Button size="lg" onClick={onOpen}>
         Open project
         <ArrowRight size={14} strokeWidth={1.75} />

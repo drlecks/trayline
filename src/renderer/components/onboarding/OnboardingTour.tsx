@@ -17,7 +17,7 @@ const TOUR_STEPS: TourStep[] = [
   {
     target: '[data-tour="topbar"]',
     title: 'Top bar',
-    body: 'Switch projects, install skills and MCPs, and open settings from here. MCPs connect workers to real tools like GitHub, Slack, and the web.',
+    body: 'Switch projects and open settings from here.',
     placement: 'bottom',
   },
   {
@@ -34,7 +34,7 @@ const TOUR_STEPS: TourStep[] = [
   },
   {
     title: "You're ready",
-    body: 'Workers can use Skills (reusable instructions) and MCPs (real-world connections to apps like GitHub and Slack). Browse both in Settings. Re-run this tour from Settings → Help anytime.',
+    body: "That's it. Describe a new workflow, add cards, and let the workers do the rest. Re-run this tour from Settings → Help anytime.",
   },
 ]
 

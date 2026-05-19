@@ -35,6 +35,16 @@ vi.mock('./worker-runner', () => ({
   },
 }))
 
+// Stub outletRunner so outlet dispatches are observable
+const outletRuns: Array<{ project: string; workflow: string; stepId: string; cardId: string; prevStepId: string }> = []
+vi.mock('./outlet-runner', () => ({
+  outletRunner: {
+    runOutlet: vi.fn(async (project: string, workflow: string, stepId: string, _cfg: unknown, cardId: string, prevStepId: string) => {
+      outletRuns.push({ project, workflow, stepId, cardId, prevStepId })
+    }),
+  },
+}))
+
 const { watcherService } = await import('./watcher-service')
 
 async function writeJson(path: string, data: unknown) {
@@ -67,6 +77,7 @@ describe('watcherService', () => {
   beforeEach(async () => {
     watchers.length = 0
     triggered.length = 0
+    outletRuns.length = 0
     await watcherService.unmountAll()
     await fs.rm(Paths.projects, { recursive: true, force: true })
     await fs.mkdir(Paths.projects, { recursive: true })
@@ -82,6 +93,29 @@ describe('watcherService', () => {
 
     expect(watchers).toHaveLength(1)
     expect(watchers[0].dir.endsWith(join('01-src', 'cards', 'ready'))).toBe(true)
+  })
+
+  it('watcher for a worker following a source step points at the source cards/ready/', async () => {
+    const project = 'p-source'
+    await writeJson(join(Paths.projects, project, 'project.json'), {
+      id: project, name: project, display_name: project, description: '', created_at: new Date().toISOString(),
+    })
+    const wfDir = join(Paths.projects, project, 'workflows', 'wf')
+    await writeJson(join(wfDir, 'workflow.json'), {
+      id: 'wf', name: 'wf', display_name: 'wf', step_ids: ['00-source', '01-process'],
+    })
+    await writeJson(join(wfDir, 'steps', '00-source', 'step.json'), {
+      id: '00-source', kind: 'source', name: 'Source',
+    })
+    await writeJson(join(wfDir, 'steps', '01-process', 'step.json'), {
+      id: '01-process', kind: 'worker', name: 'Process',
+      trigger: { mode: 'on_ready' },
+    })
+
+    await watcherService.mountWorkflow(project, 'wf')
+
+    expect(watchers).toHaveLength(1)
+    expect(watchers[0].dir.endsWith(join('00-source', 'cards', 'ready'))).toBe(true)
   })
 
   it('does not mount when trigger.mode is not on_ready', async () => {
@@ -141,5 +175,70 @@ describe('watcherService', () => {
     expect(watchers).toHaveLength(2)
     expect(watchers[0].closed).toBe(true)
     expect(watchers[1].closed).toBe(false)
+  })
+})
+
+async function buildOutletWorkflow(project: string, opts: { triggerMode?: 'on_ready' | 'scheduled' | 'manual' } = {}) {
+  await writeJson(join(Paths.projects, project, 'project.json'), {
+    id: project, name: project, display_name: project, description: '', created_at: new Date().toISOString(),
+  })
+  const wfDir = join(Paths.projects, project, 'workflows', 'wf')
+  await writeJson(join(wfDir, 'workflow.json'), {
+    id: 'wf', name: 'wf', display_name: 'wf', step_ids: ['01-tray', '02-outlet'],
+  })
+  await writeJson(join(wfDir, 'steps', '01-tray', 'step.json'), {
+    id: '01-tray', kind: 'tray', name: 'Tray', approval_mode: 'auto',
+  })
+  await writeJson(join(wfDir, 'steps', '02-outlet', 'step.json'), {
+    id: '02-outlet', kind: 'outlet', name: 'Send',
+    trigger: { mode: opts.triggerMode ?? 'on_ready', schedule_cron: null },
+    channel: { type: 'smtp', credential_id: '', to: '', subject: '', body: '' },
+    on_failure: 'send_to_errors',
+  })
+}
+
+describe('watcherService — outlet trigger modes', () => {
+  beforeEach(async () => {
+    watchers.length = 0
+    triggered.length = 0
+    outletRuns.length = 0
+    await watcherService.unmountAll()
+    await fs.rm(Paths.projects, { recursive: true, force: true })
+    await fs.mkdir(Paths.projects, { recursive: true })
+  })
+
+  afterEach(async () => {
+    await watcherService.unmountAll()
+  })
+
+  it('outlet with on_ready trigger creates a watcher on the previous tray ready/', async () => {
+    await buildOutletWorkflow('p-out-onready')
+    await watcherService.mountWorkflow('p-out-onready', 'wf')
+    expect(watchers).toHaveLength(1)
+    expect(watchers[0].dir.endsWith(join('01-tray', 'cards', 'ready'))).toBe(true)
+  })
+
+  it('outlet with scheduled trigger does not create a watcher', async () => {
+    await buildOutletWorkflow('p-out-sched', { triggerMode: 'scheduled' })
+    await watcherService.mountWorkflow('p-out-sched', 'wf')
+    expect(watchers).toHaveLength(0)
+  })
+
+  it('outlet with manual trigger does not create a watcher', async () => {
+    await buildOutletWorkflow('p-out-manual', { triggerMode: 'manual' })
+    await watcherService.mountWorkflow('p-out-manual', 'wf')
+    expect(watchers).toHaveLength(0)
+  })
+
+  it('on_ready outlet watcher fires outletRunner.runOutlet when a card is added', async () => {
+    await buildOutletWorkflow('p-out-fire')
+    await watcherService.mountWorkflow('p-out-fire', 'wf')
+
+    watchers[0].emit('add', join(watchers[0].dir, 'card_x.json'))
+    await new Promise((r) => setImmediate(r))
+
+    expect(outletRuns).toEqual([
+      { project: 'p-out-fire', workflow: 'wf', stepId: '02-outlet', cardId: 'card_x', prevStepId: '01-tray' },
+    ])
   })
 })

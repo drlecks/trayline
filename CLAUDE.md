@@ -19,12 +19,12 @@ All design decisions, data models, flows, and implementation plans live in `docs
 | File | Contents |
 |---|---|
 | [`docs/app-description.md`](docs/app-description.md) | Concept, vocabulary (authoritative glossary), target users, why it works, MVP scope |
+| [`docs/new-feature-revision.md`](docs/new-feature-revision.md) | **Feature compliance rules** — core promise, 5 canonical user personas + test workflows, compliance checklist, active gaps audit. Read before designing any new feature. |
 | [`docs/tech-stack.md`](docs/tech-stack.md) | Full tech stack, AI Terminal Adapter interface and architecture |
 | [`docs/design-principles.md`](docs/design-principles.md) | UI layout, color system, typography, motion rules, status pill states |
 | [`docs/data-model.md`](docs/data-model.md) | Folder structure, all file schemas (card, tray step.json, worker step.json, skill, MCP), atomic card movement rules, audit log schema |
-| [`docs/user-flows.md`](docs/user-flows.md) | All UX flows — first launch, workflow author, card creation, worker runs, MCP setup, import/export |
+| [`docs/user-flows.md`](docs/user-flows.md) | All UX flows — first launch, workflow author, card creation, worker runs, import/export |
 | [`docs/features.md`](docs/features.md) | Detailed feature designs — left rail, tray/worker detail views, card viewer, terminal layers, scheduler, skill finder, error tray |
-| [`docs/skills-and-mcps.md`](docs/skills-and-mcps.md) | Full skills + MCP system — validation pipeline, curated catalog, setup wizard steps, execution flow, security model |
 | [`docs/implementation/tasks.md`](docs/implementation/tasks.md) | **Master task list** — all phases with done/not-done status |
 | [`docs/release.md`](docs/release.md) | CI release pipeline, versioning, code signing, notarization, auto-updates |
 

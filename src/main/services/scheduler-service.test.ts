@@ -38,6 +38,16 @@ vi.mock('./worker-runner', () => ({
   },
 }))
 
+// Stub outletRunner for outlet scheduled tests
+const outletRuns: Array<{ project: string; workflow: string; stepId: string; cardId: string; prevStepId: string }> = []
+vi.mock('./outlet-runner', () => ({
+  outletRunner: {
+    runOutlet: vi.fn(async (project: string, workflow: string, stepId: string, _cfg: unknown, cardId: string, prevStepId: string) => {
+      outletRuns.push({ project, workflow, stepId, cardId, prevStepId })
+    }),
+  },
+}))
+
 // Import after mocks so the scheduler picks them up.
 const { schedulerService } = await import('./scheduler-service')
 
@@ -78,6 +88,7 @@ describe('schedulerService', () => {
   beforeEach(async () => {
     scheduled.length = 0
     triggered.length = 0
+    outletRuns.length = 0
     schedulerService.stopAll()
     await fs.rm(Paths.projects, { recursive: true, force: true })
     await fs.mkdir(Paths.projects, { recursive: true })
@@ -165,5 +176,82 @@ describe('schedulerService', () => {
 
     schedulerService.stopAll()
     expect(scheduled.every((t) => t.stopped)).toBe(true)
+  })
+})
+
+async function buildScheduledOutletWorkflow(project: string, cronExpr: string | null) {
+  await writeJson(join(Paths.projects, project, 'project.json'), {
+    id: project, name: project, display_name: project, description: '', created_at: new Date().toISOString(),
+  })
+  const wfDir = join(Paths.projects, project, 'workflows', 'wf')
+  await writeJson(join(wfDir, 'workflow.json'), {
+    id: 'wf', name: 'wf', display_name: 'wf', step_ids: ['01-tray', '02-outlet'],
+  })
+  const trayDir = join(wfDir, 'steps', '01-tray')
+  await fs.mkdir(join(trayDir, 'cards', 'ready'), { recursive: true })
+  await writeJson(join(trayDir, 'step.json'), { id: '01-tray', kind: 'tray', name: 'Tray' })
+  await writeJson(join(trayDir, 'cards', 'ready', 'card_xyz.json'), { id: 'card_xyz' })
+
+  const outletDir = join(wfDir, 'steps', '02-outlet')
+  await fs.mkdir(outletDir, { recursive: true })
+  await writeJson(join(outletDir, 'step.json'), {
+    id: '02-outlet',
+    kind: 'outlet',
+    name: 'Send',
+    trigger: { mode: 'scheduled', schedule_cron: cronExpr },
+    channel: { type: 'smtp', credential_id: '', to: '', subject: '', body: '' },
+    on_failure: 'send_to_errors',
+  })
+}
+
+describe('schedulerService — outlet scheduled mode', () => {
+  beforeEach(async () => {
+    scheduled.length = 0
+    triggered.length = 0
+    outletRuns.length = 0
+    schedulerService.stopAll()
+    await fs.rm(Paths.projects, { recursive: true, force: true })
+    await fs.mkdir(Paths.projects, { recursive: true })
+  })
+
+  afterEach(() => {
+    schedulerService.stopAll()
+  })
+
+  it('registers a cron task for an outlet with scheduled trigger', async () => {
+    await buildScheduledOutletWorkflow('p-out-sched', '0 8 * * *')
+    await schedulerService.mountWorkflow('p-out-sched', 'wf')
+    expect(scheduled).toHaveLength(1)
+    expect(scheduled[0].expr).toBe('0 8 * * *')
+  })
+
+  it('does not register a cron task for an outlet with on_ready trigger', async () => {
+    const project = 'p-out-onready'
+    await writeJson(join(Paths.projects, project, 'project.json'), {
+      id: project, name: project, display_name: project, description: '', created_at: new Date().toISOString(),
+    })
+    const wfDir = join(Paths.projects, project, 'workflows', 'wf')
+    await writeJson(join(wfDir, 'workflow.json'), { id: 'wf', name: 'wf', display_name: 'wf', step_ids: ['01-tray', '02-outlet'] })
+    await writeJson(join(wfDir, 'steps', '01-tray', 'step.json'), { id: '01-tray', kind: 'tray', name: 'T' })
+    await writeJson(join(wfDir, 'steps', '02-outlet', 'step.json'), {
+      id: '02-outlet', kind: 'outlet', name: 'S',
+      trigger: { mode: 'on_ready', schedule_cron: null },
+      channel: { type: 'smtp', credential_id: '', to: '', subject: '', body: '' },
+      on_failure: 'send_to_errors',
+    })
+    await schedulerService.mountWorkflow(project, 'wf')
+    expect(scheduled).toHaveLength(0)
+  })
+
+  it('firing the cron task calls outletRunner.runOutlet for each ready card', async () => {
+    await buildScheduledOutletWorkflow('p-out-fire', '0 8 * * *')
+    await schedulerService.mountWorkflow('p-out-fire', 'wf')
+
+    await scheduled[0].cb()
+    await new Promise((r) => setTimeout(r, 0))
+
+    expect(outletRuns).toEqual([
+      { project: 'p-out-fire', workflow: 'wf', stepId: '02-outlet', cardId: 'card_xyz', prevStepId: '01-tray' },
+    ])
   })
 })

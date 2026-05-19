@@ -1,17 +1,17 @@
-import { app, BrowserWindow, ipcMain, nativeTheme, dialog } from 'electron'
+import 'dotenv/config'
+import { app, BrowserWindow, ipcMain, nativeTheme, dialog, shell } from 'electron'
 import { join } from 'path'
 import fs from 'fs'
 import { settingsStore } from './services/settings-store'
 import { fsService, Paths } from './services/fs-service'
 import { auditDb } from './services/audit-db'
-import { systemSkillsService } from './services/system-skills-service'
-import { mcpRegistry } from './services/mcp-registry'
-import { skillService } from './services/skill-service'
 import { workerRunner, setRunEventBroadcast } from './services/worker-runner'
 import { sourceRunner, setSourceEventBroadcast } from './services/source-runner'
+import { setOutletEventBroadcast } from './services/outlet-runner'
 import { orchestrator } from './services/orchestrator'
 import { setupAutoUpdater } from './services/auto-update-service'
 import { registerIpcHandlers } from './ipc/handlers'
+import { notificationService } from './services/notification-service'
 import { dirnameFromMeta } from './util/paths'
 
 const __dirname = dirnameFromMeta(import.meta.url)
@@ -64,7 +64,6 @@ process.on('unhandledRejection', (reason) => {
 
 interface BootstrapInfo {
   dataDir: string
-  systemSkillsRestored: string[]
   appVersion: string
 }
 
@@ -125,6 +124,11 @@ function createWindow() {
     logCrash('preload-error', `${preloadPath}: ${err.message}\n${err.stack ?? ''}`)
   })
 
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    void shell.openExternal(url)
+    return { action: 'deny' }
+  })
+
   if (process.env.VITE_DEV_SERVER_URL) {
     win.loadURL(process.env.VITE_DEV_SERVER_URL)
     win.webContents.openDevTools()
@@ -152,24 +156,6 @@ app.whenReady().then(async () => {
     auditDb.init()
     stage('auditDb.init done')
 
-    const { restored } = await systemSkillsService.ensureInstalled()
-    stage(`systemSkillsService.ensureInstalled done (restored=${restored.join(',') || 'none'})`)
-
-    await mcpRegistry.seedCatalog()
-    stage('mcpRegistry.seedCatalog done')
-
-    await skillService.seedCatalog()
-    stage('skillService.seedCatalog done')
-
-    // Background quarantine check — non-blocking; failures are swallowed so a
-    // corrupt skill can't prevent the app from opening.
-    skillService.revalidateAll().then((quarantined) => {
-      const blocked = quarantined.filter((q) => q.quarantined)
-      if (blocked.length > 0) {
-        stage(`skillService.revalidateAll: quarantined=${blocked.map((q) => q.skillId).join(',')}`)
-      }
-    }).catch(() => {})
-
     const { recovered } = await workerRunner.recoverOrphanedRuns()
     stage(`workerRunner.recoverOrphanedRuns done (recovered=${recovered})`)
 
@@ -178,16 +164,21 @@ app.whenReady().then(async () => {
 
     setRunEventBroadcast(() => BrowserWindow.getAllWindows())
     setSourceEventBroadcast(() => BrowserWindow.getAllWindows())
+    setOutletEventBroadcast(() => BrowserWindow.getAllWindows())
 
-    bootstrapInfo = { dataDir: Paths.root, systemSkillsRestored: restored, appVersion: app.getVersion() }
+    bootstrapInfo = { dataDir: Paths.root, appVersion: app.getVersion() }
     registerIpcHandlers(ipcMain, () => bootstrapInfo)
     stage('registerIpcHandlers done')
 
-    createWindow()
+    const win = createWindow()
+    notificationService.setMainWindow(win)
     stage('createWindow returned')
 
     await orchestrator.mountAll()
     stage('orchestrator.mountAll done')
+
+    void notificationService.refreshBadgeCount()
+    stage('notificationService.refreshBadgeCount called')
 
     setupAutoUpdater(stage)
 

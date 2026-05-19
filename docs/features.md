@@ -36,29 +36,19 @@ Tabs: **Cards** / **Config** / **Schema**
 
 ## 7.3 Worker Detail View (Right Panel)
 
-Tabs: **Config** / **Instructions** / **Runs** / **Skills, MCPs & Context**
+Tabs: **Config** / **Instructions** / **Runs** / **Context**
 
 - **Config**: name, description, command (default `claude`), timeout, trigger mode, schedule cron (if scheduled)
 - **Instructions**: full-screen markdown editor for `process.md` with side preview. Token estimate displayed. Variables like `{{card.data}}` and `{{context._brand-voice}}` autocomplete.
 - **Runs**: history table, click for detail
-- **Skills, MCPs & Context**: three blocks:
+- **Context**: context packs checklist:
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│  Skills                                                       │
-│  ☑ PDF Reader    ☑ CSV Parser    ☐ Email Sender              │
-│                                                              │
-│  MCPs                                                         │
-│  ☑ Gmail                              ✓ Ready                │
-│  ☑ Google Calendar           ⚠ Setup needed [Configure ›]    │
-│  ☐ Google Drive                                              │
-│                                                              │
 │  Context Packs                                                │
 │  ☑ company-info.md    ☐ _brand-voice.md (always included)    │
 └──────────────────────────────────────────────────────────────┘
 ```
-
-Each MCP shows its current status. If marked but in *Setup needed*, an inline button starts the wizard without leaving the worker screen.
 
 ---
 
@@ -116,10 +106,39 @@ The card viewer's history timeline is colour-coded by tone: red for `run_failed`
 
 ---
 
+## 7.7a Notifications & Badge (N6.3)
+
+### OS push notifications
+
+When a card lands in a manual-approval tray while the app is not focused:
+- An OS notification fires with the tray name as title and the card's title/subject/name (from `data`) as body (falls back to "A card needs your review")
+- Clicking the notification restores the app window and navigates directly to the card in the appropriate tray panel
+- Notifications are deduplicated per session: the same `cardId` will not trigger a second notification until `clearNotified` is called (which happens when the card is approved or discarded)
+- If the app window is currently focused, notifications are suppressed (the in-app badge and queue bell are sufficient)
+- Requires `Notification.isSupported()` to be true; silently no-ops on platforms without notification support
+
+### Badge / taskbar overlay
+
+Shows the total number of cards waiting for review:
+- **macOS** — red dot with number on the dock icon (`app.setBadgeCount`)
+- **Windows** — red circle with count drawn as SVG via `BrowserWindow.setOverlayIcon`; cleared when count is 0
+- **Linux** — `app.setBadgeCount` (visible on Unity/GNOME; no-op on other desktops)
+- Count is refreshed after every card-state change (add/remove in pending dirs) and once at app startup
+
+### Settings → Notifications
+
+| Control | Behaviour |
+|---|---|
+| Global toggle "Notify when cards need review" | Turns all OS notifications on/off; badge is unaffected |
+| Per-project toggles (shown when global is on) | Suppress notifications from a specific project without affecting others |
+| "Clear notification history" button | Empties the in-session dedup set so the same cards can re-notify (useful after a session break) |
+
+---
+
 ## 7.8 Context Packs
 
 - `context/` folder in the project root holds markdown files
-- Workers list which context files to include in their **Skills, MCPs & Context** tab
+- Workers list which context files to include in their **Context** tab
 - At run time, included files are concatenated into the prompt under a `## Context` section
 - A simple file editor in the project sidebar lets the user create/edit context packs
 - Examples: company FAQ, brand voice guide, common product list, escalation rules
@@ -151,7 +170,7 @@ Cron shown as a friendly picker: "Every hour", "Every weekday at 9am", "Custom (
 
 **Layer 2 — Run summary card** (default right panel after a run)
 - ✓ or ✗ outcome with one-line reason
-- Card processed (link), skills used, MCPs active, duration, token count if available
+- Card processed (link), duration, token count if available
 - Rendered output preview
 - **Show terminal ↓** toggle
 
@@ -165,26 +184,10 @@ The user never has to open the terminal to use Trayline. But it's always one cli
 
 ---
 
-## 7.11 Skill Finder
-
-- Top bar → **Skills** (lucide `Package` icon) → opens the Skills screen
-- **Installed** section lists installed user skills (not `_system`) with **Update** / **Uninstall**
-  - **Uninstall** is disabled with a tooltip naming the workers when any worker still references the skill in its `step.json` → `skills: []`
-  - **Update** is shown for skills installed from the catalog or a URL
-- **+ Add skill** opens a modal with two tabs
-  - **Browse catalog** — fetches `https://raw.githubusercontent.com/trayline/trayline-skills/main/index.json`, falls back to the cached copy at `app-data/skills-index-cache.json` when offline. Search box filters across name, description, and tags
-  - **From URL** — pastes a base URL containing `skill.json` and `skill.md`; phase 8 only accepts those two files, full validation (executable rejection, multi-file skills) lands in N2.1
-- Catalog entry shape used by phase 8:
-  - `{ id, name, version, description, author?, tags?, base_url, files? }`
-  - `base_url` is a directory URL (trailing slash optional); `files` defaults to `["skill.json", "skill.md"]`
-- Installed `skill.json` records the install source in `_trayline.source` (`catalog` / `url` / `system` / `local`) and `_trayline.source_url` so **Update** knows where to re-fetch from
-
----
-
 ## 7.12 Import / Export
 
-- **Export**: zip the project folder. Add `manifest.json` at root listing skills (id + version) and MCPs the project uses. Credentials never export.
-- **Import**: extracts to `projects/[id]/` → reads manifest → checks installed skills and MCPs → if missing, dialog groups them: "This project needs 2 skills and 1 MCP you don't have. Install them now?" — installs, then chains setup wizards for MCPs.
+- **Export**: zip the project folder. Adds a `manifest.json` at root with version and timestamp. Credentials never export.
+- **Import**: extracts to `projects/[id]/` → validates `project.json` exists → runs a security audit for suspicious content → if findings exist, shows a review dialog before committing.
 - **Export without runs** option excludes `runs/` folders.
 
 ---
@@ -197,24 +200,15 @@ A first-class feature, not just a setup screen. Available whenever the user star
 - **Generate workflow** calls `trayline-author` via AI Terminal Adapter
 - During generation: centered loading circle with pre-written warm status messages (pool includes source-aware messages: "Setting up your data source…", "Configuring the schedule…", "Wiring up deduplication…")
 - Output: JSON workflow plan materialized to disk by `trayline-scaffold`
-- **Post-generation banner**: when the plan includes a Source step, a banner is shown before navigating to the project — it tells the user to open the Source step and write their fetch instructions. If unconfigured MCPs are also required, the banner names them.
+- **Post-generation banner**: when the plan includes a Source step, a banner is shown before navigating to the project — it tells the user to open the Source step and write their fetch instructions.
 - **Regenerate**: edit description and try again; previous version archived to `<project>/.history/<timestamp>/`
 - **Edit before scaffolding** (post-MVP): preview the proposed plan and tweak before files are written
 
-The `trayline-author` skill understands:
-- **Source steps** (`kind: "source"`): generated when the description involves polling, monitoring, or ingesting from an external source on a schedule. The plan includes `schedule_cron`, `dedup.key`, `dedup.first_run`, and a draft `source.md`.
+The workflow author understands:
+- **Source steps** (`kind: "source"`): generated when the description involves polling, monitoring, or ingesting from an external source on a schedule. The plan includes `schedule_cron`, `dedup.key`, `dedup.first_run`, and a `channel` block (`http_get` or `imap`). No AI is involved in fetching — the runner calls the channel directly. A Worker step immediately after handles AI processing of the raw data.
 - **Batch workers** (`batch_mode: true`): generated when the description involves summarising or digesting many items into one output. The plan sets `batch_max` and coerces the trigger to `scheduled` or `manual`.
 
-The author skill is in `skills/_system/` — power users can edit the master prompt to bias it toward their domain.
-
----
-
-## 7.14 System Skills (`skills/_system/`)
-
-Two skills ship with the app. Restored from bundled app resources on every launch if missing or corrupted.
-
-- **`trayline-author`** — takes a free-text description, returns a structured workflow plan (JSON: ordered steps, schemas, recommended skills and MCPs per worker, draft `process.md` per worker)
-- **`trayline-scaffold`** — takes a workflow plan and writes it to disk using bundled JSON/MD templates; can be overridden by power users to add custom defaults to every project
+The author prompt lives in `resources/author-prompt.md` in the app bundle.
 
 ---
 
@@ -264,61 +258,78 @@ Status states on the left rail card:
 
 ### Source Detail Panel (Right Canvas)
 
-Two tabs: **Source** and **Config**.
+Two tabs: **Config** and **Runs**.
 
-**Source tab** — full-screen markdown editor for `source.md`. Same editor as the Worker instructions editor (side preview, token estimate, variable autocomplete). The user writes what the AI should fetch and the exact JSON output format it must return.
+Source steps are **channel-based**. The runner calls the configured channel directly (HTTP GET or IMAP) and creates cards from the raw response. An optional **Instructions** field allows the AI adapter to shape `card.data` before the card is written — useful when you want structured fields extracted directly from the raw response rather than passing the raw text to a downstream worker.
 
 **Config tab:**
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│  Name          [Instagram Comments              ]            │
-│  Description   [Polls for new comments every 5 min]          │
+│  DATA CHANNEL                         [Required]             │
+│  Channel type  [HTTP GET ▼]                                  │
 │                                                              │
-│  Schedule      [Every 5 minutes            ▼] [Custom...]   │
-│                cron: */5 * * * *                             │
+│  [HTTP GET selected]                                         │
+│  Credential   [GitHub API ▼]  (HTTP credentials only)        │
+│  URL path     [/repos/owner/repo/issues?since={{last_run_at}}]│
+│               Appended to credential base URL.               │
+│               Use {{last_run_at}} for incremental fetches.   │
+│  Response path [data.items        ]  (optional — dot-path)   │
+│                Leave blank if root is already an array.      │
 │                                                              │
+│  [IMAP selected]                                             │
+│  Credential   [Gmail Inbox ▼]  (IMAP credentials only)       │
+│  Folder       [INBOX]                                        │
+│  Max messages [50]    [☑] Unseen only                        │
+│  Subject contains  [______]   From contains  [______]        │
+├──────────────────────────────────────────────────────────────┤
+│  Name          [GitHub Issues                    ]           │
+│  Description   [Polls for new issues every hour  ]           │
+│                                                              │
+│  Schedule      [Every hour                 ▼] [Custom...]   │
+│                cron: 0 * * * *                               │
+│                                                              │
+│  DEDUPLICATION                                               │
 │  Dedup key     [id                          ]               │
 │  Max memory    [10000                       ]               │
 │                                                              │
 │  First run     ○ Skip existing (default)                     │
 │                ○ Process all                                 │
 │                ○ Process last N  [N: ___]                    │
-│                                                              │
-│  Adapter       [claude-code ▼]   Timeout [60s]              │
-│                                                              │
-│  MCPs          ☑ Instagram                     ✓ Ready       │
-│                ☐ GitHub                                      │
-│                                                              │
-│  [Run now]   [Pause schedule]                               │
+├──────────────────────────────────────────────────────────────┤
+│  INSTRUCTIONS (optional)                                     │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │ Extract the title, author, and date from the HTML.  │   │
+│  │ Return JSON with keys: title, author, published_at. │   │
+│  └──────────────────────────────────────────────────────┘   │
+│  If set, the AI parses the raw fetched data using these      │
+│  instructions before creating the card.                      │
 └──────────────────────────────────────────────────────────────┘
 ```
+
+When `channel` is `null` (not yet configured), the channel section is highlighted in amber with a **Required** badge. The source cannot run until a channel is configured.
 
 **Schedule picker** shows friendly labels ("Every 5 minutes", "Every hour", "Every day at 9am", "Custom") and renders the resulting cron expression below the picker so users can verify it.
 
 **First run** mode only applies the very first time the source runs (when `seen-ids.json` is empty or absent). After the first run it has no effect.
 
-**Adapter selector** — dropdown of all installed AI Terminal Adapters. Defaults to the global default. Per-source overrides persist in `step.json → execution.adapter`. *(Pending implementation — see N3.2)*
-
-**MCPs** — a checklist of installed MCPs the source can activate for its runs. Source steps follow the same pre-flight and credential-injection rules as workers: if a selected MCP is not Ready, the run is aborted before starting. *(Pending implementation — see N3.1 / N3.2)*
-
-**Run now** fires the source immediately, outside the cron schedule. Useful for testing `source.md` before relying on the schedule.
+**Run now** fires the source immediately, outside the cron schedule.
 
 **Pause schedule** suspends the cron without deleting the step. The left rail card shows `⏸ Paused`.
 
 ### Run History
 
-A **Runs** sub-tab (inside the Config tab, or a third top-level tab) shows a table of past source runs:
+The **Runs** tab shows a table of past source runs:
 
 | Column | Content |
 |---|---|
 | Time | ISO timestamp |
-| Duration | ms or seconds |
-| Items found | Total items the AI returned |
+| Duration | seconds |
+| Items found | Total items fetched from the channel |
 | Items new | Cards created this run |
 | Status | ✓ / ⚠ |
 
-Clicking a row shows the raw AI output, the list of new IDs found, and any error detail.
+Clicking a row expands error details with a copy button.
 
 ---
 
@@ -375,6 +386,105 @@ A one-time guided tour that runs the first time the user launches the app. Imple
 
 ---
 
+## 7.20 Credentials Screen
+
+Accessible from the **Credentials** button (KeyRound icon) in the top bar.
+
+Lists all saved credentials with type badge, name, and action buttons:
+
+| Badge color | Type |
+|---|---|
+| Blue | HTTP |
+| Indigo | IMAP |
+| Violet | SMTP |
+
+Actions on each row: **Test** (inline ✓/✗), **Edit** (opens form pre-populated), **Delete** (confirmation: "This will also delete stored passwords.").
+
+**Add credential** button (+ icon, top right) opens a type picker: HTTP / IMAP / SMTP, then the matching form:
+
+**HTTP form:** Name, Base URL, Timeout (ms, default 15000). Headers table — name + value rows, Add/Remove. Values matching `{{secret:...}}` switch to a masked input and are stored via keytar rather than in the JSON file.
+
+**IMAP form:** Name, Host, Port (default 993), Secure toggle (on by default), Username, Password (masked — stored in keytar, never shown again after save).
+
+**SMTP form:** Name, Host, Port (default 587), Secure toggle (off by default), Username, Password (masked), From name, From address.
+
+All forms include a **Test connection** button that calls `credential:test-connection` and shows the result inline before saving.
+
+Empty state: *"No credentials yet. Add one to connect your workflows to external services."*
+
+---
+
+## 7.24 Outlet Step
+
+### Left Rail Card
+
+```
+┌────────────┐
+│ ✈ Send Report │   ← name, Send icon, purple strip
+│ smtp        │   ← channel type badge
+└────────────┘
+```
+
+Status states:
+
+| State | Display |
+|---|---|
+| Idle | Outlet name + channel type badge |
+| Running | `→ Sending…` — animated purple pulse on icon |
+| Done | `✓ Sent 2m ago` — green, fades after 30s |
+| Failed | `⚠ Failed` — red triangle, dashed border |
+
+### Outlet Detail Panel (Right Canvas)
+
+Two tabs: **Config** and **Runs**.
+
+**Config tab:**
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│  Channel type    [SMTP email]  [HTTP POST]                    │
+│                                                              │
+│  Credential      [Gmail SMTP ▼]                              │
+│  (Only SMTP credentials shown when SMTP type selected)       │
+│                                                              │
+│  [SMTP fields]                                               │
+│  To         [{{card.data.email}}                ]            │
+│  Subject    [{{card.data.subject}}              ]            │
+│  Body       [{{card.data}}                      ]            │
+│                                                              │
+│  [HTTP POST fields]                                          │
+│  URL path   [/api/notify/{{card.data.id}}       ]            │
+│  Method     [POST ▼]                                         │
+│  Body       [{"data": {{card.data | json}}}     ]            │
+│                                                              │
+│  Available tokens:                                           │
+│  {{card.data.field}}  — specific field value                 │
+│  {{card.data}}        — full card as pretty JSON             │
+│  {{card.data | json}} — full card as compact JSON string     │
+│                                                              │
+│  INSTRUCTIONS (optional)                                     │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │ Format the card as a professional client email.     │   │
+│  │ Keep it under 200 words.                            │   │
+│  └──────────────────────────────────────────────────────┘   │
+│  If set, the AI formats card.data using these instructions   │
+│  before the channel dispatch.                                │
+│                                                              │
+│  [Save]                                                      │
+└──────────────────────────────────────────────────────────────┘
+```
+
+**Runs tab:** table of past outlet runs:
+
+| Column | Content |
+|---|---|
+| Time | When the run fired |
+| Card | Card ID (truncated) |
+| Channel | smtp / http_post |
+| Status | ✓ Completed / ✗ Failed + error preview |
+
+---
+
 ## 7.19 Keyboard Shortcuts
 
 A small set of global shortcuts wired through `useGlobalShortcuts`. They are skipped while the user is typing in an input or contenteditable element, with the deliberate exception of the command palette (which uses the same global shortcut convention as Slack, VS Code, etc.).
@@ -386,6 +496,92 @@ A small set of global shortcuts wired through `useGlobalShortcuts`. They are ski
 | ⌘/Ctrl+K | Open the command palette |
 | ⌘/Ctrl+/ | Open the keyboard-shortcuts reference dialog |
 
-The **command palette** (⌘/Ctrl+K) is a quick-jump search: type to filter steps in the current workflow, other projects, and the Settings / Skills / Shortcuts screens. ↑/↓ navigate, Enter activates.
+The **command palette** (⌘/Ctrl+K) is a quick-jump search: type to filter steps in the current workflow, other projects, and the Settings / Shortcuts screens. ↑/↓ navigate, Enter activates.
 
 A **Keyboard shortcuts** button under **Settings → Help** opens the same reference dialog as ⌘/Ctrl+/.
+
+---
+
+## 7.25 AI Setup Screen
+
+When no production AI adapter is installed, the full-window `AdapterSetupScreen` shows before any other UI. It blocks routing until at least one adapter reports `installed: true`.
+
+- One card is rendered per registered **production** adapter (mock adapters are always filtered out at the IPC layer and never shown).
+- Each card shows: adapter name, description, install-command code block (from `blockers[0].fixCommand`), install-guide link, **[Check again]** button, **[Setup guide]** button.
+- Currently the only production adapter is **Claude Code**. The screen is generic — additional adapters appear automatically when added to the registry.
+- Header copy: *"Install an AI adapter to get started. Claude Code is the recommended choice."*
+
+---
+
+## 7.23 Quick AI Console (N11)
+
+A lightweight modal for sending a one-shot prompt to the active AI adapter and seeing the raw streaming response. Accessible via the **Terminal** icon button in the top bar or the keyboard shortcut **Ctrl+Shift+A** (⌘+Shift+A on macOS).
+
+**UI layout:**
+```
+┌─────────────────────────────────────────────────────────┐
+│  Quick AI                                         [×]   │
+│  ─────────────────────────────────────────────────────  │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │  Ask anything… (Ctrl+Enter to send)             │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                              [Ask ›]    │
+│  ─────────────────────────────────────────────────────  │
+│  Response                                  [Copy]       │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │  (streamed response rendered in monospace)      │   │
+│  └─────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Behaviour:**
+- Stateless — no history is persisted between opens.
+- The prompt textarea is focused when the modal opens.
+- Ctrl+Enter (⌘+Enter) submits the prompt without clicking Ask.
+- Response text streams in real time as the AI adapter emits chunks.
+- A **Copy** button appears once a response is present.
+- Closing the modal while a request is in flight calls `window.trayline.ai.abort()` which kills the underlying AI session.
+
+**IPC:**
+- `ai:query` — invoke from renderer with `prompt: string`; main spawns the adapter, streams `ai:query-chunk` events, resolves when done.
+- `ai:abort` — send from renderer to kill any in-flight session.
+- `ai:query-chunk` — push from main with each stdout chunk.
+
+---
+
+## 7.22 Project Settings Panel (N11)
+
+Accessible from the **Project settings** button at the bottom of the left rail (above "Context files"). Clicking it clears any selected step and opens `ProjectSettingsPanel` in the right canvas.
+
+**Fields:**
+- **Name** — editable text input, pre-filled from `active.display_name`. Pressing Enter saves.
+- **Description** — resizable textarea, pre-filled from `active.description`.
+
+**Save behaviour:**
+- **[Save]** button is disabled while saving or if the Name field is empty.
+- On success: updates the project store (`setActive`) and refreshes the project list (`refreshProjects`). Shows "Saved ✓" inline for 2 seconds.
+- Writes via `window.trayline.project.updateMeta()` → `project:updateMeta` IPC → `projectService.updateMeta()` → atomic `.tmp` rename on disk.
+
+**Active state:** The button is highlighted (same treatment as the Context files button) while the panel is open.
+
+---
+
+## 7.21 First-Project Guide (N10)
+
+A lightweight, non-blocking guide that appears in the right panel the first time a user opens a project generated by the Workflow Author. It replaces the generic "Select a step on the left" empty state for freshly-created projects only.
+
+**Trigger:** `justCreatedProject` in the project store is set when the user clicks "Open project" in the post-generation banner. It is cleared when the user selects any step or clicks "Dismiss".
+
+**Content (Source-based workflow):**
+1. Open your Source step — with a "Go to Source →" link that selects it.
+2. Add a credential if your source needs one — points toward the Credentials screen.
+3. Click "Run now" to test your Source.
+
+**Content (Manual-intake workflow):**
+1. Open the first tray — with a "Go to tray →" link.
+2. Mark the card as ready — workers pick it up automatically.
+3. Check the next tray for results.
+
+**Footer:** "Take a quick tour" button dispatches `trayline:open-tour` to open the `OnboardingTour` overlay. "Dismiss" clears `justCreatedProject`.
+
+The `OnboardingTour` no longer auto-fires on app boot. It is purely opt-in: via the first-project guide or **Settings → Help → Run onboarding tour**.

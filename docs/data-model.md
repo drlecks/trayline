@@ -11,38 +11,11 @@ Everything is files. SQLite is just a fast index built from those files.
 │
 ├── app-data/
 │   ├── settings.json               # User prefs (theme, default adapter, last opened project, etc.)
-│   ├── skills-index-cache.json     # Last fetched skill catalog
-│   ├── mcps-index-cache.json       # Last fetched MCP registry
-│   ├── mcps-catalog.json           # Curated MCP list (bundled in app, copied on first launch)
 │   └── audit.db                    # SQLite — searchable index of all runs
 │
-├── skills/
-│   ├── pdf-reader/
-│   │   ├── skill.json              # id, version, description, tools[]
-│   │   └── skill.md                # Instructions injected into worker prompts
-│   ├── email-sender/
-│   │
-│   └── _system/                    # App-bundled system skills (read-only, restored on launch if missing)
-│       ├── trayline-scaffold/
-│       │   ├── skill.json
-│       │   ├── skill.md
-│       │   └── templates/          # JSON/MD templates for trays, workers, cards
-│       │       ├── tray.step.json
-│       │       ├── worker.step.json
-│       │       ├── process.md
-│       │       └── workflow.json
-│       └── trayline-author/
-│           ├── skill.json
-│           └── skill.md
-│
-├── mcps/
-│   ├── gmail/
-│   │   ├── mcp.json                # id, version, description, command, credentials schema, setup steps
-│   │   ├── README.md
-│   │   └── state/
-│   │       ├── status.json         # { "configured": true, "last_health_check": "...", "last_error": null }
-│   │       └── logs/
-│   └── ...
+├── credentials/
+│   └── <id>/
+│       └── credential.json         # Type + non-secret config fields (passwords in OS keychain)
 │
 └── projects/
     └── client-onboarding/
@@ -81,13 +54,27 @@ Workflows are linear — the prefix encodes order on disk. Reordering the workfl
   "description": "Intake new clients and route their requests.",
   "created_at": "2026-05-07T14:32:11Z",
   "status": "active",
-  "updated_at": "2026-05-13T09:10:22Z"
+  "updated_at": "2026-05-13T09:10:22Z",
+  "permissions": {
+    "allow_network": false,
+    "allow_shell": false,
+    "credential_ids": [],
+    "notes": ""
+  }
 }
 ```
 
 - `status` is `"active" | "inactive"`. It does not gate execution today; it's a hook for future scheduling/visibility features and drives the green/red dot on the Project List screen.
 - `updated_at` is bumped whenever the project is created, regenerated, or has its status toggled. The Project List screen sorts on this field, descending.
 - Both fields are optional on disk for backward compatibility — readers default missing `status` to `"active"` and missing `updated_at` to `created_at`.
+- `permissions` is optional. When absent, defaults to `{ allow_network: false, allow_shell: false, credential_ids: [], notes: '' }`. Controls which tools the AI adapter may use for this project's worker and source/outlet AI steps:
+
+| Field | Meaning |
+|---|---|
+| `allow_network` | When `true`, the Claude Code adapter adds `--allowedTools "Bash(curl:*),Bash(wget:*),WebFetch"` to permit network access without prompting. |
+| `allow_shell` | When `true`, the Claude Code adapter adds `--allowedTools Bash` to permit all shell commands. Supersedes `allow_network`. |
+| `credential_ids` | IDs of credentials the AI may reference by name in its context (prepended as a "Available credentials" preamble). |
+| `notes` | Free-text instructions prepended to the AI prompt under `## Permissions`. Use this to describe what tools and data sources are available to the AI. |
 
 ### Card (`card_2026-05-07_001.json`)
 
@@ -145,8 +132,6 @@ Cards live in three subfolders: `pending/`, `ready/`, `archived/`.
   "description": "Reads the intake card and structures it",
   "color": "#F7A14F",
   "icon": "cpu",
-  "skills": ["pdf-reader", "csv-parser"],
-  "mcps": ["gmail", "google-calendar"],
   "context_packs": ["company-info.md"],
   "execution": {
     "command": "claude",
@@ -167,105 +152,197 @@ Cards live in three subfolders: `pending/`, `ready/`, `archived/`.
 
 When `batch_mode` is `true`, the worker receives all cards currently in the previous step's `ready/` folder as a JSON array (up to `batch_max` items, default unlimited). It produces **one** output card. All source cards are archived after the batch run completes successfully. `batch_mode` is mutually exclusive with `trigger.mode: "on_ready"` — a batch worker must use `scheduled` or `manual` trigger.
 
+### Credentials (`credentials/<id>/credential.json`)
+
+Credentials are global (not per-project) and hold non-secret auth config. Passwords and API keys are **never** written to disk — they live in the OS keychain via keytar: `service = 'trayline-credential-<id>'`, `account = '<field-name>'`.
+
+**HTTP credential:**
+```json
+{
+  "id": "github-api",
+  "type": "http",
+  "name": "GitHub API",
+  "base_url": "https://api.github.com",
+  "headers": [
+    { "name": "Accept", "value": "application/vnd.github.v3+json" },
+    { "name": "Authorization", "value": "{{secret:token}}" }
+  ],
+  "timeout_ms": 15000
+}
+```
+Header values of the form `{{secret:key_name}}` are resolved from keytar at execution time and never reach the renderer.
+
+**IMAP credential:**
+```json
+{
+  "id": "gmail-inbox",
+  "type": "imap",
+  "name": "Gmail Inbox",
+  "host": "imap.gmail.com",
+  "port": 993,
+  "secure": true,
+  "username": "user@gmail.com"
+}
+```
+Password stored in keytar as `account='password'`.
+
+**SMTP credential:**
+```json
+{
+  "id": "gmail-smtp",
+  "type": "smtp",
+  "name": "Gmail SMTP",
+  "host": "smtp.gmail.com",
+  "port": 587,
+  "secure": false,
+  "username": "user@gmail.com",
+  "from_name": "Alex",
+  "from_address": "user@gmail.com"
+}
+```
+Password stored in keytar as `account='password'`.
+
 ### Source `step.json`
 
 ```json
 {
   "id": "00-source",
   "kind": "source",
-  "name": "Instagram Comments",
-  "description": "Polls for new comments every 5 minutes",
+  "name": "GitHub Issues",
+  "description": "Polls for new issues every hour",
   "icon": "rss",
   "color": "#4CB87E",
-  "schedule_cron": "*/5 * * * *",
-  "dedup": {
-    "key": "id",
-    "max_memory": 10000,
-    "first_run": "skip_existing",
-    "first_run_n": 10
+  "channel": {
+    "type": "http_get",
+    "credential_id": "github-api",
+    "url_path": "/repos/owner/repo/issues?state=open&since={{last_run_at}}"
   },
-  "execution": {
-    "timeout_seconds": 60,
-    "adapter": "claude-code"
-  },
-  "mcps": [],
+  "schedule_cron": "0 * * * *",
   "paused": false
 }
 ```
 
+Source steps are **channel-based**. The runner calls the channel directly (HTTP GET or IMAP) and creates cards. Optionally, an AI prompt can shape the card data before it is written (see `prompt` field below).
+
+`channel` is **required**. When `null`, the source cannot run and will fail with a configuration error.
+
+**HTTP GET behaviour:** one fetch per scheduled run → **one card** created. The full response text (any content type — JSON, HTML, plain text) is stored verbatim in `card.data.body`. There is no JSON parsing, no item extraction, and no dedup. The Worker that follows receives `{{card.data.body}}` and does whatever parsing is needed.
+
+**IMAP channel variant (with dedup):**
+```json
+{
+  "channel": {
+    "type": "imap",
+    "credential_id": "gmail-inbox",
+    "folder": "INBOX",
+    "unseen_only": true,
+    "max_messages": 50,
+    "subject_contains": "",
+    "from_contains": ""
+  },
+  "dedup": {
+    "key": "message_id",
+    "max_memory": 10000,
+    "first_run": "skip_existing",
+    "first_run_n": 10
+  }
+}
+```
+
+IMAP creates one card per email, deduplicated by `dedup.key`. `dedup` is only used for IMAP sources — omit it entirely for `http_get`.
+
+`{{last_run_at}}` is a built-in token resolved to the ISO timestamp of the last successful run (from `state/counters.json`), or empty string on first run.
+
 | Field | Meaning |
 |---|---|
 | `kind` | Always `"source"` |
+| `channel` | Required data-source channel (`http_get` or `imap`). `null` means not yet configured. |
+| `channel.type` | `"http_get"`: fetches the URL, creates 1 card with `data.body` = full response text. `"imap"`: fetches emails, one card per email. |
 | `schedule_cron` | Standard cron expression for how often the source runs |
-| `dedup.key` | The field name in each AI-returned JSON item used as the unique identifier |
-| `dedup.max_memory` | Maximum number of IDs stored in `seen-ids.json`; oldest entries pruned when exceeded |
-| `dedup.first_run` | What to do on the very first run: `skip_existing` (default — fetch but discard all, record IDs only), `process_all` (create cards for everything found), `process_last_n` (create cards for the N most recent) |
-| `dedup.first_run_n` | Number of most-recent items to process when `first_run` is `"process_last_n"` |
-| `execution.adapter` | Which AI Terminal Adapter to use for this source (overrides global default). Defaults to `claude-code`. |
-| `mcps` | List of MCP ids to activate for each source run — same pre-flight and credential-injection rules as workers. *(Pending implementation — N3.1 / N3.2)* |
+| `dedup.key` | **IMAP only.** The field name in each email object used as the unique identifier. |
+| `dedup.max_memory` | **IMAP only.** Maximum number of IDs stored in `seen-ids.json`; oldest entries pruned when exceeded. |
+| `dedup.first_run` | **IMAP only.** What to do on the very first run: `skip_existing` (default), `process_all`, `process_last_n`. |
+| `dedup.first_run_n` | **IMAP only.** Number of most-recent emails to process when `first_run` is `"process_last_n"`. |
 | `paused` | When `true`, the cron job is not registered at launch and `source:pause` / `source:resume` toggle it |
+| `prompt` | **Optional.** If set, the AI adapter processes the raw fetched data using these instructions before `card.data` is written. For HTTP GET: `prefetchedData` = response body. For IMAP: called once per email item. If the AI returns a JSON object it becomes `card.data`; a string is stored as `{ ai_output: "..." }`. Run fails if the AI step fails. |
 
 **Source step folder structure:**
 ```
 00-source/
-├── step.json         # Config above
-├── source.md         # AI instructions: what to fetch, JSON array output format
+├── step.json         # Config above (includes channel)
 ├── state/
 │   ├── seen-ids.json # [{ id, seen_at }] — deduplicated item IDs, pruned to max_memory
 │   └── counters.json # { runs_total, items_found, items_new, last_run_at }
 ├── runs/
 │   └── run_YYYY-MM-DD_NNN/
 │       ├── meta.json   # { run_id, status, started_at, ended_at, items_found, items_new, error? }
-│       └── output.json # The raw JSON array returned by the AI (on success)
+│       └── output.json # The fetched JSON array (on success)
 └── cards/
-    ├── ready/          # New deduplicated cards, one per new item
+    ├── ready/          # Cards created by this source run
     └── archived/       # Cards that have moved downstream
 ```
 
 A Source step is always the **first** step in a workflow (`00-<slug>`). It has no preceding step to read cards from — it generates cards by polling the world.
 
-**Atomic write protocol for `seen-ids.json`:** Write to `seen-ids.json.tmp` first, then rename to `seen-ids.json`. On app launch, any leftover `.tmp` file is discarded (the last complete `seen-ids.json` remains authoritative).
+**Atomic write protocol for `seen-ids.json` (IMAP):** Write to `seen-ids.json.tmp` first, then rename to `seen-ids.json`. On app launch, any leftover `.tmp` file is discarded (the last complete `seen-ids.json` remains authoritative).
 
-### Skill `skill.json`
+### Outlet `step.json`
 
 ```json
 {
-  "id": "pdf-reader",
-  "name": "PDF Reader",
-  "version": "1.2.0",
-  "description": "Extract text and tables from PDF files",
-  "_trayline": {
-    "source": "catalog | url | system | local",
-    "source_url": "https://github.com/user/pdf-reader",
-    "installed_at": "2026-05-08T10:14:22Z",
-    "installed_from_commit": "a3f9c12"
+  "id": "05-send-report",
+  "kind": "outlet",
+  "name": "Send Report Email",
+  "description": "Emails the processed report to the client",
+  "color": "#8B5CF6",
+  "icon": "send",
+  "channel": {
+    "type": "smtp",
+    "credential_id": "gmail-smtp",
+    "to": "{{card.data.client_email}}",
+    "subject": "{{card.data.subject}}",
+    "body": "{{card.data.content}}"
+  },
+  "on_failure": "send_to_errors"
+}
+```
+
+**HTTP POST channel variant:**
+```json
+{
+  "channel": {
+    "type": "http_post",
+    "credential_id": "freshdesk-api",
+    "url_path": "/tickets/{{card.data.ticket_id}}",
+    "method": "POST",
+    "body": "{ \"status\": 2, \"reply\": {{card.data.reply | json}} }"
   }
 }
 ```
 
-### MCP `mcp.json`
+**Optional AI instructions:** If `"prompt"` is set, the AI adapter runs against `card.data` before the channel dispatch. If it returns a JSON object, that object replaces `card.data` for token resolution; string output is merged in as `card.data.ai_output`. The run fails if the AI step fails.
 
 ```json
 {
-  "id": "github",
-  "name": "GitHub",
-  "version": "1.0.0",
-  "description": "Issues, PRs, repos, and files via Personal Access Token",
-  "install_method": "npm",
-  "command_template": "npx -y @modelcontextprotocol/server-github",
-  "instructions": "Create a Personal Access Token at github.com/settings/tokens with repo and issues scopes.",
-  "credentials_schema": [
-    { "id": "github_pat", "type": "api_key", "label": "Personal Access Token", "env_var": "GITHUB_PERSONAL_ACCESS_TOKEN" }
-  ],
-  "has_test": true
+  "prompt": "Format the card data as a professional client-facing email. Keep it under 200 words."
 }
 ```
 
-The Setup Wizard is derived entirely from these three fields: `instructions` → info screen, each `credentials_schema` entry → one masked (`api_key`) or plain (`text_field` / `select`) input, and `has_test: true` → connection test screen at the end.
+**Template tokens** in `to`, `subject`, `body`, and `url_path`:
+- `{{card.data.field}}` — the value of a specific field from the card's data
+- `{{card.data}}` — the full card data object as pretty-printed JSON
+- `{{card.data | json}}` — the full card data object as a compact JSON string (useful inside a JSON body)
 
-**Credentials are never in `mcp.json`.** They live in the OS keychain (keytar). `state/status.json` only stores flags (`configured: true/false`), never the secret itself.
+**Outlet step folder structure:**
+```
+05-send-report/
+├── step.json
+└── runs/
+    └── run_YYYY-MM-DD_NNN/
+        └── meta.json   # { run_id, status, started_at, ended_at, card_id, channel_type, error? }
+```
 
-**Trayline does not support OAuth-based MCPs.** All credentials are simple key/value pairs (API keys, tokens, file paths) stored in the OS keychain via keytar. MCPs that require a browser-based OAuth flow are intentionally excluded.
+An Outlet has no `cards/` subfolder — it consumes cards from the tray above it and archives them after a successful dispatch. On failure the card moves to `99-errors/`, exactly like a failed worker.
 
 ### App settings (`app-data/settings.json`)
 
@@ -333,44 +410,37 @@ The renderer writes `lastOpenedProject` whenever the active project changes (ope
 
 ```
 00-source/
-├── step.json
-├── source.md                  # AI instructions — what to fetch and how to format output
+├── step.json                  # Config (includes channel)
 ├── state/
-│   ├── seen-ids.json          # [{id: "...", seen_at: "ISO"}], capped at dedup.max_memory
+│   ├── seen-ids.json          # IMAP only: [{id: "...", seen_at: "ISO"}], capped at dedup.max_memory
 │   └── counters.json          # {runs_total, items_found, items_new, last_run_at}
+├── runs/
+│   └── run_YYYY-MM-DD_NNN/
+│       ├── meta.json          # Run metadata (status, times, counts, error)
+│       ├── output.txt         # http_get: full response text
+│       └── output.json        # imap: fetched email array
 └── cards/
-    ├── ready/                 # New deduplicated items, consumed by the next step
-    └── archived/              # Items already processed downstream
+    ├── ready/                 # Cards created by this source run, consumed by the next step
+    └── archived/              # Cards already processed downstream
 ```
 
-`source.md` instructs the AI what to fetch and specifies the exact JSON output format. It must include the field that matches `dedup.key`. Example:
+The source fetches data directly via its `channel` — no AI involved. A **Worker** step immediately after processes the cards with AI.
 
-```markdown
-# Instagram Comments
+- **`http_get`**: one run → one card. `card.data.body` holds the full response text verbatim.
+- **`imap`**: one run → one card per new email (deduplicated). `card.data` holds the email fields.
 
-Use the Instagram MCP to read all comments on post {{config.post_url}}.
-
-For each comment, output a JSON array item with:
-- id: the comment's unique ID (string, used for deduplication)
-- author: username (string)
-- text: comment content (string)
-- posted_at: ISO 8601 timestamp
-
-Return ONLY the JSON array. No explanations, no markdown fences.
-```
-
-#### `seen-ids.json`
+#### `seen-ids.json` (IMAP only)
 
 ```json
 [
-  { "id": "comment_12345", "seen_at": "2026-05-11T09:00:00Z" },
-  { "id": "comment_12346", "seen_at": "2026-05-11T09:00:00Z" }
+  { "id": "msg_12345", "seen_at": "2026-05-11T09:00:00Z" },
+  { "id": "msg_12346", "seen_at": "2026-05-11T09:00:00Z" }
 ]
 ```
 
-- Entries are appended after each run.
+- Entries are appended after each IMAP run.
 - When the array length exceeds `dedup.max_memory`, the oldest entries (by `seen_at`) are pruned.
-- The file is written atomically: written to `seen-ids.json.tmp`, then renamed. This means a crash mid-write never corrupts the dedup index.
+- Written atomically: written to `seen-ids.json.tmp`, then renamed. A crash mid-write never corrupts the dedup index.
 
 ---
 
@@ -403,8 +473,6 @@ Every worker run produces a single JSON object on stdout. The shape is decided b
 
 When the parsed output contains `trayline_error`, the worker-runner treats the run as **failed** regardless of the process exit code: it writes a `run_failed` audit entry with `code: message` as the error note, leaves `output.json` unwritten, and moves the source card into the project's error tray (`99-errors/cards/pending/`). The error tray card preserves the original `card.data`; the failure note lives in `card.history`.
 
-Workers are taught this contract by the bundled `trayline-worker-contract` system skill, which the runner injects automatically into every worker prompt — per-worker `process.md` files only need to *remind* the agent to use the envelope when it cannot complete the task.
-
 Success replies must **not** include `trayline_error`. The contract is exclusive: either the worker returns its task-specific success shape, or it returns the failure envelope.
 
 ---
@@ -424,8 +492,6 @@ Success replies must **not** include `trayline_error`. The contract is exclusive
 | details_json | TEXT |
 
 **Card events:** `card_created`, `card_marked_ready`, `run_started`, `run_completed`, `run_failed`, `card_approved`, `card_rejected`
-
-**MCP events:** `mcp_installed`, `mcp_uninstalled`, `mcp_configured`, `mcp_credentials_reset`, `mcp_health_check_failed`, `run_aborted_mcp_not_ready`
 
 **AI terminal events:** `ai_terminal_clear_failed` — written when the post-run `adapter.clearContext()` call throws. Non-fatal: the run's own outcome (`run_completed` / `run_failed`) is recorded separately and remains authoritative. The `details_json` carries `{ run_id, adapter, error }`.
 

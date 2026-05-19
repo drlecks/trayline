@@ -6,14 +6,11 @@ import { app } from 'electron'
 import archiver from 'archiver'
 import AdmZip from 'adm-zip'
 import { Paths } from './fs-service'
-import { projectService } from './project-service'
-import { auditProject } from './security-audit-service'
 import type {
   ExportManifest,
   ExportOptions,
   ImportResult,
   ImportSuccess,
-  ImportNeedsReview,
 } from '../../shared/types'
 
 async function pathExists(p: string): Promise<boolean> {
@@ -54,48 +51,10 @@ async function addDirectory(
   }
 }
 
-async function buildManifest(projectName: string): Promise<ExportManifest> {
-  const skillIds = new Set<string>()
-  const mcpIds = new Set<string>()
-
-  const wfRoot = join(Paths.projects, projectName, 'workflows')
-  if (await pathExists(wfRoot)) {
-    const wfs = await fs.readdir(wfRoot, { withFileTypes: true })
-    for (const wf of wfs) {
-      if (!wf.isDirectory()) continue
-      const stepsRoot = join(wfRoot, wf.name as string, 'steps')
-      if (!(await pathExists(stepsRoot))) continue
-      const steps = await fs.readdir(stepsRoot, { withFileTypes: true })
-      for (const step of steps) {
-        if (!step.isDirectory()) continue
-        try {
-          const raw = JSON.parse(
-            await fs.readFile(join(stepsRoot, step.name as string, 'step.json'), 'utf-8'),
-          ) as Record<string, unknown>
-          if (raw.kind === 'worker') {
-            if (Array.isArray(raw.skills)) {
-              for (const id of raw.skills) { if (typeof id === 'string') skillIds.add(id) }
-            }
-            if (Array.isArray(raw.mcps)) {
-              for (const id of raw.mcps) { if (typeof id === 'string') mcpIds.add(id) }
-            }
-          }
-        } catch { /* skip unparseable */ }
-      }
-    }
-  }
-
-  const skills: ExportManifest['skills'] = []
-  for (const id of skillIds) {
-    const manifest = await projectService.getSkill(id)
-    skills.push({ id, version: manifest?.version ?? 'unknown' })
-  }
-
+function buildManifest(): ExportManifest {
   return {
     trayline_version: app.getVersion(),
     exported_at: new Date().toISOString(),
-    skills,
-    mcps: [...mcpIds],
   }
 }
 
@@ -107,7 +66,7 @@ async function exportProject(
   const projectDir = join(Paths.projects, projectName)
   if (!(await pathExists(projectDir))) throw new Error(`Project not found: ${projectName}`)
 
-  const manifest = await buildManifest(projectName)
+  const manifest = buildManifest()
 
   const output = createWriteStream(outputPath)
   const archive = archiver('zip', { zlib: { level: 6 } })
@@ -131,34 +90,22 @@ async function exportProject(
 type PendingImport = {
   tempDir: string
   projectName: string
-  manifest: ExportManifest | null
   extractedPath: string
 }
 
 // In-memory map of pending imports awaiting user confirmation
 const pendingImports = new Map<string, PendingImport>()
 
-function makeToken(): string {
-  return `import_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
-}
-
 async function extractAndValidate(zipPath: string): Promise<{
   tempDir: string
   extractedPath: string
   projectName: string
-  manifest: ExportManifest | null
 }> {
   const tempDir = join(tmpdir(), `trayline-import-${Date.now()}`)
   await fs.mkdir(tempDir, { recursive: true })
 
   const zip = new AdmZip(zipPath)
   zip.extractAllTo(tempDir, true)
-
-  // Read manifest.json from zip root (optional)
-  let manifest: ExportManifest | null = null
-  try {
-    manifest = JSON.parse(await fs.readFile(join(tempDir, 'manifest.json'), 'utf-8')) as ExportManifest
-  } catch { /* proceed without manifest */ }
 
   // Project folder is the first subdirectory in the zip root
   const entries = await fs.readdir(tempDir, { withFileTypes: true })
@@ -179,60 +126,19 @@ async function extractAndValidate(zipPath: string): Promise<{
     throw new Error(`A project named "${projectName}" already exists. Delete it first before importing.`)
   }
 
-  return { tempDir, extractedPath, projectName, manifest }
-}
-
-async function resolveMissingSkills(manifest: ExportManifest | null): Promise<ImportSuccess['missingSkills']> {
-  if (!manifest) return []
-  const missing: ImportSuccess['missingSkills'] = []
-  for (const skill of manifest.skills) {
-    if (!(await pathExists(join(Paths.skills, skill.id, 'skill.json')))) {
-      missing.push(skill)
-    }
-  }
-  return missing
-}
-
-async function resolveMissingMcps(manifest: ExportManifest | null): Promise<string[]> {
-  if (!manifest) return []
-  const missing: string[] = []
-  for (const id of manifest.mcps) {
-    if (!(await pathExists(join(Paths.mcps, id, 'mcp.json')))) {
-      missing.push(id)
-    }
-  }
-  return missing
+  return { tempDir, extractedPath, projectName }
 }
 
 async function importProject(zipPath: string): Promise<ImportResult> {
-  const { tempDir, extractedPath, projectName, manifest } = await extractAndValidate(zipPath)
+  const { tempDir, extractedPath, projectName } = await extractAndValidate(zipPath)
 
   // cleanupTemp tracks whether we own the temp dir at the end of this call.
   // Set to false when ownership is transferred to pendingImports.
   let cleanupTemp = true
 
   try {
-    const { findings, summary } = await auditProject(extractedPath)
-
-    if (findings.length > 0) {
-      const token = makeToken()
-      pendingImports.set(token, { tempDir, extractedPath, projectName, manifest })
-      cleanupTemp = false  // temp is now owned by pendingImports entry
-      const result: ImportNeedsReview = {
-        ok: 'needs_review',
-        token,
-        projectName,
-        securityFindings: findings,
-        projectSummary: summary,
-      }
-      return result
-    }
-
-    // Clean — commit immediately
     await fs.cp(extractedPath, join(Paths.projects, projectName), { recursive: true })
-    const missingSkills = await resolveMissingSkills(manifest)
-    const missingMcps = await resolveMissingMcps(manifest)
-    return { ok: true, projectName, missingSkills, missingMcps }
+    return { ok: true, projectName }
   } finally {
     if (cleanupTemp) {
       await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {})
@@ -245,13 +151,11 @@ async function commitImport(token: string): Promise<ImportSuccess> {
   if (!pending) throw new Error('Import session expired or not found.')
   pendingImports.delete(token)
 
-  const { tempDir, extractedPath, projectName, manifest } = pending
+  const { tempDir, extractedPath, projectName } = pending
 
   try {
     await fs.cp(extractedPath, join(Paths.projects, projectName), { recursive: true })
-    const missingSkills = await resolveMissingSkills(manifest)
-    const missingMcps = await resolveMissingMcps(manifest)
-    return { ok: true, projectName, missingSkills, missingMcps }
+    return { ok: true, projectName }
   } finally {
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {})
   }
@@ -279,11 +183,11 @@ async function openExampleProject(): Promise<ImportSuccess> {
 
   const targetPath = join(Paths.projects, projectName)
   if (await pathExists(targetPath)) {
-    return { ok: true, projectName, missingSkills: [], missingMcps: [] }
+    return { ok: true, projectName }
   }
 
   await fs.cp(src, targetPath, { recursive: true })
-  return { ok: true, projectName, missingSkills: [], missingMcps: [] }
+  return { ok: true, projectName }
 }
 
 export const exportService = {
