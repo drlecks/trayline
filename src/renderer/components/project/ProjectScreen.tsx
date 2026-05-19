@@ -71,8 +71,8 @@ export default function ProjectScreen() {
 
           <div className="flex flex-col gap-2 flex-1">
             {steps.filter((s) => s.id !== '99-errors').map((step, idx, arr) => {
-              // Up-arrow: only trays, not if already first, not if the step above is a source or outlet
-              const canMoveUp = step.kind === 'tray'
+              // Up-arrow: trays and workers, not if already first, not if the step above is a source or outlet
+              const canMoveUp = (step.kind === 'tray' || step.kind === 'worker')
                 && idx > 0
                 && arr[idx - 1].kind !== 'source'
                 && arr[idx - 1].kind !== 'outlet'
@@ -477,7 +477,7 @@ function StepCard({ step, selected, onClick }: { step: StepMeta; selected: boole
     <button
       onClick={onClick}
       className={`
-        group relative overflow-hidden rounded-lg border text-left
+        group relative overflow-hidden rounded-lg border text-left w-full
         transition-all duration-150
         ${isError
           ? 'border-dashed border-neutral-200 dark:border-neutral-800 opacity-80 hover:opacity-100'
