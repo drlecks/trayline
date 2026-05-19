@@ -5,6 +5,7 @@ import { useProjectStore } from '@/stores/project-store'
 import AddTrayDialog from './AddTrayDialog'
 import AddWorkerDialog from './AddWorkerDialog'
 import AddSourceDialog from './AddSourceDialog'
+import AddOutletDialog from './AddOutletDialog'
 import AddStepDialog from './AddStepDialog'
 import TrayDetailPanel from './TrayDetailPanel'
 import WorkerDetailPanel from './WorkerDetailPanel'
@@ -33,6 +34,7 @@ export default function ProjectScreen() {
   const [addTrayOpen, setAddTrayOpen] = useState(false)
   const [addWorkerOpen, setAddWorkerOpen] = useState(false)
   const [addSourceOpen, setAddSourceOpen] = useState(false)
+  const [addOutletOpen, setAddOutletOpen] = useState(false)
   const [showContextEditor, setShowContextEditor] = useState(false)
   const [showProjectSettings, setShowProjectSettings] = useState(false)
   const [errorsExpanded, setErrorsExpanded] = useState(false)
@@ -208,12 +210,14 @@ export default function ProjectScreen() {
           setPickOpen(false)
           if (kind === 'tray') setAddTrayOpen(true)
           else if (kind === 'worker') setAddWorkerOpen(true)
+          else if (kind === 'outlet') setAddOutletOpen(true)
           else setAddSourceOpen(true)
         }}
       />
       <AddTrayDialog open={addTrayOpen} onOpenChange={setAddTrayOpen} />
       <AddWorkerDialog open={addWorkerOpen} onOpenChange={setAddWorkerOpen} />
       <AddSourceDialog open={addSourceOpen} onOpenChange={setAddSourceOpen} />
+      <AddOutletDialog open={addOutletOpen} onOpenChange={setAddOutletOpen} />
     </div>
   )
 }

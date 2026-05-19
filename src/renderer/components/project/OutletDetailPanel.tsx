@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Send, RotateCcw } from 'lucide-react'
+import { Send, RotateCcw, Copy } from 'lucide-react'
 import { useProjectStore } from '@/stores/project-store'
 import type { StepMeta, OutletStepConfig, OutletRunMeta, OutletRunEvent, CredentialSummary } from '../../../shared/types'
 
@@ -112,7 +112,7 @@ export default function OutletDetailPanel({ step }: Props) {
             {/* Channel type */}
             <div>
               <label className="block text-xs font-medium mb-1.5">Channel type</label>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 {(['smtp', 'http_post'] as const).map((t) => (
                   <button
                     key={t}
@@ -125,28 +125,30 @@ export default function OutletDetailPanel({ step }: Props) {
               </div>
             </div>
 
-            {/* Credential */}
-            <div>
-              <label className="block text-xs font-medium mb-1.5">Credential</label>
-              <select
-                className="w-full text-sm border border-neutral-200 dark:border-neutral-700 rounded-md px-3 py-2 bg-white dark:bg-neutral-900 focus:outline-none focus:ring-1 focus:ring-teal-500"
-                value={config.channel.credential_id}
-                onChange={(e) => saveChannel({ credential_id: e.target.value })}
-              >
-                <option value="">— Select credential —</option>
-                {(channelType === 'smtp' ? smtpCreds : httpCreds).map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-              {(channelType === 'smtp' ? smtpCreds : httpCreds).length === 0 && (
-                <p className="text-xs text-neutral-400 mt-1">
-                  No {channelType === 'smtp' ? 'SMTP' : 'HTTP'} credentials yet —{' '}
-                  <button className="text-teal-500 hover:underline" onClick={() => useProjectStore.getState().setScreen('credentials')}>
-                    add one in Credentials
-                  </button>
-                </p>
-              )}
-            </div>
+            {/* Credential (smtp / http_post only) */}
+            {(channelType === 'smtp' || channelType === 'http_post') && (
+              <div>
+                <label className="block text-xs font-medium mb-1.5">Credential</label>
+                <select
+                  className="w-full text-sm border border-neutral-200 dark:border-neutral-700 rounded-md px-3 py-2 bg-white dark:bg-neutral-900 focus:outline-none focus:ring-1 focus:ring-teal-500"
+                  value={(config.channel as { credential_id?: string }).credential_id ?? ''}
+                  onChange={(e) => saveChannel({ credential_id: e.target.value })}
+                >
+                  <option value="">— Select credential —</option>
+                  {(channelType === 'smtp' ? smtpCreds : httpCreds).map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+                {(channelType === 'smtp' ? smtpCreds : httpCreds).length === 0 && (
+                  <p className="text-xs text-neutral-400 mt-1">
+                    No {channelType === 'smtp' ? 'SMTP' : 'HTTP'} credentials yet —{' '}
+                    <button className="text-teal-500 hover:underline" onClick={() => useProjectStore.getState().setScreen('credentials')}>
+                      add one in Credentials
+                    </button>
+                  </p>
+                )}
+              </div>
+            )}
 
             {channelType === 'smtp' && (
               <>
@@ -158,7 +160,16 @@ export default function OutletDetailPanel({ step }: Props) {
 
             {channelType === 'http_post' && (
               <>
-                <TemplateField label="URL path" defaultValue={(config.channel as { url_path?: string }).url_path ?? ''} onBlur={(v) => saveChannel({ url_path: v })} placeholder="/endpoint/{{card.data.id}}" />
+                <div>
+                  <label className="block text-xs font-medium mb-1.5">URL path <span className="font-normal text-neutral-400">(optional)</span></label>
+                  <input
+                    className="w-full text-sm font-mono border border-neutral-200 dark:border-neutral-700 rounded-md px-3 py-2 bg-white dark:bg-neutral-900 focus:outline-none focus:ring-1 focus:ring-teal-500"
+                    defaultValue={(config.channel as { url_path?: string }).url_path ?? ''}
+                    onBlur={(e) => saveChannel({ url_path: e.target.value })}
+                    placeholder="/endpoint/{{card.data.id}}"
+                  />
+                  <p className="text-xs text-neutral-400 mt-1">Leave empty to POST directly to the credential's base URL (e.g. for Discord / Slack webhooks).</p>
+                </div>
                 <div>
                   <label className="block text-xs font-medium mb-1.5">Method</label>
                   <select
@@ -171,7 +182,7 @@ export default function OutletDetailPanel({ step }: Props) {
                     <option>PATCH</option>
                   </select>
                 </div>
-                <TemplateField label="Body" multiline defaultValue={(config.channel as { body?: string }).body ?? ''} onBlur={(v) => saveChannel({ body: v })} placeholder='{"data": {{card.data | json}}}' />
+                <TemplateField label="Body" multiline defaultValue={(config.channel as { body?: string }).body ?? ''} onBlur={(v) => saveChannel({ body: v })} placeholder='{"content": "{{card.data.message}}"}' />
               </>
             )}
 
@@ -230,7 +241,20 @@ export default function OutletDetailPanel({ step }: Props) {
                               <RotateCcw size={10} strokeWidth={2} /> Retry
                             </button>
                           )}
-                          {r.error && <span className="text-red-500 truncate max-w-[180px] inline-block align-bottom" title={r.error}>{r.error}</span>}
+                          {r.error && (
+                            <span className="flex items-center gap-1 min-w-0">
+                              <span className="text-red-500 truncate max-w-[160px] inline-block align-bottom" title={r.error}>{r.error}</span>
+                              <button
+                                title="Copy full error"
+                                onClick={() => void navigator.clipboard.writeText(
+                                  `Run: ${r.run_id}\nCard: ${r.card_id}\nChannel: ${r.channel_type}\nStarted: ${r.started_at}\nError: ${r.error}`
+                                )}
+                                className="shrink-0 p-0.5 rounded text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+                              >
+                                <Copy size={10} strokeWidth={2} />
+                              </button>
+                            </span>
+                          )}
                         </div>
                       </td>
                     </tr>

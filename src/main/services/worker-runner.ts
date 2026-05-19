@@ -22,6 +22,7 @@ import { adapterRegistry } from '../ai-terminals/registry'
 import { adapterReadinessService } from './adapter-readiness-service'
 import { detectPermissionPrompt, permissionPromptResponse } from '../ai-terminals/claude-code'
 import { ANSI_RE } from '../ai-terminals/prompt-utils'
+import { aiOutputLog } from './ai-output-log'
 import { IPC } from '../../shared/ipc-channels'
 import type { AISession } from '../ai-terminals/adapter'
 import type { Card, CardHistoryEntry } from '../../shared/card'
@@ -400,7 +401,10 @@ async function runInner(input: TriggerRunInput): Promise<TriggerRunResult> {
         for await (const chunk of activeSession.stdout) {
           emit({ type: 'log', project, workflow, stepId, runId, chunk })
           const clean = chunk.replace(ANSI_RE, '')
-          if (clean.trim()) console.log('[worker]', clean.trimEnd())
+          if (clean.trim()) {
+            console.log('[worker]', clean.trimEnd())
+            void aiOutputLog.append('worker', clean.trimEnd())
+          }
           permissionBuffer += chunk
           if (permissionBuffer.length > 4096) permissionBuffer = permissionBuffer.slice(-4096)
           if (detectPermissionPrompt(permissionBuffer)) {
@@ -547,14 +551,21 @@ async function runInner(input: TriggerRunInput): Promise<TriggerRunResult> {
     const historyEntry: CardHistoryEntry = {
       at: endedAt, step: stepId, event: 'run_completed', by: 'worker',
     }
+    const rawWorkerOutput: Record<string, unknown> = typeof output === 'object' && output !== null
+      ? (output as Record<string, unknown>)
+      : { raw: output }
+    const cardData: Record<string, unknown> = { ...rawWorkerOutput }
+    for (const field of ['name', 'key', 'id'] as const) {
+      if (!(field in cardData) && field in sourceCard.data) {
+        cardData[field] = sourceCard.data[field]
+      }
+    }
     const producedCard: Card = {
       id: plannedNextCardId,
       created_at: endedAt,
       created_by: 'worker',
       source_step: stepId,
-      data: typeof output === 'object' && output !== null
-        ? (output as Record<string, unknown>)
-        : { raw: output },
+      data: cardData,
       history: [...sourceCard.history, historyEntry, {
         at: endedAt, step: nextStepId, event: 'created', by: 'worker',
       }],
@@ -729,7 +740,10 @@ async function runBatchInner(input: TriggerBatchRunInput): Promise<TriggerRunRes
         for await (const chunk of activeSessionBatch.stdout) {
           emit({ type: 'log', project, workflow, stepId, runId, chunk })
           const clean = chunk.replace(ANSI_RE, '')
-          if (clean.trim()) console.log('[worker-batch]', clean.trimEnd())
+          if (clean.trim()) {
+            console.log('[worker-batch]', clean.trimEnd())
+            void aiOutputLog.append('worker-batch', clean.trimEnd())
+          }
           permissionBufferBatch += chunk
           if (permissionBufferBatch.length > 4096) permissionBufferBatch = permissionBufferBatch.slice(-4096)
           if (detectPermissionPrompt(permissionBufferBatch)) {
@@ -818,9 +832,21 @@ async function runBatchInner(input: TriggerBatchRunInput): Promise<TriggerRunRes
     const targetCardDir = join(projectService.paths.stepDir(project, workflow, nextStepId), 'cards', targetStatus)
     await fs.mkdir(targetCardDir, { recursive: true })
 
+    const rawBatchOutput: Record<string, unknown> = typeof output === 'object' && output !== null
+      ? (output as Record<string, unknown>)
+      : { raw: output }
+    const batchData: Record<string, unknown> = { ...rawBatchOutput }
+    const firstSource = sourceCards[0]?.card
+    if (firstSource) {
+      for (const field of ['name', 'key', 'id'] as const) {
+        if (!(field in batchData) && field in firstSource.data) {
+          batchData[field] = firstSource.data[field]
+        }
+      }
+    }
     const producedCard: Card = {
       id: plannedNextCardId, created_at: endedAt, created_by: 'worker', source_step: stepId,
-      data: typeof output === 'object' && output !== null ? (output as Record<string, unknown>) : { raw: output },
+      data: batchData,
       history: [
         { at: endedAt, step: stepId, event: 'run_completed', by: 'worker', note: `batch of ${sourceCards.length} cards` },
         { at: endedAt, step: nextStepId, event: 'created', by: 'worker' },

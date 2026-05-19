@@ -5,7 +5,7 @@ import fs from 'fs/promises'
 import { fsService } from './fs-service'
 import { projectService } from './project-service'
 import type { PlanFieldDef, PlanTrayStep, PlanWorkerStep } from '../../shared/workflow-plan'
-import type { SourceStepConfig } from '../../shared/types'
+import type { OutletStepConfig, SourceStepConfig } from '../../shared/types'
 
 interface AddTrayInput {
   project: string
@@ -427,10 +427,51 @@ async function moveStepUp(input: MoveStepUpInput): Promise<{ newStepId: string; 
   return { newStepId, displacedStepId: newAboveId }
 }
 
+// ── Outlet steps ──────────────────────────────────────────────────────────────
+
+interface AddOutletInput {
+  project: string
+  workflow: string
+  name: string
+  description?: string
+}
+
+async function addOutlet(input: AddOutletInput): Promise<OutletStepConfig & { id: string }> {
+  const prefix = await nextStepPrefix(input.project, input.workflow)
+  const id = `${prefix}-${slugify(input.name) || 'outlet'}`
+  const stepDir = projectService.paths.stepDir(input.project, input.workflow, id)
+
+  if (await pathExists(stepDir)) {
+    throw new Error(`Step already exists: ${id}`)
+  }
+
+  await fs.mkdir(stepDir, { recursive: true })
+  await fs.mkdir(join(stepDir, 'runs'), { recursive: true })
+
+  const stepJson: OutletStepConfig = {
+    id,
+    kind: 'outlet',
+    name: input.name,
+    description: input.description ?? '',
+    color: '#14B8A6',
+    icon: 'send',
+    trigger: { mode: 'on_ready', schedule_cron: null },
+    channel: { type: 'smtp', credential_id: '', to: '', subject: '', body: '{{card.data}}' },
+    on_failure: 'send_to_errors',
+    prompt: null,
+  }
+
+  await fsService.writeJsonAtomic(join(stepDir, 'step.json'), stepJson)
+  await insertStepIntoWorkflow(input.project, input.workflow, id)
+
+  return { ...stepJson, id }
+}
+
 export const stepService = {
   addTray,
   addWorker,
   addSource,
+  addOutlet,
   updateStep,
   updateWorkerProcess,
   readWorkerProcess,

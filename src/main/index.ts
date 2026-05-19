@@ -1,3 +1,4 @@
+import 'dotenv/config'
 import { app, BrowserWindow, ipcMain, nativeTheme, dialog, shell } from 'electron'
 import { join } from 'path'
 import fs from 'fs'
