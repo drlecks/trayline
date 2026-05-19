@@ -14,22 +14,15 @@ export default function OutletDetailPanel({ step }: Props) {
   const workflow = useProjectStore((s) => s.workflow)
   const [tab, setTab] = useState<Tab>('config')
   const [config, setConfig] = useState<OutletStepConfig | null>(null)
-  const [instructions, setInstructions] = useState('')
   const [runs, setRuns] = useState<OutletRunMeta[]>([])
   const [credentials, setCredentials] = useState<CredentialSummary[]>([])
-  const [saving, setSaving] = useState(false)
-  const [saveError, setSaveError] = useState('')
 
   const loadConfig = useCallback(async () => {
     if (!active || !workflow) return
     try {
       const raw = await window.trayline.project.listSteps(active.name, workflow.name)
       const s = raw.find((r) => r.id === step.id)
-      if (s) {
-        const cfg = s.raw as unknown as OutletStepConfig
-        setConfig(cfg)
-        setInstructions(cfg.prompt ?? '')
-      }
+      if (s) setConfig(s.raw as unknown as OutletStepConfig)
     } catch { /* ignore */ }
   }, [active, workflow, step.id])
 
@@ -43,14 +36,8 @@ export default function OutletDetailPanel({ step }: Props) {
 
   useEffect(() => { void loadConfig() }, [loadConfig])
   useEffect(() => { void loadRuns() }, [loadRuns])
+  useEffect(() => { void window.trayline.credential.list().then(setCredentials) }, [])
 
-  useEffect(() => {
-    void window.trayline.credential.list().then((list) => {
-      setCredentials(list)
-    })
-  }, [])
-
-  // Listen for run events to refresh runs list
   useEffect(() => {
     const offC = window.trayline.outlet.onCompleted((ev: OutletRunEvent) => {
       if (ev.stepId === step.id) void loadRuns()
@@ -61,38 +48,30 @@ export default function OutletDetailPanel({ step }: Props) {
     return () => { offC(); offF() }
   }, [step.id, loadRuns])
 
-  async function handleSave() {
-    if (!active || !workflow || !config) return
-    setSaving(true)
-    setSaveError('')
+  async function save(patch: Record<string, unknown>) {
+    if (!active || !workflow) return
     try {
-      await window.trayline.step.update({
-        project: active.name,
-        workflow: workflow.name,
-        stepId: step.id,
-        patch: { channel: config.channel, prompt: instructions.trim() || null },
-      })
-    } catch (err) {
-      setSaveError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setSaving(false)
-    }
+      await window.trayline.step.update({ project: active.name, workflow: workflow.name, stepId: step.id, patch })
+      setConfig((c) => c ? { ...c, ...patch } as OutletStepConfig : c)
+    } catch { /* ignore */ }
+  }
+
+  function saveChannel(channelPatch: Record<string, unknown>) {
+    if (!config) return
+    const next = { ...config.channel, ...channelPatch } as OutletStepConfig['channel']
+    setConfig({ ...config, channel: next })
+    void save({ channel: next })
   }
 
   const channelType = config?.channel?.type ?? 'smtp'
   const smtpCreds = credentials.filter((c) => c.type === 'smtp')
   const httpCreds = credentials.filter((c) => c.type === 'http')
 
-  function updateChannel(patch: Record<string, unknown>) {
-    if (!config) return
-    setConfig({ ...config, channel: { ...config.channel, ...patch } as OutletStepConfig['channel'] })
-  }
-
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
       <div className="px-6 py-4 border-b border-black/[0.06] dark:border-white/[0.06] flex items-center gap-3">
-        <div className="w-8 h-8 rounded-lg bg-violet-500 flex items-center justify-center text-white">
+        <div className="w-8 h-8 rounded-lg bg-teal-500 flex items-center justify-center text-white">
           <Send size={16} strokeWidth={2} />
         </div>
         <div>
@@ -116,7 +95,7 @@ export default function OutletDetailPanel({ step }: Props) {
 
       <div className="flex-1 overflow-y-auto">
         {tab === 'config' && config && (
-          <div className="px-6 py-5 space-y-5 max-w-xl">
+          <div key={step.id} className="px-6 py-5 space-y-5 max-w-xl">
             {/* Channel type */}
             <div>
               <label className="block text-xs font-medium mb-1.5">Channel type</label>
@@ -124,8 +103,8 @@ export default function OutletDetailPanel({ step }: Props) {
                 {(['smtp', 'http_post'] as const).map((t) => (
                   <button
                     key={t}
-                    onClick={() => updateChannel({ type: t, credential_id: '' })}
-                    className={`px-3 py-1.5 text-xs rounded-md border transition-colors ${channelType === t ? 'border-violet-400 bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300' : 'border-neutral-200 dark:border-neutral-700 text-neutral-500 hover:border-neutral-300'}`}
+                    onClick={() => saveChannel({ type: t, credential_id: '' })}
+                    className={`px-3 py-1.5 text-xs rounded-md border transition-colors ${channelType === t ? 'border-teal-400 bg-teal-50 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300' : 'border-neutral-200 dark:border-neutral-700 text-neutral-500 hover:border-neutral-300'}`}
                   >
                     {t === 'smtp' ? 'SMTP email' : 'HTTP POST'}
                   </button>
@@ -137,9 +116,9 @@ export default function OutletDetailPanel({ step }: Props) {
             <div>
               <label className="block text-xs font-medium mb-1.5">Credential</label>
               <select
-                className="w-full text-sm border border-neutral-200 dark:border-neutral-700 rounded-md px-3 py-2 bg-white dark:bg-neutral-900 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                className="w-full text-sm border border-neutral-200 dark:border-neutral-700 rounded-md px-3 py-2 bg-white dark:bg-neutral-900 focus:outline-none focus:ring-1 focus:ring-teal-500"
                 value={config.channel.credential_id}
-                onChange={(e) => updateChannel({ credential_id: e.target.value })}
+                onChange={(e) => saveChannel({ credential_id: e.target.value })}
               >
                 <option value="">— Select credential —</option>
                 {(channelType === 'smtp' ? smtpCreds : httpCreds).map((c) => (
@@ -149,7 +128,7 @@ export default function OutletDetailPanel({ step }: Props) {
               {(channelType === 'smtp' ? smtpCreds : httpCreds).length === 0 && (
                 <p className="text-xs text-neutral-400 mt-1">
                   No {channelType === 'smtp' ? 'SMTP' : 'HTTP'} credentials yet —{' '}
-                  <button className="text-violet-500 hover:underline" onClick={() => useProjectStore.getState().setScreen('credentials')}>
+                  <button className="text-teal-500 hover:underline" onClick={() => useProjectStore.getState().setScreen('credentials')}>
                     add one in Credentials
                   </button>
                 </p>
@@ -158,28 +137,28 @@ export default function OutletDetailPanel({ step }: Props) {
 
             {channelType === 'smtp' && (
               <>
-                <TemplateField label="To" value={(config.channel as { to: string }).to ?? ''} onChange={(v) => updateChannel({ to: v })} placeholder="{{card.data.email}}" />
-                <TemplateField label="Subject" value={(config.channel as { subject: string }).subject ?? ''} onChange={(v) => updateChannel({ subject: v })} placeholder="{{card.data.subject}}" />
-                <TemplateField label="Body" multiline value={(config.channel as { body: string }).body ?? ''} onChange={(v) => updateChannel({ body: v })} placeholder="{{card.data}}" />
+                <TemplateField label="To" defaultValue={(config.channel as { to?: string }).to ?? ''} onBlur={(v) => saveChannel({ to: v })} placeholder="{{card.data.email}}" />
+                <TemplateField label="Subject" defaultValue={(config.channel as { subject?: string }).subject ?? ''} onBlur={(v) => saveChannel({ subject: v })} placeholder="{{card.data.subject}}" />
+                <TemplateField label="Body" multiline defaultValue={(config.channel as { body?: string }).body ?? ''} onBlur={(v) => saveChannel({ body: v })} placeholder="{{card.data}}" />
               </>
             )}
 
             {channelType === 'http_post' && (
               <>
-                <TemplateField label="URL path" value={(config.channel as { url_path: string }).url_path ?? ''} onChange={(v) => updateChannel({ url_path: v })} placeholder="/endpoint/{{card.data.id}}" />
+                <TemplateField label="URL path" defaultValue={(config.channel as { url_path?: string }).url_path ?? ''} onBlur={(v) => saveChannel({ url_path: v })} placeholder="/endpoint/{{card.data.id}}" />
                 <div>
                   <label className="block text-xs font-medium mb-1.5">Method</label>
                   <select
                     className="w-28 text-sm border border-neutral-200 dark:border-neutral-700 rounded-md px-3 py-2 bg-white dark:bg-neutral-900 focus:outline-none"
                     value={(config.channel as { method?: string }).method ?? 'POST'}
-                    onChange={(e) => updateChannel({ method: e.target.value })}
+                    onChange={(e) => saveChannel({ method: e.target.value })}
                   >
                     <option>POST</option>
                     <option>PUT</option>
                     <option>PATCH</option>
                   </select>
                 </div>
-                <TemplateField label="Body" multiline value={(config.channel as { body?: string }).body ?? ''} onChange={(v) => updateChannel({ body: v })} placeholder='{"data": {{card.data | json}}}' />
+                <TemplateField label="Body" multiline defaultValue={(config.channel as { body?: string }).body ?? ''} onBlur={(v) => saveChannel({ body: v })} placeholder='{"data": {{card.data | json}}}' />
               </>
             )}
 
@@ -193,24 +172,14 @@ export default function OutletDetailPanel({ step }: Props) {
             <div>
               <label className="block text-xs font-medium mb-1.5">Instructions (optional)</label>
               <textarea
-                value={instructions}
-                onChange={(e) => setInstructions(e.target.value)}
+                defaultValue={config.prompt ?? ''}
+                onBlur={(e) => void save({ prompt: e.target.value.trim() || null })}
                 rows={4}
-                className="w-full text-sm rounded-md border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 px-3 py-2 focus:outline-none focus:ring-1 focus:ring-violet-500 resize-none"
+                className="w-full text-sm rounded-md border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 px-3 py-2 focus:outline-none focus:ring-1 focus:ring-teal-500 resize-none"
                 placeholder="e.g. Format the card data as a professional client-facing email. Keep it under 200 words."
               />
               <p className="text-xs text-neutral-400 mt-1">If set, the AI will format the card data using these instructions before sending.</p>
             </div>
-
-            {saveError && <p className="text-xs text-red-500">{saveError}</p>}
-
-            <button
-              onClick={() => void handleSave()}
-              disabled={saving}
-              className="px-4 py-2 text-sm bg-violet-500 text-white rounded-md hover:bg-violet-600 transition-colors disabled:opacity-50"
-            >
-              {saving ? 'Saving…' : 'Save'}
-            </button>
           </div>
         )}
 
@@ -252,26 +221,26 @@ export default function OutletDetailPanel({ step }: Props) {
   )
 }
 
-function TemplateField({ label, value, onChange, placeholder, multiline }: {
+function TemplateField({ label, defaultValue, onBlur, placeholder, multiline }: {
   label: string
-  value: string
-  onChange: (v: string) => void
+  defaultValue: string
+  onBlur: (v: string) => void
   placeholder?: string
   multiline?: boolean
 }) {
-  const cls = 'w-full text-sm font-mono border border-neutral-200 dark:border-neutral-700 rounded-md px-3 py-2 bg-white dark:bg-neutral-900 focus:outline-none focus:ring-1 focus:ring-violet-500'
+  const cls = 'w-full text-sm font-mono border border-neutral-200 dark:border-neutral-700 rounded-md px-3 py-2 bg-white dark:bg-neutral-900 focus:outline-none focus:ring-1 focus:ring-teal-500'
   return (
     <div>
       <label className="block text-xs font-medium mb-1.5">{label}</label>
       {multiline ? (
         <textarea
           className={`${cls} resize-y min-h-[80px]`}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
+          defaultValue={defaultValue}
+          onBlur={(e) => onBlur(e.target.value)}
           placeholder={placeholder}
         />
       ) : (
-        <input className={cls} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} />
+        <input className={cls} defaultValue={defaultValue} onBlur={(e) => onBlur(e.target.value)} placeholder={placeholder} />
       )}
     </div>
   )

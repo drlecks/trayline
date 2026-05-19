@@ -94,10 +94,13 @@ class ClaudePtySession implements AISession {
           const cleaned = this.terminalLog.replace(ANSI_RE, '').trim()
           let output: object | string | null = cleaned || null
           if (typeof output === 'string') {
-            // Try to find the last balanced JSON object/array in the output.
             const jsonGuess = extractTrailingJson(cleaned)
             if (jsonGuess) {
-              try { output = JSON.parse(jsonGuess) } catch { /* keep as string */ }
+              try {
+                output = JSON.parse(jsonGuess)
+              } catch {
+                try { output = JSON.parse(sanitizeJsonStrings(jsonGuess)) } catch { /* keep as string */ }
+              }
             }
           }
           resolve({
@@ -206,11 +209,16 @@ class ClaudePtySession implements AISession {
 /**
  * Pull a JSON value out of a text blob even when it's wrapped in markdown
  * code fences or sandwiched between prose. Returns the slice between the
- * first `{`/`[` and the matching last `}`/`]`, so trailing ```` ``` ```` /
+ * first `{`/`[` and the matching last `}`/`]`, so trailing ``` /
  * commentary / banner text doesn't break JSON.parse downstream.
  */
 function extractTrailingJson(s: string): string | null {
-  const trimmed = s.trim()
+  // Strip markdown code fences (```json ... ``` or ``` ... ```) before searching.
+  const stripped = s.trim()
+    .replace(/^```(?:json|JSON)?\s*\n?/m, '')
+    .replace(/\n?```\s*$/m, '')
+    .trim()
+  const trimmed = stripped || s.trim()
   if (!trimmed) return null
   const firstObj = trimmed.indexOf('{')
   const firstArr = trimmed.indexOf('[')
@@ -224,6 +232,36 @@ function extractTrailingJson(s: string): string | null {
   const end = trimmed.lastIndexOf(closeChar)
   if (end <= start) return null
   return trimmed.slice(start, end + 1)
+}
+
+/**
+ * Escape raw control characters that appear inside JSON string values.
+ * The AI sometimes emits literal newlines inside strings, producing invalid
+ * JSON that JSON.parse rejects outright.
+ */
+function sanitizeJsonStrings(raw: string): string {
+  let out = ''
+  let inString = false
+  let i = 0
+  while (i < raw.length) {
+    const ch = raw[i]
+    if (inString) {
+      if (ch === '\\') {
+        out += ch; i++
+        if (i < raw.length) out += raw[i]
+      } else if (ch === '"') {
+        inString = false; out += ch
+      } else if (ch === '\n') { out += '\\n'
+      } else if (ch === '\r') { out += '\\r'
+      } else if (ch === '\t') { out += '\\t'
+      } else { out += ch }
+    } else {
+      if (ch === '"') inString = true
+      out += ch
+    }
+    i++
+  }
+  return out
 }
 
 /**

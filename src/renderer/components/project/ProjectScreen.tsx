@@ -289,6 +289,21 @@ function ErrorTraySection({
   )
 }
 
+function stepConfigWarning(step: StepMeta): string | null {
+  if (step.kind === 'source') {
+    const ch = (step.raw as { channel?: { type?: string; credential_id?: string } }).channel
+    if (ch?.type === 'imap' && !ch.credential_id) return 'IMAP credential not configured'
+  }
+  if (step.kind === 'outlet') {
+    const ch = (step.raw as { channel?: { type?: string; credential_id?: string; to?: string } }).channel
+    if (ch?.type === 'smtp') {
+      if (!ch.credential_id) return 'SMTP credential not configured'
+      if (!ch.to) return '"To" address not configured'
+    }
+  }
+  return null
+}
+
 function StepCard({ step, selected, onClick }: { step: StepMeta; selected: boolean; onClick: () => void }) {
   const isBatch = step.kind === 'worker' && !!(step.raw as { batch_mode?: boolean }).batch_mode
   const Icon = step.kind === 'source'
@@ -299,6 +314,7 @@ function StepCard({ step, selected, onClick }: { step: StepMeta; selected: boole
         ? (step.id === '99-errors' ? AlertTriangle : Inbox)
         : isBatch ? Layers : Cpu
   const isError = step.id === '99-errors'
+  const configWarning = stepConfigWarning(step)
 
   const [counts, setCounts] = useState<CardCounts | null>(null)
   const [workerStatus, setWorkerStatus] = useState<WorkerRunStatus | 'idle'>('idle')
@@ -396,10 +412,10 @@ function StepCard({ step, selected, onClick }: { step: StepMeta; selected: boole
       }
     : step.kind === 'outlet'
     ? {
-        strip: 'bg-violet-500',
+        strip: 'bg-teal-500',
         stripText: 'text-white',
-        tint: 'bg-violet-50/50 dark:bg-violet-950/15',
-        ring: 'ring-violet-400/40',
+        tint: 'bg-teal-50/50 dark:bg-teal-950/15',
+        ring: 'ring-teal-400/40',
         label: 'Outlet',
       }
     : step.kind === 'source'
@@ -463,7 +479,7 @@ function StepCard({ step, selected, onClick }: { step: StepMeta; selected: boole
                 <span>· {sourceCardCount} ready</span>
               )}
               {step.kind === 'outlet' && outletStatus === 'running' && (
-                <span className="text-[10px] font-medium px-1.5 py-0 rounded-full bg-violet-100 text-violet-800 dark:bg-violet-950/60 dark:text-violet-300 animate-pulse">
+                <span className="text-[10px] font-medium px-1.5 py-0 rounded-full bg-teal-100 text-teal-800 dark:bg-teal-950/60 dark:text-teal-300 animate-pulse">
                   Sending…
                 </span>
               )}
@@ -489,10 +505,15 @@ function StepCard({ step, selected, onClick }: { step: StepMeta; selected: boole
             <span className="shrink-0 inline-block w-[11px] h-[11px] mt-1 rounded-full bg-emerald-500 animate-pulse" />
           )}
           {step.kind === 'outlet' && outletStatus === 'running' && (
-            <span className="shrink-0 inline-block w-[11px] h-[11px] mt-1 rounded-full bg-violet-500 animate-pulse" />
+            <span className="shrink-0 inline-block w-[11px] h-[11px] mt-1 rounded-full bg-teal-500 animate-pulse" />
           )}
           {step.kind === 'outlet' && outletStatus === 'failed' && (
             <span className="shrink-0 inline-block w-[11px] h-[11px] mt-1 rounded-full bg-red-500" />
+          )}
+          {configWarning && (
+            <span title={configWarning} className="shrink-0 flex items-center justify-center w-[18px] h-[18px] mt-0.5 rounded-full bg-amber-100 dark:bg-amber-950/60">
+              <AlertTriangle size={11} className="text-amber-600 dark:text-amber-400" strokeWidth={2.5} />
+            </span>
           )}
         </div>
       </div>
