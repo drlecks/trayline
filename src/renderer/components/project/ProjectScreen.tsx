@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Inbox, Cpu, AlertTriangle, RefreshCw, Plus, FileText, Settings, ChevronDown, ChevronRight, Rss, Layers, Send } from 'lucide-react'
+import { Inbox, Cpu, AlertTriangle, RefreshCw, Plus, FileText, Settings, ChevronDown, ChevronRight, Rss, Layers, Send, ArrowUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useProjectStore } from '@/stores/project-store'
 import AddTrayDialog from './AddTrayDialog'
@@ -46,6 +46,17 @@ export default function ProjectScreen() {
 
   const selectedStep = steps.find((s) => s.id === selectedStepId) ?? null
 
+  async function handleMoveUp(stepId: string) {
+    if (!active || !workflow) return
+    try {
+      const { newStepId } = await window.trayline.step.moveUp({ project: active.name, workflow: workflow.name, stepId })
+      await refreshSteps()
+      setSelectedStepId(newStepId)
+    } catch {
+      // service guards reject invalid moves silently; nothing to surface here
+    }
+  }
+
   return (
     <div className="flex flex-col w-full h-full">
       <div className="flex flex-1 min-h-0">
@@ -59,14 +70,42 @@ export default function ProjectScreen() {
           </div>
 
           <div className="flex flex-col gap-2 flex-1">
-            {steps.filter((s) => s.id !== '99-errors').map((step) => (
-              <StepCard
-                key={step.id}
-                step={step}
-                selected={step.id === selectedStepId && !showContextEditor}
-                onClick={() => { setSelectedStepId(step.id); setShowContextEditor(false); setShowProjectSettings(false) }}
-              />
-            ))}
+            {steps.filter((s) => s.id !== '99-errors').map((step, idx, arr) => {
+              // Up-arrow: only trays, not if already first, not if the step above is a source or outlet
+              const canMoveUp = step.kind === 'tray'
+                && idx > 0
+                && arr[idx - 1].kind !== 'source'
+                && arr[idx - 1].kind !== 'outlet'
+              return (
+                <div key={step.id} className="relative group/rail-item">
+                  <StepCard
+                    step={step}
+                    selected={step.id === selectedStepId && !showContextEditor}
+                    onClick={() => { setSelectedStepId(step.id); setShowContextEditor(false); setShowProjectSettings(false) }}
+                  />
+                  {canMoveUp && (
+                    <button
+                      type="button"
+                      title="Move up"
+                      onClick={(e) => { e.stopPropagation(); void handleMoveUp(step.id) }}
+                      className="
+                        absolute top-1.5 right-1.5 z-10
+                        w-5 h-5 flex items-center justify-center
+                        rounded border border-neutral-200 dark:border-neutral-700
+                        bg-white/90 dark:bg-neutral-900/90 shadow-sm
+                        text-neutral-500 dark:text-neutral-400
+                        hover:bg-neutral-100 dark:hover:bg-neutral-800
+                        hover:text-neutral-800 dark:hover:text-neutral-200
+                        opacity-0 group-hover/rail-item:opacity-100
+                        transition-opacity
+                      "
+                    >
+                      <ArrowUp size={10} strokeWidth={2.5} />
+                    </button>
+                  )}
+                </div>
+              )
+            })}
 
             <Button
               variant="ghost"

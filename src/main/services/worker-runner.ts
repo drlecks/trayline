@@ -21,6 +21,7 @@ import { settingsStore } from './settings-store'
 import { adapterRegistry } from '../ai-terminals/registry'
 import { adapterReadinessService } from './adapter-readiness-service'
 import { detectPermissionPrompt, permissionPromptResponse } from '../ai-terminals/claude-code'
+import { ANSI_RE } from '../ai-terminals/prompt-utils'
 import { IPC } from '../../shared/ipc-channels'
 import type { AISession } from '../ai-terminals/adapter'
 import type { Card, CardHistoryEntry } from '../../shared/card'
@@ -398,6 +399,8 @@ async function runInner(input: TriggerRunInput): Promise<TriggerRunResult> {
       try {
         for await (const chunk of activeSession.stdout) {
           emit({ type: 'log', project, workflow, stepId, runId, chunk })
+          const clean = chunk.replace(ANSI_RE, '')
+          if (clean.trim()) console.log('[worker]', clean.trimEnd())
           permissionBuffer += chunk
           if (permissionBuffer.length > 4096) permissionBuffer = permissionBuffer.slice(-4096)
           if (detectPermissionPrompt(permissionBuffer)) {
@@ -725,6 +728,8 @@ async function runBatchInner(input: TriggerBatchRunInput): Promise<TriggerRunRes
       try {
         for await (const chunk of activeSessionBatch.stdout) {
           emit({ type: 'log', project, workflow, stepId, runId, chunk })
+          const clean = chunk.replace(ANSI_RE, '')
+          if (clean.trim()) console.log('[worker-batch]', clean.trimEnd())
           permissionBufferBatch += chunk
           if (permissionBufferBatch.length > 4096) permissionBufferBatch = permissionBufferBatch.slice(-4096)
           if (detectPermissionPrompt(permissionBufferBatch)) {
@@ -1044,6 +1049,13 @@ export const workerRunner = {
       if (k.startsWith(prefix)) count++
     }
     return count
+  },
+  hasInFlightForStep: (project: string, workflow: string, stepId: string): boolean => {
+    const prefix = `${project}/${workflow}/${stepId}/`
+    for (const k of inFlight) {
+      if (k.startsWith(prefix)) return true
+    }
+    return false
   },
 }
 
