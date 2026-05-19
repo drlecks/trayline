@@ -1,31 +1,29 @@
 // Source step execution engine.
 //
-// Runs the AI adapter against source.md, parses the JSON array output,
-// deduplicates against seen-ids.json, and creates cards in cards/ready/.
+// HTTP GET: one fetch per scheduled run → one card (data.body = full response text).
+// IMAP:     one card per email, deduplicated via seen-ids.json.
 //
-// Atomic protocol:
+// Atomic protocol for IMAP:
 //   1. Read seen-ids.json (or empty on first run).
-//   2. Spawn AI adapter with source.md as the instruction file (no card input).
-//   3. Parse stdout as JSON array.  On parse failure: audit + return early.
-//   4. Dedup loop: for each item, skip if id already in seen set.
-//   5. Write audit entry for each new item BEFORE creating the card file.
-//   6. Create card files in cards/ready/.
-//   7. Atomic seen-ids write: write .tmp → rename.
-//   8. Update state/counters.json.
+//   2. Fetch emails from IMAP.
+//   3. Dedup loop: skip items whose ID is already in seen set.
+//   4. Write audit entry for each new item BEFORE creating the card file.
+//   5. Create card files in cards/ready/.
+//   6. Atomic seen-ids write: write .tmp → rename.
+//   7. Update state/counters.json.
 
 import { join } from 'path'
 import fs from 'fs/promises'
 import { BrowserWindow } from 'electron'
 import { fsService, Paths } from './fs-service'
 import { projectService } from './project-service'
+import { credentialService } from './credential-service'
+import { notificationService } from './notification-service'
 import { auditDb } from './audit-db'
-import { adapterRegistry } from '../ai-terminals/registry'
-import { mcpRegistry } from './mcp-registry'
-import { mcpCredentials } from './mcp-credentials'
 import { IPC } from '../../shared/ipc-channels'
-import type { SourceStepConfig, SourceCounters, SeenIdsEntry, SourceRunMeta, SourceState, SourceRunEvent } from '../../shared/types'
-import type { MCPDefinition } from '../ai-terminals/adapter'
-import type { Card } from '../../shared/card'
+import { runAIStep } from './ai-step-helper'
+import type { SourceStepConfig, SourceCounters, SeenIdsEntry, SourceRunMeta, SourceState, SourceRunEvent, HttpCredential, ImapCredential, HttpErrorDetail } from '../../shared/types'
+import type { Card, CardHistoryEntry } from '../../shared/card'
 
 // ── Broadcast ─────────────────────────────────────────────────────────────────
 
@@ -101,6 +99,40 @@ function pruneSeenIds(entries: SeenIdsEntry[], maxMemory: number): SeenIdsEntry[
   return sorted.slice(sorted.length - maxMemory)
 }
 
+// If the step immediately after the source in the workflow is a tray, write produced
+// cards directly to that tray's ready/ folder so they bypass the pending review queue.
+// Falls back to the source step's own ready/ when the next step is a worker, outlet,
+// 99-errors, or when the workflow/step file cannot be read.
+async function resolveCardOutputDir(
+  project: string,
+  workflow: string,
+  sourceStepId: string,
+): Promise<{ dir: string; autoForwarded: boolean; forwardedToStepId: string | null }> {
+  const fallback = {
+    dir: join(projectService.paths.stepDir(project, workflow, sourceStepId), 'cards', 'ready'),
+    autoForwarded: false,
+    forwardedToStepId: null,
+  }
+  try {
+    const wf = await fsService.readJson<{ step_ids: string[] }>(
+      join(projectService.paths.workflowDir(project, workflow), 'workflow.json'),
+    )
+    const idx = wf.step_ids.indexOf(sourceStepId)
+    if (idx === -1 || idx >= wf.step_ids.length - 1) return fallback
+    const nextStepId = wf.step_ids[idx + 1]
+    const nextStepDir = projectService.paths.stepDir(project, workflow, nextStepId)
+    const nextStep = await fsService.readJson<{ kind: string }>(join(nextStepDir, 'step.json'))
+    if (nextStep.kind === 'tray') {
+      return {
+        dir: join(nextStepDir, 'cards', 'ready'),
+        autoForwarded: true,
+        forwardedToStepId: nextStepId,
+      }
+    }
+  } catch { /* fall through */ }
+  return fallback
+}
+
 function nextRunId(existing: string[]): string {
   const date = todayDate()
   let max = 0
@@ -120,50 +152,6 @@ const inFlight = new Set<string>()
 
 function stepKey(project: string, workflow: string, stepId: string): string {
   return `${project}/${workflow}/${stepId}`
-}
-
-// ── MCP pre-flight ────────────────────────────────────────────────────────────
-
-async function resolveMcps(
-  project: string, workflow: string, stepId: string, runId: string,
-  mcpIds: string[],
-): Promise<MCPDefinition[]> {
-  const defs: MCPDefinition[] = []
-  for (const id of mcpIds) {
-    const manifest = await mcpRegistry.readManifest(id)
-    if (!manifest) {
-      auditDb.insert({
-        project_id: project, workflow_id: workflow, step_id: stepId, card_id: '',
-        event: 'run_aborted_mcp_not_ready', actor: 'system',
-        details_json: JSON.stringify({ run_id: runId, mcp_id: id, reason: 'not_installed' }),
-      })
-      throw new Error(`MCP "${id}" is not installed. Set it up in the MCPs screen before running.`)
-    }
-    const status = await mcpRegistry.readStatus(id)
-    if (status.disabled) {
-      auditDb.insert({
-        project_id: project, workflow_id: workflow, step_id: stepId, card_id: '',
-        event: 'run_aborted_mcp_not_ready', actor: 'system',
-        details_json: JSON.stringify({ run_id: runId, mcp_id: id, reason: 'disabled' }),
-      })
-      throw new Error(`MCP "${manifest.name}" is disabled. Enable it in the MCPs screen before running.`)
-    }
-    if (!status.configured && manifest.credentials_schema.length > 0) {
-      auditDb.insert({
-        project_id: project, workflow_id: workflow, step_id: stepId, card_id: '',
-        event: 'run_aborted_mcp_not_ready', actor: 'system',
-        details_json: JSON.stringify({ run_id: runId, mcp_id: id, reason: 'not_configured' }),
-      })
-      throw new Error(`MCP "${manifest.name}" needs credentials. Configure it in the MCPs screen before running.`)
-    }
-    const credentials: Record<string, string> = {}
-    for (const cred of manifest.credentials_schema) {
-      const val = await mcpCredentials.readCredential(id, cred.id)
-      if (val) credentials[cred.id] = val
-    }
-    defs.push({ id, manifest: manifest as unknown as Record<string, unknown>, credentials })
-  }
-  return defs
 }
 
 // ── Run orchestration ─────────────────────────────────────────────────────────
@@ -197,7 +185,6 @@ async function runSourceInner({ project, workflow, stepId, stepConfig }: RunSour
   const runsDir = join(stepDir, 'runs')
   await fs.mkdir(runsDir, { recursive: true })
 
-  // Allocate run id
   let existingRuns: string[] = []
   try { existingRuns = await fs.readdir(runsDir) } catch { /* empty */ }
   const runId = nextRunId(existingRuns)
@@ -217,188 +204,207 @@ async function runSourceInner({ project, workflow, stepId, stepConfig }: RunSour
   })
   emit({ type: 'started', project, workflow, stepId, runId })
 
-  // Read existing seen ids
-  const seenEntries = await readSeenIds(stateDir)
-  const seenSet = new Set(seenEntries.map((e) => e.id))
-  const isFirstRun = seenEntries.length === 0
-
-  // Spawn adapter
-  const adapterId = stepConfig.execution.adapter ?? 'claude-code'
-  const adapter = adapterRegistry.get(adapterId)
-  if (!adapter) {
-    const err = `Adapter not found: ${adapterId}`
-    await failRun({ project, workflow, stepId, runId, stateDir, runDir, startedAt, meta, error: err })
+  if (!stepConfig.channel) {
+    await failRun({ project, workflow, stepId, runId, stateDir, runDir, startedAt, meta, error: 'No channel configured — open source settings to set up a data channel.' })
     return
   }
 
-  const instructionFile = join(stepDir, 'source.md')
-  if (!(await pathExists(instructionFile))) {
-    const err = 'source.md not found — write instructions before running'
-    await failRun({ project, workflow, stepId, runId, stateDir, runDir, startedAt, meta, error: err })
+  const channel = stepConfig.channel
+  const credential = await credentialService.get(channel.credential_id)
+  if (!credential) {
+    await failRun({ project, workflow, stepId, runId, stateDir, runDir, startedAt, meta, error: `Credential not found: ${channel.credential_id}` })
     return
   }
 
-  const timeoutMs = (stepConfig.execution.timeout_seconds ?? 60) * 1000
-
-  let rawOutput = ''
-  let runError: string | undefined
-
-  try {
-    const mcpIds = stepConfig.mcps ?? []
-    const mcpDefs = mcpIds.length > 0
-      ? await resolveMcps(project, workflow, stepId, runId, mcpIds)
-      : []
-
-    const session = await adapter.spawn({
-      processFile: instructionFile,
-      cardData: {},
-      skills: [],
-      contextPacks: [],
-      mcps: mcpDefs,
-      workingDir: runDir,
-      timeout: timeoutMs,
-    })
-
-    // Collect full stdout
-    void (async () => {
-      try {
-        for await (const chunk of session.stderr) {
-          void chunk // discard stderr for source runs
-        }
-      } catch { /* ignore */ }
-    })()
-
-    for await (const chunk of session.stdout) {
-      rawOutput += chunk
-    }
-
-    const result = await session.result()
-    if (result.exitCode !== 0 && !rawOutput.trim()) {
-      runError = `Adapter exited with code ${result.exitCode}`
-    }
-
-    try { await adapter.clearContext() } catch { /* non-fatal */ }
-  } catch (err) {
-    runError = err instanceof Error ? err.message : String(err)
-  }
-
-  if (runError !== undefined) {
-    await failRun({ project, workflow, stepId, runId, stateDir, runDir, startedAt, meta, error: runError })
-    return
-  }
-
-  // Parse JSON array
-  let items: Record<string, unknown>[]
-  try {
-    // Try to extract a JSON array from the output (may be wrapped in markdown code fences)
-    const jsonMatch = rawOutput.match(/```(?:json)?\s*([\s\S]*?)```/) ?? rawOutput.match(/(\[[\s\S]*\])/)
-    const jsonStr = jsonMatch ? jsonMatch[1].trim() : rawOutput.trim()
-    const parsed = JSON.parse(jsonStr)
-    if (!Array.isArray(parsed)) throw new Error('Output is not a JSON array')
-    items = parsed as Record<string, unknown>[]
-  } catch (err) {
-    const error = `Failed to parse AI output as JSON array: ${err instanceof Error ? err.message : String(err)}`
-    await failRun({ project, workflow, stepId, runId, stateDir, runDir, startedAt, meta, error })
-    return
-  }
-
-  // Save raw output for inspection
-  await fs.writeFile(join(runDir, 'output.json'), JSON.stringify(items, null, 2), 'utf-8')
-
-  // Dedup
-  const dedupKey = stepConfig.dedup.key
-  const firstRunPolicy = stepConfig.dedup.first_run
-  const maxMemory = stepConfig.dedup.max_memory ?? 10000
-
-  const newItems: Record<string, unknown>[] = []
-  const allIds: string[] = []
-
-  for (const item of items) {
-    const itemId = String(item[dedupKey] ?? '')
-    if (!itemId) continue
-    allIds.push(itemId)
-    if (!seenSet.has(itemId)) {
-      newItems.push(item)
-    }
-  }
-
-  // Apply first_run policy
-  let cardsToCreate: Record<string, unknown>[]
-  if (isFirstRun) {
-    if (firstRunPolicy === 'skip_existing') {
-      cardsToCreate = []
-    } else if (firstRunPolicy === 'process_last_n') {
-      const n = stepConfig.dedup.first_run_n ?? 10
-      cardsToCreate = newItems.slice(-n)
-    } else {
-      // process_all
-      cardsToCreate = newItems
-    }
-  } else {
-    cardsToCreate = newItems
-  }
-
-  // Create cards
-  const readyDir = join(stepDir, 'cards', 'ready')
-  await fs.mkdir(readyDir, { recursive: true })
+  const { dir: cardOutputDir, autoForwarded, forwardedToStepId } = await resolveCardOutputDir(project, workflow, stepId)
+  await fs.mkdir(cardOutputDir, { recursive: true })
   const now = new Date().toISOString()
 
-  for (let i = 0; i < cardsToCreate.length; i++) {
-    const item = cardsToCreate[i]
-    const itemId = String(item[dedupKey] ?? '')
-    const cardId = await nextCardId(project, workflow, stepId, i + 1)
+  // ── HTTP GET: one fetch → one card (full response text as card.data.body) ──
+  if (channel.type === 'http_get') {
+    const counters = await readCounters(stateDir)
+    const lastRunAt = counters.last_run_at ?? ''
+    let rawBody: string
+    try {
+      const { fetchHttp } = await import('./http-channel')
+      rawBody = await fetchHttp(credential as HttpCredential, channel, { last_run_at: lastRunAt })
+    } catch (err) {
+      const error = `Channel fetch failed: ${err instanceof Error ? err.message : String(err)}`
+      let httpError: HttpErrorDetail | undefined
+      if (err && typeof err === 'object' && 'detail' in err) {
+        const d = (err as { detail: unknown }).detail
+        if (d && typeof d === 'object' && 'url' in d && 'status' in d) {
+          httpError = d as HttpErrorDetail
+        }
+      }
+      await failRun({ project, workflow, stepId, runId, stateDir, runDir, startedAt, meta, error, httpError })
+      return
+    }
 
-    // Audit BEFORE writing card (replayable)
+    await fs.writeFile(join(runDir, 'output.txt'), rawBody, 'utf-8')
+
+    let cardData: object = { body: rawBody }
+    if (stepConfig.prompt) {
+      try {
+        const projectMeta = await projectService.getProject(project)
+        const permissions = projectService.getPermissions(projectMeta)
+        const aiResult = await runAIStep({ runDir, prompt: stepConfig.prompt, prefetchedData: rawBody, permissions })
+        cardData = typeof aiResult.output === 'object' ? aiResult.output : { ai_output: aiResult.output }
+      } catch (err) {
+        await failRun({ project, workflow, stepId, runId, stateDir, runDir, startedAt, meta, error: `AI step failed: ${err instanceof Error ? err.message : String(err)}` })
+        return
+      }
+    }
+
+    const cardId = await nextCardId(project, workflow, autoForwarded && forwardedToStepId ? forwardedToStepId : stepId, 1)
     auditDb.insert({
       project_id: project, workflow_id: workflow, step_id: stepId, card_id: cardId,
       event: 'source_item_new', actor: 'system',
-      details_json: JSON.stringify({ item_id: itemId, card_id: cardId, run_id: runId }),
+      details_json: JSON.stringify({ card_id: cardId, run_id: runId }),
     })
-
-    const card: Card = {
-      id: cardId,
-      created_at: now,
-      created_by: 'source',
-      source_step: stepId,
-      data: item,
-      history: [{ at: now, step: stepId, event: 'created', by: 'system' }],
+    const cardHistory: CardHistoryEntry[] = [{ at: now, step: stepId, event: 'created', by: 'system' }]
+    if (autoForwarded && forwardedToStepId) {
+      cardHistory.push({ at: now, step: forwardedToStepId, event: 'marked_ready', by: 'system' })
     }
-    await fsService.writeJsonAtomic(join(readyDir, `${cardId}.json`), card)
+    const card: Card = {
+      id: cardId, created_at: now, created_by: 'source', source_step: stepId,
+      data: cardData as Record<string, unknown>,
+      history: cardHistory,
+    }
+    await fsService.writeJsonAtomic(join(cardOutputDir, `${cardId}.json`), card)
+
+    const endedAt = new Date().toISOString()
+    const elapsedMs = Date.parse(endedAt) - Date.parse(startedAt)
+    await fsService.writeJsonAtomic(join(stateDir, 'counters.json'), {
+      ...counters,
+      runs_total: counters.runs_total + 1,
+      items_found: counters.items_found + 1,
+      items_new: counters.items_new + 1,
+      last_run_at: endedAt,
+    })
+    await fsService.writeJsonAtomic(join(runDir, 'meta.json'), {
+      ...meta, ended_at: endedAt, elapsed_ms: elapsedMs, status: 'completed',
+      items_found: 1, items_new: 1,
+    })
+    auditDb.insert({
+      project_id: project, workflow_id: workflow, step_id: stepId, card_id: '',
+      event: 'source_run_completed', actor: 'system',
+      details_json: JSON.stringify({ run_id: runId, items_found: 1, items_new: 1, duration_ms: elapsedMs }),
+    })
+    emit({ type: 'completed', project, workflow, stepId, runId, itemsFound: 1, itemsNew: 1 })
+    return
   }
 
-  // Update seen ids — add all item ids (not just new ones) to seen set
-  const nextSeen: SeenIdsEntry[] = [
-    ...seenEntries.filter((e) => !allIds.includes(e.id)),
-    ...allIds.map((id) => ({ id, seen_at: now })),
-  ]
-  const pruned = pruneSeenIds(nextSeen, maxMemory)
-  await writeSeenIdsAtomic(stateDir, pruned)
+  // ── IMAP: one card per email, deduplicated via seen-ids.json ──────────────
+  if (channel.type === 'imap') {
+    const seenEntries = await readSeenIds(stateDir)
+    const seenSet = new Set(seenEntries.map((e) => e.id))
+    const isFirstRun = seenEntries.length === 0
 
-  // Update counters
-  const endedAt = new Date().toISOString()
-  const elapsedMs = Date.parse(endedAt) - Date.parse(startedAt)
-  const counters = await readCounters(stateDir)
-  const nextCounters: SourceCounters = {
-    runs_total: counters.runs_total + 1,
-    items_found: counters.items_found + items.length,
-    items_new: counters.items_new + cardsToCreate.length,
-    last_run_at: endedAt,
+    let items: Record<string, unknown>[]
+    try {
+      const { fetchEmails } = await import('./imap-channel')
+      items = (await fetchEmails(credential as ImapCredential, channel)) as unknown as Record<string, unknown>[]
+    } catch (err) {
+      const error = `Channel fetch failed: ${err instanceof Error ? err.message : String(err)}`
+      await failRun({ project, workflow, stepId, runId, stateDir, runDir, startedAt, meta, error })
+      return
+    }
+
+    await fs.writeFile(join(runDir, 'output.json'), JSON.stringify(items, null, 2), 'utf-8')
+
+    const dedup = stepConfig.dedup ?? { key: 'message_id', max_memory: 10000, first_run: 'skip_existing' as const }
+    const dedupKey = dedup.key
+    const firstRunPolicy = dedup.first_run
+    const maxMemory = dedup.max_memory ?? 10000
+
+    const newItems: Record<string, unknown>[] = []
+    const allIds: string[] = []
+
+    for (const item of items) {
+      const itemId = String(item[dedupKey] ?? '')
+      if (!itemId) continue
+      allIds.push(itemId)
+      if (!seenSet.has(itemId)) newItems.push(item)
+    }
+
+    let cardsToCreate: Record<string, unknown>[]
+    if (isFirstRun) {
+      if (firstRunPolicy === 'skip_existing') {
+        cardsToCreate = []
+      } else if (firstRunPolicy === 'process_last_n') {
+        cardsToCreate = newItems.slice(-(dedup.first_run_n ?? 10))
+      } else {
+        cardsToCreate = newItems
+      }
+    } else {
+      cardsToCreate = newItems
+    }
+
+    for (let i = 0; i < cardsToCreate.length; i++) {
+      const item = cardsToCreate[i]
+      const itemId = String(item[dedupKey] ?? '')
+      const cardId = await nextCardId(project, workflow, autoForwarded && forwardedToStepId ? forwardedToStepId : stepId, i + 1)
+
+      let cardData: object = item
+      if (stepConfig.prompt) {
+        try {
+          const projectMeta = await projectService.getProject(project)
+          const permissions = projectService.getPermissions(projectMeta)
+          const aiResult = await runAIStep({ runDir, prompt: stepConfig.prompt, prefetchedData: JSON.stringify(item, null, 2), permissions })
+          cardData = typeof aiResult.output === 'object' ? aiResult.output : { ai_output: aiResult.output }
+        } catch (err) {
+          await failRun({ project, workflow, stepId, runId, stateDir, runDir, startedAt, meta, error: `AI step failed for item ${itemId}: ${err instanceof Error ? err.message : String(err)}` })
+          return
+        }
+      }
+
+      auditDb.insert({
+        project_id: project, workflow_id: workflow, step_id: stepId, card_id: cardId,
+        event: 'source_item_new', actor: 'system',
+        details_json: JSON.stringify({ item_id: itemId, card_id: cardId, run_id: runId }),
+      })
+      const cardHistory: CardHistoryEntry[] = [{ at: now, step: stepId, event: 'created', by: 'system' }]
+      if (autoForwarded && forwardedToStepId) {
+        cardHistory.push({ at: now, step: forwardedToStepId, event: 'marked_ready', by: 'system' })
+      }
+      const card: Card = {
+        id: cardId, created_at: now, created_by: 'source', source_step: stepId,
+        data: cardData as Record<string, unknown>,
+        history: cardHistory,
+      }
+      await fsService.writeJsonAtomic(join(cardOutputDir, `${cardId}.json`), card)
+    }
+
+    const nextSeen: SeenIdsEntry[] = [
+      ...seenEntries.filter((e) => !allIds.includes(e.id)),
+      ...allIds.map((id) => ({ id, seen_at: now })),
+    ]
+    await writeSeenIdsAtomic(stateDir, pruneSeenIds(nextSeen, maxMemory))
+
+    const endedAt = new Date().toISOString()
+    const elapsedMs = Date.parse(endedAt) - Date.parse(startedAt)
+    const counters = await readCounters(stateDir)
+    await fsService.writeJsonAtomic(join(stateDir, 'counters.json'), {
+      runs_total: counters.runs_total + 1,
+      items_found: counters.items_found + items.length,
+      items_new: counters.items_new + cardsToCreate.length,
+      last_run_at: endedAt,
+    })
+    await fsService.writeJsonAtomic(join(runDir, 'meta.json'), {
+      ...meta, ended_at: endedAt, elapsed_ms: elapsedMs, status: 'completed',
+      items_found: items.length, items_new: cardsToCreate.length,
+    })
+    auditDb.insert({
+      project_id: project, workflow_id: workflow, step_id: stepId, card_id: '',
+      event: 'source_run_completed', actor: 'system',
+      details_json: JSON.stringify({ run_id: runId, items_found: items.length, items_new: cardsToCreate.length, duration_ms: elapsedMs }),
+    })
+    emit({ type: 'completed', project, workflow, stepId, runId, itemsFound: items.length, itemsNew: cardsToCreate.length })
+    return
   }
-  await fsService.writeJsonAtomic(join(stateDir, 'counters.json'), nextCounters)
 
-  // Update run meta
-  const finalMeta: SourceRunMeta = {
-    ...meta, ended_at: endedAt, elapsed_ms: elapsedMs, status: 'completed',
-    items_found: items.length, items_new: cardsToCreate.length,
-  }
-  await fsService.writeJsonAtomic(join(runDir, 'meta.json'), finalMeta)
-
-  auditDb.insert({
-    project_id: project, workflow_id: workflow, step_id: stepId, card_id: '',
-    event: 'source_run_completed', actor: 'system',
-    details_json: JSON.stringify({ run_id: runId, items_found: items.length, items_new: cardsToCreate.length, duration_ms: elapsedMs }),
-  })
-  emit({ type: 'completed', project, workflow, stepId, runId, itemsFound: items.length, itemsNew: cardsToCreate.length })
+  await failRun({ project, workflow, stepId, runId, stateDir, runDir, startedAt, meta, error: `Unknown channel type: ${(channel as { type: string }).type}` })
 }
 
 interface FailRunInput {
@@ -411,9 +417,10 @@ interface FailRunInput {
   startedAt: string
   meta: SourceRunMeta
   error: string
+  httpError?: HttpErrorDetail
 }
 
-async function failRun({ project, workflow, stepId, runId, stateDir, runDir, startedAt, meta, error }: FailRunInput): Promise<void> {
+async function failRun({ project, workflow, stepId, runId, stateDir, runDir, startedAt, meta, error, httpError }: FailRunInput): Promise<void> {
   const endedAt = new Date().toISOString()
   const elapsedMs = Date.parse(endedAt) - Date.parse(startedAt)
 
@@ -426,6 +433,7 @@ async function failRun({ project, workflow, stepId, runId, stateDir, runDir, sta
 
   const failMeta: SourceRunMeta = {
     ...meta, ended_at: endedAt, elapsed_ms: elapsedMs, status: 'failed', error,
+    ...(httpError ? { http_error: httpError } : {}),
   }
   await fsService.writeJsonAtomic(join(runDir, 'meta.json'), failMeta)
 
@@ -435,6 +443,7 @@ async function failRun({ project, workflow, stepId, runId, stateDir, runDir, sta
     details_json: JSON.stringify({ run_id: runId, error, duration_ms: elapsedMs }),
   })
   emit({ type: 'failed', project, workflow, stepId, runId, error })
+  notificationService.notifySourceRunFailed({ projectName: project, workflowName: workflow, error })
 }
 
 // ── State query ───────────────────────────────────────────────────────────────
@@ -534,11 +543,21 @@ async function recoverOrphanedRuns(): Promise<{ recovered: number }> {
   return { recovered }
 }
 
+async function resetDedup(project: string, workflow: string, stepId: string): Promise<void> {
+  const stateDir = join(projectService.paths.stepDir(project, workflow, stepId), 'state')
+  const seenPath = join(stateDir, 'seen-ids.json')
+  const tmpPath = join(stateDir, 'seen-ids.json.tmp')
+  // Remove .tmp first in case a previous crash left one
+  try { await fs.unlink(tmpPath) } catch { /* ignore */ }
+  await fs.writeFile(seenPath, '[]', 'utf-8')
+}
+
 export const sourceRunner = {
   runSource,
   getState,
   listRuns,
   recoverOrphanedRuns,
+  resetDedup,
   isRunning: (project: string, workflow: string, stepId: string) => inFlight.has(stepKey(project, workflow, stepId)),
   activeRunCount: (project: string): number => {
     const prefix = project + '/'

@@ -4,6 +4,13 @@
 
 // ── Settings ──────────────────────────────────────────────────────────────────
 
+export interface NotificationSettings {
+  /** Global on/off switch — when false, no OS notifications are fired. Default: true. */
+  enabled: boolean
+  /** Project names (folder ids) for which notifications are suppressed. */
+  disabledProjects: string[]
+}
+
 export interface Settings {
   theme: 'light' | 'dark' | 'system'
   defaultCliCommand: string
@@ -12,7 +19,9 @@ export interface Settings {
   defaultModelByAdapter: Record<string, string | null>
   /** Per-adapter chosen effort id. Keyed by adapter id; null when not set or N/A. */
   defaultEffortByAdapter: Record<string, string | null>
+  /** @deprecated Use notificationSettings.enabled instead. */
   notificationsEnabled: boolean
+  notificationSettings: NotificationSettings
   /**
    * Name (folder id) of the last project the user had open. Restored on next
    * launch so the app comes back to where the user left it. null when the
@@ -40,21 +49,15 @@ export type AuditEvent =
   | 'run_started'
   | 'run_completed'
   | 'run_failed'
-  | 'run_aborted_mcp_not_ready'
-  | 'mcp_installed'
-  | 'mcp_uninstalled'
-  | 'mcp_configured'
-  | 'mcp_credentials_reset'
-  | 'mcp_health_check_failed'
   | 'ai_terminal_clear_failed'
   | 'source_run_started'
   | 'source_run_completed'
   | 'source_run_failed'
   | 'source_item_new'
-  | 'skill_installed'
-  | 'skill_updated'
-  | 'skill_uninstalled'
-  | 'skill_quarantined'
+  | 'outlet_run_started'
+  | 'outlet_run_completed'
+  | 'outlet_run_failed'
+  | 'ai_permission_auto_accepted'
 
 export interface AuditRow {
   id: string
@@ -72,13 +75,21 @@ export interface AuditRow {
 
 export interface BootstrapInfo {
   dataDir: string
-  systemSkillsRestored: string[]
   appVersion: string
 }
 
 // ── Project metadata ──────────────────────────────────────────────────────────
 
 export type ProjectStatus = 'active' | 'inactive'
+
+export interface ProjectPermissions {
+  allow_network: boolean
+  allow_shell: boolean
+  /** IDs of credentials the AI may reference by name in its context. */
+  credential_ids: string[]
+  /** Free-text instructions passed to the AI about what tools are available. */
+  notes?: string
+}
 
 export interface ProjectMeta {
   id: string
@@ -98,6 +109,8 @@ export interface ProjectMeta {
    * list screen. Defaults to `created_at` on read when absent.
    */
   updated_at: string
+  /** Optional AI permission block. Controls which tools the AI adapter may use. */
+  permissions?: ProjectPermissions
 }
 
 export interface WorkflowMeta {
@@ -107,7 +120,7 @@ export interface WorkflowMeta {
   step_ids: string[]
 }
 
-export type StepKind = 'tray' | 'worker' | 'source'
+export type StepKind = 'tray' | 'worker' | 'source' | 'outlet'
 
 export interface StepMeta {
   id: string
@@ -116,6 +129,119 @@ export interface StepMeta {
   description?: string
   raw: Record<string, unknown>
 }
+
+// ── Credentials ───────────────────────────────────────────────────────────────
+
+export interface HttpCredential {
+  id: string
+  type: 'http'
+  name: string
+  base_url: string
+  headers: Array<{ name: string; value: string }>
+  timeout_ms: number
+}
+
+export interface ImapCredential {
+  id: string
+  type: 'imap'
+  name: string
+  host: string
+  port: number
+  secure: boolean
+  username: string
+}
+
+export interface SmtpCredential {
+  id: string
+  type: 'smtp'
+  name: string
+  host: string
+  port: number
+  secure: boolean
+  username: string
+  from_name: string
+  from_address: string
+}
+
+export type Credential = HttpCredential | ImapCredential | SmtpCredential
+export type CredentialType = 'http' | 'imap' | 'smtp'
+
+export interface CredentialSummary {
+  id: string
+  type: CredentialType
+  name: string
+}
+
+// ── Source channels ───────────────────────────────────────────────────────────
+
+export interface HttpGetChannel {
+  type: 'http_get'
+  credential_id: string
+  url_path: string
+}
+
+export interface ImapChannel {
+  type: 'imap'
+  credential_id: string
+  folder: string
+  unseen_only: boolean
+  max_messages: number
+  subject_contains?: string
+  from_contains?: string
+}
+
+export type SourceChannel = HttpGetChannel | ImapChannel
+
+// ── Outlet types ──────────────────────────────────────────────────────────────
+
+export interface SmtpChannel {
+  type: 'smtp'
+  credential_id: string
+  to: string
+  subject: string
+  body: string
+}
+
+export interface HttpPostChannel {
+  type: 'http_post'
+  credential_id: string
+  url_path: string
+  body?: string
+  method?: 'POST' | 'PUT' | 'PATCH'
+}
+
+export type OutletChannel = SmtpChannel | HttpPostChannel
+
+export interface OutletStepConfig {
+  id: string
+  kind: 'outlet'
+  name: string
+  description?: string
+  color?: string
+  icon?: string
+  trigger?: {
+    mode: 'on_ready' | 'scheduled' | 'manual'
+    schedule_cron?: string | null
+  }
+  channel: OutletChannel
+  on_failure: 'send_to_errors'
+  prompt?: string | null
+}
+
+export interface OutletRunMeta {
+  run_id: string
+  status: 'running' | 'completed' | 'failed'
+  started_at: string
+  ended_at?: string
+  card_id: string
+  channel_type: string
+  error?: string
+}
+
+export type OutletRunEvent =
+  | { type: 'started'; project: string; workflow: string; stepId: string; runId: string; cardId: string }
+  | { type: 'completed'; project: string; workflow: string; stepId: string; runId: string; cardId: string }
+  | { type: 'failed'; project: string; workflow: string; stepId: string; runId: string; cardId: string; error: string }
 
 // ── Source step types ─────────────────────────────────────────────────────────
 
@@ -136,13 +262,10 @@ export interface SourceStepConfig {
   color: string
   icon: string
   schedule_cron: string
-  dedup: SourceDedup
-  execution: {
-    timeout_seconds: number
-    adapter: string
-  }
-  mcps?: string[]
+  dedup?: SourceDedup
   paused: boolean
+  channel: SourceChannel | null
+  prompt?: string | null
 }
 
 export interface SeenIdsEntry {
@@ -157,6 +280,15 @@ export interface SourceCounters {
   last_run_at: string | null
 }
 
+export interface HttpErrorDetail {
+  /** The full URL that was attempted. */
+  url: string
+  status: number
+  statusText: string
+  /** First 4 KB of the response body. */
+  responseBody: string
+}
+
 export interface SourceRunMeta {
   run_id: string
   step_id: string
@@ -168,6 +300,8 @@ export interface SourceRunMeta {
   items_found?: number
   items_new?: number
   error?: string
+  /** Set when the failure was an HTTP non-2xx response, for richer error display. */
+  http_error?: HttpErrorDetail
   elapsed_ms?: number
 }
 
@@ -199,6 +333,30 @@ export interface UsageSnapshot {
 }
 
 // ── AI provider readiness ─────────────────────────────────────────────────────
+
+export type AdapterBlockerKind =
+  | 'not_installed'
+
+export interface AdapterBlocker {
+  kind: AdapterBlockerKind
+  /** User-facing explanation in plain English. */
+  message: string
+  /** Link to install docs. */
+  fixUrl?: string
+  /** Shell command the user can run to fix this (e.g. an install command). */
+  fixCommand?: string
+}
+
+export interface AdapterReadiness {
+  adapterId: string
+  /** CLI binary (or local server) is present and reachable. */
+  installed: boolean
+  /** CLI version string if installed, null otherwise. */
+  version: string | null
+  /** All current blockers. Empty array means ready to run. */
+  blockers: AdapterBlocker[]
+  checkedAt: number
+}
 
 export interface ProviderInstallSuggestion {
   id: string
@@ -235,8 +393,6 @@ export interface AdapterUsageSnapshot {
 export interface ProjectCreateSuccess {
   ok: true
   project: ProjectMeta
-  /** MCP ids referenced by the new project that aren't installed/configured yet. */
-  unconfiguredMcps: string[]
   /** True when the generated plan includes at least one Source step. */
   hasSourceStep: boolean
 }
@@ -251,167 +407,6 @@ export interface ProjectCreateError {
 }
 
 export type ProjectCreateOutcome = ProjectCreateSuccess | ProjectCreateError
-
-export interface SkillManifest {
-  id: string
-  name: string
-  version: string
-  description: string
-  tags?: string[]
-  tools?: string[]
-  /** Additional files bundled with this skill (relative paths under the skill directory). */
-  files?: string[]
-  _trayline?: Record<string, unknown>
-}
-
-// ── Skill catalog (Phase 8 — Skill Finder) ────────────────────────────────────
-
-export interface SkillCatalogEntry {
-  id: string
-  name: string
-  version: string
-  description: string
-  author?: string
-  tags?: string[]
-  /** Directory URL where the skill's files live (must end with `/`). */
-  base_url: string
-  /** Relative paths to fetch under base_url. Defaults to ["skill.json", "skill.md"]. */
-  files?: string[]
-}
-
-export interface SkillCatalogIndex {
-  schema_version?: number
-  generated_at?: string
-  skills: SkillCatalogEntry[]
-}
-
-export interface SkillCatalogFetchResult {
-  index: SkillCatalogIndex
-  source: 'remote' | 'cache'
-  /** Populated when source === 'cache' — why the remote attempt failed. */
-  remoteError?: string
-}
-
-export interface InstalledSkillRow {
-  manifest: SkillManifest
-  source: 'catalog' | 'url' | 'local' | 'system'
-  sourceUrl?: string
-  installedAt?: string
-  usedBy: { project: string; workflow: string; stepId: string }[]
-  /** Version available in the cached catalog when newer than installed. */
-  updateAvailable?: string
-  /** True when on-disk revalidation at launch found the skill tampered or invalid. */
-  quarantined?: boolean
-}
-
-// ── Skill validation (N2.1) ───────────────────────────────────────────────────
-
-export interface ValidationCheck {
-  id: string
-  label: string
-  status: 'pass' | 'fail' | 'warn'
-  /** Human-readable description for fail/warn status. */
-  message?: string
-  /** For skill.md safety scan: each matched line as "line N: [pattern] text". */
-  matches?: string[]
-}
-
-export interface SkillValidationResult {
-  checks: ValidationCheck[]
-  /** Parsed and validated manifest, or null if skill.json was invalid. */
-  manifest: {
-    id: string
-    name: string
-    version: string
-    description: string
-    tags?: string[]
-  } | null
-  /** Every file found in the bundle with its byte size. */
-  fileList: { name: string; sizeBytes: number }[]
-  /** True when at least one check has status === 'fail'. */
-  hasFail: boolean
-  /** Populated only when hasFail === false; the temp dir where files are staged. */
-  pendingTempDir?: string
-  /** The source URL used for this validation. */
-  sourceUrl?: string
-}
-
-export interface MissingSkillsEntry {
-  stepId: string
-  workflowId: string
-  missingSkillIds: string[]
-}
-
-// ── MCP system ────────────────────────────────────────────────────────────────
-
-export type McpInstallMethod = 'npm' | 'binary' | 'docker' | 'local'
-
-export interface McpCredentialSchemaEntry {
-  id: string
-  label: string
-  description?: string
-  /** api_key → masked input; text_field → plain text input. Both stored in OS keychain. */
-  kind: 'api_key' | 'text_field'
-}
-
-export interface McpManifest {
-  id: string
-  name: string
-  version: string
-  description: string
-  install_method: McpInstallMethod
-  command_template: string
-  /** Human-readable setup instructions shown before the credential inputs. */
-  instructions?: string
-  credentials_schema: McpCredentialSchemaEntry[]
-  /** When true the setup wizard appends a live connection-test step at the end. */
-  has_test?: boolean
-  /** If set, MCP is only shown in the catalog on the listed platforms. Absent = all platforms. */
-  platforms?: ('darwin' | 'win32' | 'linux')[]
-  tags?: string[]
-  homepage?: string
-}
-
-export type McpHealthState = 'ready' | 'unconfigured' | 'error' | 'unknown' | 'disabled'
-
-export interface McpStatus {
-  /** True when all required credentials are confirmed present in the keychain. */
-  configured: boolean
-  /** Result of last health check. null if never run. */
-  health: 'ok' | 'failed' | null
-  healthCheckedAt: string | null
-  lastError?: string
-  /** When true, MCP won't auto-start even if a worker has it marked. */
-  disabled?: boolean
-}
-
-export interface InstalledMcpRow {
-  manifest: McpManifest
-  status: McpStatus
-  healthState: McpHealthState
-  installedAt: string
-}
-
-export interface McpCatalogEntry {
-  id: string
-  name: string
-  version: string
-  description: string
-  install_method: McpInstallMethod
-  command_template: string
-  instructions?: string
-  credentials_schema: McpCredentialSchemaEntry[]
-  has_test?: boolean
-  platforms?: ('darwin' | 'win32' | 'linux')[]
-  tags?: string[]
-  homepage?: string
-}
-
-export interface McpCatalogIndex {
-  schema_version?: number
-  generated_at?: string
-  mcps: McpCatalogEntry[]
-}
 
 // ── Project live stats & readiness (N5.2) ────────────────────────────────────
 
@@ -439,8 +434,6 @@ export interface ExportOptions {
 export interface ExportManifest {
   trayline_version: string
   exported_at: string
-  skills: Array<{ id: string; version: string }>
-  mcps: string[]
 }
 
 // ── Security audit ────────────────────────────────────────────────────────────
@@ -466,7 +459,6 @@ export interface ImportProjectSummary {
   description: string
   trays: number
   workers: number
-  skillsRequired: string[]
   /** First 300 chars of process.md per worker step. */
   workerPreviews: Array<{ name: string; excerpt: string }>
 }
@@ -475,9 +467,6 @@ export interface ImportProjectSummary {
 export interface ImportSuccess {
   ok: true
   projectName: string
-  missingSkills: Array<{ id: string; version: string }>
-  /** MCP ids referenced by the project that are not installed on this machine. */
-  missingMcps: string[]
 }
 
 /**

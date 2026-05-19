@@ -3,15 +3,21 @@ import fs from 'fs/promises'
 import { Paths } from './fs-service'
 import type {
   ProjectMeta,
+  ProjectPermissions,
   ProjectStatus,
   WorkflowMeta,
   StepKind,
   StepMeta,
-  SkillManifest,
-  MissingSkillsEntry,
 } from '../../shared/types'
 
-export type { ProjectMeta, ProjectStatus, WorkflowMeta, StepKind, StepMeta, SkillManifest }
+export type { ProjectMeta, ProjectPermissions, ProjectStatus, WorkflowMeta, StepKind, StepMeta }
+
+const DEFAULT_PERMISSIONS: ProjectPermissions = {
+  allow_network: false,
+  allow_shell: false,
+  credential_ids: [],
+  notes: '',
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -42,7 +48,7 @@ function stepDir(projectName: string, workflowName: string, stepId: string): str
 
 function normalizeMeta(raw: Partial<ProjectMeta> & { name: string }): ProjectMeta {
   const created_at = raw.created_at ?? new Date(0).toISOString()
-  return {
+  const meta: ProjectMeta = {
     id: raw.id ?? raw.name,
     name: raw.name,
     display_name: raw.display_name ?? raw.name,
@@ -51,6 +57,8 @@ function normalizeMeta(raw: Partial<ProjectMeta> & { name: string }): ProjectMet
     status: raw.status === 'inactive' ? 'inactive' : 'active',
     updated_at: raw.updated_at ?? created_at,
   }
+  if (raw.permissions) meta.permissions = raw.permissions
+  return meta
 }
 
 // ─── Project operations ───────────────────────────────────────────────────────
@@ -138,77 +146,6 @@ async function getStep(projectName: string, workflowName: string, stepId: string
   }
 }
 
-// ─── Skill discovery ──────────────────────────────────────────────────────────
-
-async function listSkills(): Promise<SkillManifest[]> {
-  if (!(await pathExists(Paths.skills))) return []
-  const out: SkillManifest[] = []
-
-  // User-installed skills only (top level of skills/, not _system/)
-  // System skills are auto-managed and never exposed to the worker skill picker.
-  const top = await fs.readdir(Paths.skills, { withFileTypes: true })
-  for (const e of top) {
-    if (!e.isDirectory()) continue
-    if (e.name === '_system') continue
-    const m = await readJsonSafe<SkillManifest>(join(Paths.skills, e.name, 'skill.json'))
-    if (m) out.push(m)
-  }
-
-  return out
-}
-
-/**
- * Check every worker in the project and return entries for any worker whose
- * required skills are not installed as user skills.
- * System skills (in Paths.systemSkills) are auto-restored on launch and never
- * appear in a worker's skills[] array, so we only check Paths.skills here.
- */
-async function checkProjectSkills(projectName: string): Promise<MissingSkillsEntry[]> {
-  const result: MissingSkillsEntry[] = []
-  const wfRoot = join(projectDir(projectName), 'workflows')
-  if (!(await pathExists(wfRoot))) return result
-
-  const wfs = await fs.readdir(wfRoot, { withFileTypes: true })
-  for (const wfEntry of wfs) {
-    if (!wfEntry.isDirectory()) continue
-    const stepsRoot = join(wfRoot, wfEntry.name, 'steps')
-    if (!(await pathExists(stepsRoot))) continue
-
-    const steps = await fs.readdir(stepsRoot, { withFileTypes: true })
-    for (const stepEntry of steps) {
-      if (!stepEntry.isDirectory()) continue
-      const raw = await readJsonSafe<{ kind?: string; skills?: string[] }>(
-        join(stepsRoot, stepEntry.name, 'step.json'),
-      )
-      if (!raw || raw.kind !== 'worker') continue
-
-      const missing: string[] = []
-      for (const skillId of raw.skills ?? []) {
-        if (!(await pathExists(join(Paths.skills, skillId, 'skill.json')))) {
-          missing.push(skillId)
-        }
-      }
-      if (missing.length > 0) {
-        result.push({ stepId: stepEntry.name, workflowId: wfEntry.name, missingSkillIds: missing })
-      }
-    }
-  }
-  return result
-}
-
-async function getSkill(skillId: string): Promise<SkillManifest | null> {
-  // Look in user skills first, then system
-  const candidates = [
-    join(Paths.skills, skillId, 'skill.json'),
-    join(Paths.systemSkills, skillId, 'skill.json'),
-  ]
-  for (const p of candidates) {
-    const m = await readJsonSafe<SkillManifest>(p)
-    if (m) return m
-  }
-  return null
-}
-
 // ─── Context pack operations ──────────────────────────────────────────────────
 
 async function listContextFiles(projectName: string): Promise<string[]> {
@@ -245,17 +182,60 @@ async function deleteContextFile(projectName: string, file: string): Promise<voi
   if (await pathExists(p)) await fs.unlink(p)
 }
 
+async function updateMeta(
+  projectName: string,
+  patch: { display_name?: string; description?: string },
+): Promise<ProjectMeta> {
+  const path = join(projectDir(projectName), 'project.json')
+  const raw = await readJsonSafe<Partial<ProjectMeta>>(path)
+  if (!raw) throw new Error(`Project not found: ${projectName}`)
+  const next = normalizeMeta({
+    ...raw,
+    name: raw.name ?? projectName,
+    display_name: patch.display_name ?? raw.display_name ?? projectName,
+    description: patch.description ?? raw.description ?? '',
+    updated_at: new Date().toISOString(),
+  })
+  const tmp = path + '.tmp'
+  await fs.writeFile(tmp, JSON.stringify(next, null, 2), 'utf-8')
+  await fs.rename(tmp, path)
+  return next
+}
+
+async function updatePermissions(
+  projectName: string,
+  permissions: ProjectPermissions,
+): Promise<ProjectMeta> {
+  const path = join(projectDir(projectName), 'project.json')
+  const raw = await readJsonSafe<Partial<ProjectMeta>>(path)
+  if (!raw) throw new Error(`Project not found: ${projectName}`)
+  const next = normalizeMeta({
+    ...raw,
+    name: raw.name ?? projectName,
+    permissions,
+    updated_at: new Date().toISOString(),
+  })
+  const tmp = path + '.tmp'
+  await fs.writeFile(tmp, JSON.stringify(next, null, 2), 'utf-8')
+  await fs.rename(tmp, path)
+  return next
+}
+
+function getPermissions(meta: ProjectMeta | null): ProjectPermissions {
+  return meta?.permissions ?? DEFAULT_PERMISSIONS
+}
+
 export const projectService = {
   listProjects,
   getProject,
   setStatus,
+  updateMeta,
+  updatePermissions,
+  getPermissions,
   listWorkflows,
   getWorkflow,
   listSteps,
   getStep,
-  listSkills,
-  getSkill,
-  checkProjectSkills,
   listContextFiles,
   readContextFile,
   writeContextFile,

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -21,47 +21,44 @@ export default function ConfigTab({ step }: { step: StepMeta }) {
   const [allowManualCreate, setAllowManualCreate] = useState<boolean>(
     (step.raw.allow_manual_create as boolean | undefined) ?? true,
   )
-  const [busy, setBusy] = useState(false)
-  const [savedAt, setSavedAt] = useState<string | null>(null)
+  const [deleteBusy, setDeleteBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const userEditedRef = useRef(false)
 
   useEffect(() => {
+    userEditedRef.current = false
     setName(step.name)
     setDescription((step.raw.description as string) ?? '')
     setApprovalMode((step.raw.approval_mode as 'manual' | 'auto') ?? 'manual')
     setAllowManualCreate((step.raw.allow_manual_create as boolean | undefined) ?? true)
-    setSavedAt(null)
     setError(null)
   }, [step.id, step.name, step.raw])
 
-  async function save() {
+  const save = useCallback(async () => {
     if (!active || !workflow) return
-    setBusy(true); setError(null)
     try {
       await window.trayline.step.update({
         project: active.name,
         workflow: workflow.name,
         stepId: step.id,
-        patch: {
-          name,
-          description,
-          approval_mode: approvalMode,
-          allow_manual_create: allowManualCreate,
-        },
+        patch: { name, description, approval_mode: approvalMode, allow_manual_create: allowManualCreate },
       })
       await refreshSteps()
-      setSavedAt(new Date().toLocaleTimeString())
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
-    } finally {
-      setBusy(false)
     }
-  }
+  }, [active, workflow, step.id, name, description, approvalMode, allowManualCreate, refreshSteps])
+
+  useEffect(() => {
+    if (!userEditedRef.current) return
+    const timer = setTimeout(() => { void save() }, 500)
+    return () => clearTimeout(timer)
+  }, [save])
 
   async function handleDelete() {
     if (!active || !workflow) return
     if (!confirm(`Delete tray "${step.name}"? Cards inside will be lost. This cannot be undone.`)) return
-    setBusy(true); setError(null)
+    setDeleteBusy(true); setError(null)
     try {
       await window.trayline.step.delete({
         project: active.name,
@@ -72,9 +69,11 @@ export default function ConfigTab({ step }: { step: StepMeta }) {
       await refreshSteps()
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
-      setBusy(false)
+      setDeleteBusy(false)
     }
   }
+
+  function markEdited() { userEditedRef.current = true }
 
   const isErrors = step.id === '99-errors'
 
@@ -82,12 +81,12 @@ export default function ConfigTab({ step }: { step: StepMeta }) {
     <div className="px-6 py-4 max-w-2xl flex flex-col gap-5">
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="cfg-name" className="text-xs">Name</Label>
-        <Input id="cfg-name" value={name} onChange={(e) => setName(e.target.value)} disabled={isErrors} />
+        <Input id="cfg-name" value={name} onChange={(e) => { markEdited(); setName(e.target.value) }} disabled={isErrors} />
       </div>
 
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="cfg-desc" className="text-xs">Description</Label>
-        <Textarea id="cfg-desc" value={description} onChange={(e) => setDescription(e.target.value)} rows={3} disabled={isErrors} />
+        <Textarea id="cfg-desc" value={description} onChange={(e) => { markEdited(); setDescription(e.target.value) }} rows={3} disabled={isErrors} />
       </div>
 
       <div className="flex flex-col gap-1.5">
@@ -98,7 +97,7 @@ export default function ConfigTab({ step }: { step: StepMeta }) {
               key={m}
               type="button"
               disabled={isErrors}
-              onClick={() => setApprovalMode(m)}
+              onClick={() => { markEdited(); setApprovalMode(m) }}
               className={`
                 px-3 py-1.5 rounded-md text-xs capitalize border transition-colors
                 ${approvalMode === m
@@ -117,7 +116,7 @@ export default function ConfigTab({ step }: { step: StepMeta }) {
         <input
           type="checkbox"
           checked={allowManualCreate}
-          onChange={(e) => setAllowManualCreate(e.target.checked)}
+          onChange={(e) => { markEdited(); setAllowManualCreate(e.target.checked) }}
           disabled={isErrors}
         />
         <span>Allow users to create cards manually in this tray</span>
@@ -127,16 +126,10 @@ export default function ConfigTab({ step }: { step: StepMeta }) {
         <div className="text-xs text-red-600 dark:text-red-400">{error}</div>
       )}
 
-      <div className="flex items-center justify-between pt-2">
-        <Button size="sm" variant="ghost" onClick={handleDelete} disabled={busy || isErrors} className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/40">
+      <div className="flex items-center pt-2">
+        <Button size="sm" variant="ghost" onClick={handleDelete} disabled={deleteBusy || isErrors} className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/40">
           <Trash2 size={13} strokeWidth={1.75} /> Delete tray
         </Button>
-        <div className="flex items-center gap-3">
-          {savedAt && <span className="text-[11px] text-neutral-500">Saved at {savedAt}</span>}
-          <Button size="sm" onClick={save} disabled={busy || isErrors}>
-            {busy ? 'Saving…' : 'Save'}
-          </Button>
-        </div>
       </div>
     </div>
   )

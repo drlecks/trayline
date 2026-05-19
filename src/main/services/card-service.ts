@@ -8,6 +8,7 @@ import fs from 'fs/promises'
 import { fsService } from './fs-service'
 import { auditDb } from './audit-db'
 import { projectService } from './project-service'
+import { notificationService } from './notification-service'
 import type { Card, CardCounts, CardStatus, TrayCounters, CardHistoryEntry } from '../../shared/card'
 
 function stepPath(project: string, workflow: string, stepId: string): string {
@@ -150,16 +151,29 @@ async function createCard(
 ): Promise<Card> {
   const id = await nextCardId(project, workflow, stepId)
   const now = new Date().toISOString()
+  const actor = opts.createdBy === 'manual' ? 'user' : 'system'
+
+  const stepJson = await fsService.readJson<{ kind?: string; approval_mode?: string }>(
+    join(stepPath(project, workflow, stepId), 'step.json'),
+  )
+  const isAutoApprove = stepJson.kind === 'tray' && stepJson.approval_mode === 'auto'
+
+  const history: CardHistoryEntry[] = [
+    { at: now, step: stepId, event: 'created', by: actor },
+    ...(isAutoApprove ? [{ at: now, step: stepId, event: 'marked_ready' as const, by: 'system' as const }] : []),
+  ]
+
   const card: Card = {
     id,
     created_at: now,
     created_by: opts.createdBy ?? 'manual',
     source_step: stepId,
     data,
-    history: [{ at: now, step: stepId, event: 'created', by: opts.createdBy === 'manual' ? 'user' : 'system' }],
+    history,
   }
 
-  const dir = statusDir(project, workflow, stepId, 'pending')
+  const targetStatus: CardStatus = isAutoApprove ? 'ready' : 'pending'
+  const dir = statusDir(project, workflow, stepId, targetStatus)
   await fs.mkdir(dir, { recursive: true })
   await fsService.writeJsonAtomic(join(dir, `${id}.json`), card)
 
@@ -171,9 +185,20 @@ async function createCard(
     step_id: stepId,
     card_id: id,
     event: 'card_created',
-    actor: opts.createdBy === 'manual' ? 'user' : 'system',
+    actor,
     details_json: JSON.stringify({ source: opts.createdBy ?? 'manual' }),
   })
+  if (isAutoApprove) {
+    auditDb.insert({
+      project_id: project,
+      workflow_id: workflow,
+      step_id: stepId,
+      card_id: id,
+      event: 'card_marked_ready',
+      actor: 'system',
+      details_json: JSON.stringify({ auto: true }),
+    })
+  }
 
   return card
 }
@@ -228,6 +253,7 @@ async function markReady(
   stepId: string,
   cardId: string,
 ): Promise<Card> {
+  notificationService.clearNotified(cardId)
   return moveCard(project, workflow, stepId, cardId, 'pending', 'ready', {
     at: new Date().toISOString(),
     step: stepId,
@@ -243,6 +269,7 @@ async function archiveCard(
   cardId: string,
   fromStatus: CardStatus,
 ): Promise<Card> {
+  notificationService.clearNotified(cardId)
   return moveCard(project, workflow, stepId, cardId, fromStatus, 'archived', {
     at: new Date().toISOString(),
     step: stepId,

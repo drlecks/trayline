@@ -59,8 +59,7 @@ export default function ExportProjectDialog({
             <AlertTriangle size={14} strokeWidth={1.75} className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
             <p className="text-xs text-amber-800 dark:text-amber-300 leading-relaxed">
               This export includes your workflow configuration — step names, AI prompts, and process
-              instructions. MCP credentials are never exported. Review the contents for any personal
-              or sensitive information before sharing.
+              instructions. Review the contents for any personal or sensitive information before sharing.
             </p>
           </div>
 

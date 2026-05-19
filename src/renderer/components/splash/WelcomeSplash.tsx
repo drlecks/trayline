@@ -1,17 +1,14 @@
 import { useEffect, useState } from 'react'
 import { Folder, Sparkles, FolderOpen, Package } from 'lucide-react'
+import iconUrl from '../../../../resources/icon-128.png'
 import { Button } from '@/components/ui/button'
 import { useProjectStore } from '@/stores/project-store'
-import ImportMissingSkillsDialog from '../projects/ImportMissingSkillsDialog'
-import ImportSecurityAuditDialog from '../projects/ImportSecurityAuditDialog'
-import type { BootstrapInfo, ImportSuccess, ImportNeedsReview } from '../../../shared/types'
+import type { BootstrapInfo } from '../../../shared/types'
 
 export default function WelcomeSplash() {
   const [info, setInfo] = useState<BootstrapInfo | null>(null)
   const [importing, setImporting] = useState(false)
   const [openingExample, setOpeningExample] = useState(false)
-  const [importResult, setImportResult] = useState<ImportSuccess | null>(null)
-  const [importAudit, setImportAudit] = useState<ImportNeedsReview | null>(null)
   const setScreen = useProjectStore((s) => s.setScreen)
   const setActive = useProjectStore((s) => s.setActive)
   const refreshProjects = useProjectStore((s) => s.refreshProjects)
@@ -31,13 +28,7 @@ export default function WelcomeSplash() {
       const result = await window.trayline.project.import()
       if ('canceled' in result) return
       await refreshProjects()
-      if (result.ok === 'needs_review') {
-        setImportAudit(result)
-      } else if (result.missingSkills.length > 0 || result.missingMcps.length > 0) {
-        setImportResult(result)
-      } else {
-        await openProject(result.projectName)
-      }
+      await openProject(result.projectName)
     } catch (e) {
       alert(e instanceof Error ? e.message : String(e))
     } finally {
@@ -50,11 +41,7 @@ export default function WelcomeSplash() {
     try {
       const result = await window.trayline.project.openExample()
       await refreshProjects()
-      if (result.missingSkills.length > 0 || result.missingMcps.length > 0) {
-        setImportResult(result)
-      } else {
-        await openProject(result.projectName)
-      }
+      await openProject(result.projectName)
     } catch (e) {
       alert(e instanceof Error ? e.message : String(e))
     } finally {
@@ -62,33 +49,9 @@ export default function WelcomeSplash() {
     }
   }
 
-  async function handleAuditCommit(token: string) {
-    const committed = await window.trayline.project.importCommit(token)
-    setImportAudit(null)
-    await refreshProjects()
-    if (committed.missingSkills.length > 0 || committed.missingMcps.length > 0) {
-      setImportResult(committed)
-    } else {
-      await openProject(committed.projectName)
-    }
-  }
-
-  function handleAuditAbort(token: string) {
-    void window.trayline.project.importAbort(token)
-    setImportAudit(null)
-  }
-
-  async function handleMissingSkillsDone(projectName: string) {
-    setImportResult(null)
-    await refreshProjects()
-    await openProject(projectName)
-  }
-
   return (
     <div className="flex flex-col items-center justify-center w-full max-w-2xl mx-auto px-8">
-      <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-neutral-100 dark:bg-neutral-900 mb-6">
-        <Sparkles size={22} className="text-neutral-700 dark:text-neutral-300" strokeWidth={1.5} />
-      </div>
+      <img src={iconUrl} alt="" className="w-16 h-16 mb-6 select-none" draggable={false} />
 
       <h1 className="text-2xl font-semibold tracking-tight mb-2">Welcome to Trayline</h1>
       <p className="text-sm text-neutral-500 dark:text-neutral-400 text-center max-w-md mb-10 leading-relaxed">
@@ -148,38 +111,10 @@ export default function WelcomeSplash() {
             <div className="text-xs text-neutral-500 dark:text-neutral-400 font-mono truncate mt-0.5" data-selectable>
               {info.dataDir}
             </div>
-            {info.systemSkillsRestored.length > 0 && (
-              <div className="text-xs text-neutral-500 dark:text-neutral-400 mt-1.5">
-                Restored system skills: {info.systemSkillsRestored.join(', ')}
-              </div>
-            )}
           </div>
         </div>
       )}
 
-      {importAudit && (
-        <ImportSecurityAuditDialog
-          token={importAudit.token}
-          projectName={importAudit.projectName}
-          securityFindings={importAudit.securityFindings}
-          projectSummary={importAudit.projectSummary}
-          open={!!importAudit}
-          onOpenChange={(o) => { if (!o) handleAuditAbort(importAudit.token) }}
-          onCommit={handleAuditCommit}
-          onAbort={handleAuditAbort}
-        />
-      )}
-
-      {importResult && (
-        <ImportMissingSkillsDialog
-          projectName={importResult.projectName}
-          missingSkills={importResult.missingSkills}
-          missingMcps={importResult.missingMcps}
-          open={!!importResult}
-          onOpenChange={(o) => { if (!o) setImportResult(null) }}
-          onDone={() => void handleMissingSkillsDone(importResult.projectName)}
-        />
-      )}
     </div>
   )
 }

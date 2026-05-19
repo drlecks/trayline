@@ -3,7 +3,10 @@ import fs from 'node:fs/promises'
 import { join } from 'node:path'
 import { Paths } from './fs-service'
 import { auditDb } from './audit-db'
-import { setMockScript, getMockClearContextCalls, resetMockClearContextCalls, getLastSpawnedMcps, resetLastSpawnedMcps } from '../ai-terminals/mock'
+import {
+  setMockScript, getMockClearContextCalls, resetMockClearContextCalls,
+  setPermissionPromptChunks, getSendInputCalls, resetPermissionState,
+} from '../ai-terminals/mock'
 import { workerRunner } from './worker-runner'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -40,7 +43,7 @@ async function buildWorkflow(opts: { name: string; trayId: string; workerId: str
   await fs.mkdir(join(stepsDir, opts.workerId, 'state'), { recursive: true })
   await writeJson(join(stepsDir, opts.workerId, 'step.json'), {
     id: opts.workerId, kind: 'worker', name: 'Worker',
-    skills: [], mcps: [], context_packs: [],
+    context_packs: [],
     execution: { adapter: 'mock', timeout_seconds: 5, retry_attempts: 0 },
     trigger: { mode: 'on_ready' },
     on_success: 'advance', on_failure: 'send_to_errors',
@@ -220,126 +223,81 @@ describe('workerRunner', () => {
     expect(resolvedExists).toBe(false)
   })
 
-  // ── MCP pre-flight tests ─────────────────────────────────────────────────────
-
-  it('aborts with run_aborted_mcp_not_ready when MCP is not installed', async () => {
-    const project = `mcp-not-installed-${Date.now()}`
-    const { stepsDir } = await buildWorkflow({ name: project, trayId: '01-src', workerId: '02-worker', nextTrayId: '03-next' })
-
-    // Worker references an MCP that has no directory under Paths.mcps
-    await writeJson(join(stepsDir, '02-worker', 'step.json'), {
-      id: '02-worker', kind: 'worker', name: 'Worker',
-      skills: [], mcps: ['nonexistent-mcp'], context_packs: [],
-      execution: { adapter: 'mock', timeout_seconds: 5, retry_attempts: 0 },
-      trigger: { mode: 'on_ready' },
-      on_success: 'advance', on_failure: 'send_to_errors',
+  describe('permission auto-accept', () => {
+    beforeEach(() => {
+      resetPermissionState()
+      setMockScript({ output: { summary: 'ok' }, exitCode: 0 })
     })
 
-    await seedReadyCard(stepsDir, '01-src', 'card_mni_001')
+    it('auto-accepts a single permission prompt and logs the audit event', async () => {
+      setPermissionPromptChunks(['Allow this tool? [y/N] '])
+      const project = `perm-ok-${Date.now()}`
+      const { stepsDir } = await buildWorkflow({ name: project, trayId: '01-src', workerId: '02-worker', nextTrayId: '03-next' })
+      await seedReadyCard(stepsDir, '01-src', 'card_p_001')
 
-    const { runId } = await workerRunner.triggerRun({
-      project, workflow: 'wf', stepId: '02-worker', cardId: 'card_mni_001',
+      const { runId } = await workerRunner.triggerRun({
+        project, workflow: 'wf', stepId: '02-worker', cardId: 'card_p_001',
+      })
+
+      // Run succeeded (permission was auto-accepted)
+      const runDir = join(stepsDir, '02-worker', 'runs', runId)
+      const meta = JSON.parse(await fs.readFile(join(runDir, 'meta.json'), 'utf-8'))
+      expect(meta.status).toBe('succeeded')
+
+      // sendInput was called with 'y\n'
+      expect(getSendInputCalls()).toEqual(['y\n'])
+
+      // Audit event logged
+      const rows = auditDb.query({ project_id: project, event: 'ai_permission_auto_accepted' })
+      expect(rows.length).toBe(1)
+      const details = JSON.parse(rows[0].details_json)
+      expect(details.retry).toBe(1)
     })
 
-    const runDir = join(stepsDir, '02-worker', 'runs', runId)
-    const meta = JSON.parse(await fs.readFile(join(runDir, 'meta.json'), 'utf-8'))
-    expect(meta.status).toBe('failed')
-    expect(meta.error).toContain('nonexistent-mcp')
+    it('fails with max_permission_retries_exceeded after 4 prompts (max 3 retries)', async () => {
+      // 4 permission prompt chunks → 3 auto-accepts, 4th triggers abort
+      setPermissionPromptChunks([
+        'Allow? [y/N] ',
+        'Allow? [y/N] ',
+        'Allow? [y/N] ',
+        'Allow? [y/N] ',
+      ])
+      const project = `perm-max-${Date.now()}`
+      const { stepsDir } = await buildWorkflow({ name: project, trayId: '01-src', workerId: '02-worker', nextTrayId: '03-next' })
+      await seedReadyCard(stepsDir, '01-src', 'card_p_002')
 
-    const rows = auditDb.query({ project_id: project, event: 'run_aborted_mcp_not_ready' })
-    expect(rows.length).toBeGreaterThan(0)
-    const details = JSON.parse(rows[0].details_json)
-    expect(details.mcp_id).toBe('nonexistent-mcp')
-    expect(details.reason).toBe('not_installed')
-  })
+      await workerRunner.triggerRun({
+        project, workflow: 'wf', stepId: '02-worker', cardId: 'card_p_002',
+      })
 
-  it('aborts with run_aborted_mcp_not_ready when MCP has unconfigured credentials', async () => {
-    const project = `mcp-not-configured-${Date.now()}`
-    const { stepsDir } = await buildWorkflow({ name: project, trayId: '01-src', workerId: '02-worker', nextTrayId: '03-next' })
+      // Run failed with max_permission_retries_exceeded
+      const runs = await workerRunner.listRuns(project, 'wf', '02-worker')
+      const meta = runs[0]
+      expect(meta.status).toBe('failed')
+      expect(meta.error).toBe('max_permission_retries_exceeded')
 
-    // Create an MCP that requires credentials but is not configured
-    const mcpId = `test-mcp-unconf-${Date.now()}`
-    const mcpDir = join(Paths.mcps, mcpId)
-    await fs.mkdir(join(mcpDir, 'state'), { recursive: true })
-    await writeJson(join(mcpDir, 'mcp.json'), {
-      id: mcpId, name: 'Needs Config MCP', version: '1.0.0',
-      description: 'Test', install_method: 'npm',
-      command_template: 'npx test-mcp',
-      credentials_schema: [{ id: 'api_key', label: 'API Key', kind: 'api_key' }],
-    })
-    await writeJson(join(mcpDir, 'state', 'status.json'), {
-      configured: false, health: null, healthCheckedAt: null,
-    })
+      // Exactly 3 sendInput calls (retries 1–3); 4th triggered abort
+      expect(getSendInputCalls()).toHaveLength(3)
+      expect(getSendInputCalls().every(r => r === 'y\n')).toBe(true)
 
-    await writeJson(join(stepsDir, '02-worker', 'step.json'), {
-      id: '02-worker', kind: 'worker', name: 'Worker',
-      skills: [], mcps: [mcpId], context_packs: [],
-      execution: { adapter: 'mock', timeout_seconds: 5, retry_attempts: 0 },
-      trigger: { mode: 'on_ready' },
-      on_success: 'advance', on_failure: 'send_to_errors',
+      // Card moved to 99-errors
+      const errPending = await fs.readdir(join(stepsDir, '99-errors', 'cards', 'pending'))
+      expect(errPending).toContain('card_p_002.json')
     })
 
-    await seedReadyCard(stepsDir, '01-src', 'card_mnc_001')
+    it('does not log permission events when no prompt is present', async () => {
+      const project = `perm-none-${Date.now()}`
+      const { stepsDir } = await buildWorkflow({ name: project, trayId: '01-src', workerId: '02-worker', nextTrayId: '03-next' })
+      await seedReadyCard(stepsDir, '01-src', 'card_p_003')
 
-    const { runId } = await workerRunner.triggerRun({
-      project, workflow: 'wf', stepId: '02-worker', cardId: 'card_mnc_001',
+      await workerRunner.triggerRun({
+        project, workflow: 'wf', stepId: '02-worker', cardId: 'card_p_003',
+      })
+
+      expect(getSendInputCalls()).toHaveLength(0)
+      const rows = auditDb.query({ project_id: project, event: 'ai_permission_auto_accepted' })
+      expect(rows.length).toBe(0)
     })
-
-    const runDir = join(stepsDir, '02-worker', 'runs', runId)
-    const meta = JSON.parse(await fs.readFile(join(runDir, 'meta.json'), 'utf-8'))
-    expect(meta.status).toBe('failed')
-    expect(meta.error).toContain('Needs Config MCP')
-
-    const rows = auditDb.query({ project_id: project, event: 'run_aborted_mcp_not_ready' })
-    expect(rows.length).toBeGreaterThan(0)
-    const details = JSON.parse(rows[0].details_json)
-    expect(details.reason).toBe('not_configured')
-  })
-
-  it('resolves a ready no-credential MCP and passes it to the adapter', async () => {
-    resetLastSpawnedMcps()
-    const project = `mcp-ready-${Date.now()}`
-    const { stepsDir } = await buildWorkflow({ name: project, trayId: '01-src', workerId: '02-worker', nextTrayId: '03-next' })
-
-    // Create a ready MCP with no credentials (auto-configured)
-    const mcpId = `test-mcp-ready-${Date.now()}`
-    const mcpDir = join(Paths.mcps, mcpId)
-    await fs.mkdir(join(mcpDir, 'state'), { recursive: true })
-    await writeJson(join(mcpDir, 'mcp.json'), {
-      id: mcpId, name: 'Ready MCP', version: '1.0.0',
-      description: 'Test', install_method: 'npm',
-      command_template: 'npx ready-test-mcp',
-      credentials_schema: [],
-    })
-    await writeJson(join(mcpDir, 'state', 'status.json'), {
-      configured: true, health: null, healthCheckedAt: null,
-    })
-
-    await writeJson(join(stepsDir, '02-worker', 'step.json'), {
-      id: '02-worker', kind: 'worker', name: 'Worker',
-      skills: [], mcps: [mcpId], context_packs: [],
-      execution: { adapter: 'mock', timeout_seconds: 5, retry_attempts: 0 },
-      trigger: { mode: 'on_ready' },
-      on_success: 'advance', on_failure: 'send_to_errors',
-    })
-
-    await seedReadyCard(stepsDir, '01-src', 'card_mr_001')
-
-    const { runId } = await workerRunner.triggerRun({
-      project, workflow: 'wf', stepId: '02-worker', cardId: 'card_mr_001',
-    })
-
-    // Run should succeed
-    const runDir = join(stepsDir, '02-worker', 'runs', runId)
-    const meta = JSON.parse(await fs.readFile(join(runDir, 'meta.json'), 'utf-8'))
-    expect(meta.status).toBe('succeeded')
-    expect(meta.mcps_active).toEqual([mcpId])
-
-    // Mock adapter received the MCP definition
-    const spawnedMcps = getLastSpawnedMcps()
-    expect(spawnedMcps).toHaveLength(1)
-    expect(spawnedMcps[0].id).toBe(mcpId)
-    expect((spawnedMcps[0].manifest as Record<string, unknown>)['command_template']).toBe('npx ready-test-mcp')
   })
 
   it('marks orphaned running runs as interrupted', async () => {
@@ -366,4 +324,5 @@ describe('workerRunner', () => {
     // Source card untouched in ready/
     expect(await pathExists(join(stepsDir, '01-src', 'cards', 'ready', 'card_z_001.json'))).toBe(true)
   })
+
 })

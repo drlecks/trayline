@@ -4,35 +4,29 @@
 //
 // See docs/tech-stack.md for the full architectural rationale.
 
-export interface SkillDefinition {
-  id: string
-  /** Resolved contents of the skill's skill.md, ready to inject into the prompt. */
-  content: string
-}
-
-export interface MCPDefinition {
-  id: string
-  /** Resolved contents of the MCP's mcp.json. */
-  manifest: Record<string, unknown>
-  /** Credentials map already resolved from the keychain — env-var name → value. */
-  credentials: Record<string, string>
-}
-
 export interface SpawnOptions {
   /** Absolute path to the worker's process.md (already-resolved variables). */
   processFile: string
   /** The card's full data payload. */
   cardData: object
-  /** Skills to inject into the system prompt. */
-  skills: SkillDefinition[]
   /** Context pack file contents (already loaded), concatenated under ## Context. */
   contextPacks: string[]
-  /** MCPs that should be active during this run. */
-  mcps: MCPDefinition[]
   /** The run's working directory (`runs/<run_id>/`). */
   workingDir: string
   /** Hard timeout in milliseconds. */
   timeout: number
+  /**
+   * Pre-fetched data from a Source channel (HTTP response or serialised email
+   * list). When present, adapters prepend it to the prompt under ## Fetched data
+   * so the AI reasons on already-retrieved content rather than fetching itself.
+   */
+  prefetchedData?: string
+  /**
+   * Project-level AI permissions. Adapters translate this to CLI flags
+   * (e.g. --allowedTools) and/or a permissions preamble in the prompt.
+   * Omit for backwards-compat default (no extra tools allowed).
+   */
+  permissions?: import('../../shared/types').ProjectPermissions
   /**
    * Notifies when the session flips between awaiting user input and not.
    * Adapters that never block on input (e.g. mock) may ignore this.
@@ -80,10 +74,10 @@ export interface EffortInfo {
   label: string
 }
 
-// AdapterUsageSnapshot lives in src/shared/types so the renderer can import it
-// without dragging main-process modules into its TS program.
-export type { AdapterUsageSnapshot } from '../../shared/types'
-import type { AdapterUsageSnapshot } from '../../shared/types'
+// These types live in src/shared/types so the renderer can import them without
+// dragging main-process modules into its TS program.
+export type { AdapterUsageSnapshot, AdapterReadiness, AdapterBlocker, AdapterBlockerKind } from '../../shared/types'
+import type { AdapterUsageSnapshot, AdapterReadiness } from '../../shared/types'
 
 export interface AITerminalAdapter {
   /** Stable identifier used by worker config (`adapter: "claude-code"`). */
@@ -99,9 +93,18 @@ export interface AITerminalAdapter {
   kind: 'production' | 'mock'
   /** Optional URL with install instructions, surfaced when `detectInstalled()` is false. */
   installUrl?: string
-  /** Returns true if the underlying CLI is available on the host system. */
+  /** Short description shown in the adapter selector UI. */
+  description?: string
+  /**
+   * Returns structured readiness without running any inference.
+   * Checks only what is cheaply detectable: binary presence, version, and any
+   * adapter-specific structural preconditions (e.g. local server reachable).
+   * Safe to call at startup; never consumes API tokens.
+   */
+  checkReadiness(): Promise<AdapterReadiness>
+  /** @deprecated Use checkReadiness() instead. */
   detectInstalled(): Promise<boolean>
-  /** Returns the CLI version string, or null if not installed. */
+  /** @deprecated Use checkReadiness() instead. */
   getVersion(): Promise<string | null>
   /** Models the user can pick for this provider. Empty array if not applicable. */
   listModels(): Promise<ModelInfo[]>

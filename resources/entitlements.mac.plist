@@ -13,7 +13,7 @@
   <!-- Required so spawned helper processes (CLI agents) can inherit. -->
   <key>com.apple.security.cs.allow-dyld-environment-variables</key>
   <true/>
-  <!-- Network access for skill catalog + auto-updater. -->
+  <!-- Network access for auto-updater. -->
   <key>com.apple.security.network.client</key>
   <true/>
 </dict>

@@ -1,10 +1,10 @@
-// Runs the `trayline-author` system skill against a free-text user description
+// Runs the workflow author prompt against a free-text user description
 // and returns a parsed WorkflowPlan.
 
 import { join } from 'path'
 import fs from 'fs/promises'
 import os from 'os'
-import { Paths } from './fs-service'
+import { app } from 'electron'
 import { adapterRegistry } from '../ai-terminals/registry'
 import { settingsStore } from './settings-store'
 import type { WorkflowPlan } from '../../shared/workflow-plan'
@@ -29,11 +29,17 @@ export interface AuthorError {
 
 export type AuthorOutcome = AuthorResult | AuthorError
 
-async function loadSystemSkill(skillId: string): Promise<{ id: string; content: string } | null> {
-  const md = join(Paths.systemSkills, skillId, 'skill.md')
+function getAuthorPromptPath(): string {
+  // Packaged: app.getAppPath() is the asar root → ../resources is the electron resources dir.
+  // Dev/Test: app.getAppPath() is the project root → resources/ is directly inside.
+  return app.isPackaged
+    ? join(app.getAppPath(), '..', 'resources', 'author-prompt.md')
+    : join(app.getAppPath(), 'resources', 'author-prompt.md')
+}
+
+async function loadAuthorPrompt(): Promise<string | null> {
   try {
-    const content = await fs.readFile(md, 'utf-8')
-    return { id: skillId, content }
+    return await fs.readFile(getAuthorPromptPath(), 'utf-8')
   } catch {
     return null
   }
@@ -114,6 +120,22 @@ function isWorkflowPlan(value: unknown): value is WorkflowPlan {
   return true
 }
 
+function validateWorkerPlacement(plan: WorkflowPlan): string | null {
+  const steps = plan.workflow.steps
+  for (let i = 0; i < steps.length; i++) {
+    if (steps[i].kind !== 'worker') continue
+    const prev = steps[i - 1]
+    const next = steps[i + 1]
+    if (!prev || prev.kind !== 'tray') {
+      return `Worker "${steps[i].name}" must be immediately preceded by a tray step (found: ${prev ? prev.kind : 'nothing'}). Add a tray before this worker.`
+    }
+    if (!next || next.kind !== 'tray') {
+      return `Worker "${steps[i].name}" must be immediately followed by a tray step (found: ${next ? next.kind : 'nothing'}). Add a tray after this worker.`
+    }
+  }
+  return null
+}
+
 async function generate(description: string, opts: { adapterId?: string } = {}): Promise<AuthorOutcome> {
   const adapterId = opts.adapterId ?? settingsStore.get('defaultAdapterId') ?? 'claude-code'
   const adapter = adapterRegistry.get(adapterId)
@@ -130,29 +152,26 @@ async function generate(description: string, opts: { adapterId?: string } = {}):
     }
   }
 
-  const skill = await loadSystemSkill('trayline-author')
-  if (!skill) {
+  const authorPrompt = await loadAuthorPrompt()
+  if (!authorPrompt) {
     return {
       ok: false,
       reason: 'unknown',
-      message: 'trayline-author system skill is missing. Try restarting the app.',
+      message: 'Author prompt file is missing. Try restarting the app.',
     }
   }
 
-  // Prepare a temp working dir + minimal process.md. The skill body carries
-  // the full master prompt, including the output schema. process.md just hands
-  // the user's description to the agent as the input payload.
+  // Write the author prompt as the process file. The card data carries the
+  // user's description and is substituted via {{card.data}} at spawn time.
   const workingDir = await fs.mkdtemp(join(os.tmpdir(), 'trayline-author-'))
   const processFile = join(workingDir, 'process.md')
-  await fs.writeFile(processFile, '{{card.data}}\n', 'utf-8')
+  await fs.writeFile(processFile, authorPrompt + '\n\n{{card.data}}\n', 'utf-8')
 
   try {
     const session = await adapter.spawn({
       processFile,
       cardData: { description },
-      skills: [skill],
       contextPacks: [],
-      mcps: [],
       workingDir,
       timeout: 120_000,
     })
@@ -190,6 +209,16 @@ async function generate(description: string, opts: { adapterId?: string } = {}):
         ok: false,
         reason: 'invalid_plan',
         message: 'The returned JSON did not match the expected workflow plan shape.',
+        raw: JSON.stringify(parsed, null, 2),
+      }
+    }
+
+    const placementError = validateWorkerPlacement(parsed)
+    if (placementError) {
+      return {
+        ok: false,
+        reason: 'invalid_plan',
+        message: placementError,
         raw: JSON.stringify(parsed, null, 2),
       }
     }

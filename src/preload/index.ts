@@ -2,32 +2,38 @@ import { contextBridge, ipcRenderer } from 'electron'
 import { IPC } from '../shared/ipc-channels'
 import type {
   Settings,
+  NotificationSettings,
   AuditRow,
   BootstrapInfo,
   ProjectMeta,
+  ProjectPermissions,
   ProjectStatus,
   WorkflowMeta,
   StepMeta,
-  SkillManifest,
   UsageSnapshot,
   AdapterUsageSnapshot,
+  AdapterReadiness,
   ProjectCreateOutcome,
   ProviderReadyResult,
-  SkillCatalogFetchResult,
-  InstalledSkillRow,
-  SkillValidationResult,
   ExportOptions,
   ImportResult,
   ImportSuccess,
   ProjectLiveStats,
   ProjectReadiness,
+  SourceStepConfig,
+  SourceState,
+  SourceRunMeta,
+  SourceRunEvent,
+  Credential,
+  CredentialSummary,
+  OutletStepConfig,
+  OutletRunMeta,
+  OutletRunEvent,
 } from '../shared/types'
-import type { MissingSkillsEntry } from '../shared/types'
 import type { Card, CardStatus, CardCounts } from '../shared/card'
 import type { QueueEntry } from '../shared/queue'
 import type { PlanFieldDef, PlanTrayStep, PlanWorkerStep } from '../shared/workflow-plan'
 import type { WorkerRun, WorkerRunEvent } from '../shared/worker-run'
-import type { SourceStepConfig, SourceState, SourceRunMeta, SourceRunEvent, InstalledMcpRow, McpCatalogEntry, McpStatus } from '../shared/types'
 
 const api = {
   settings: {
@@ -61,9 +67,6 @@ const api = {
       ipcRenderer.invoke(IPC.project.listWorkflows, name),
     listSteps: (project: string, workflow: string): Promise<StepMeta[]> =>
       ipcRenderer.invoke(IPC.project.listSteps, project, workflow),
-    listSkills: (): Promise<SkillManifest[]> => ipcRenderer.invoke(IPC.project.listSkills),
-    checkSkills: (project: string): Promise<MissingSkillsEntry[]> =>
-      ipcRenderer.invoke(IPC.project.checkSkills, project),
     listContextFiles: (project: string): Promise<string[]> =>
       ipcRenderer.invoke(IPC.project.listContextFiles, project),
     readContextFile: (project: string, file: string): Promise<string> =>
@@ -77,6 +80,10 @@ const api = {
     delete: (name: string): Promise<void> => ipcRenderer.invoke(IPC.project.delete, name),
     setStatus: (name: string, status: ProjectStatus): Promise<ProjectMeta> =>
       ipcRenderer.invoke(IPC.project.setStatus, name, status),
+    updateMeta: (name: string, patch: { display_name?: string; description?: string }): Promise<ProjectMeta> =>
+      ipcRenderer.invoke(IPC.project.updateMeta, name, patch),
+    updatePermissions: (name: string, permissions: ProjectPermissions): Promise<ProjectMeta> =>
+      ipcRenderer.invoke(IPC.project.updatePermissions, name, permissions),
     getOrchestration: (name: string): Promise<{ name: string; mounted: boolean }> =>
       ipcRenderer.invoke(IPC.project.getOrchestration, name),
     onStatusChanged: (
@@ -105,7 +112,7 @@ const api = {
     get: (): Promise<UsageSnapshot> => ipcRenderer.invoke(IPC.usage.get),
   },
   adapters: {
-    list: (): Promise<{ id: string; displayName: string; kind: 'production' | 'mock'; installUrl: string | null }[]> =>
+    list: (): Promise<{ id: string; displayName: string; kind: 'production' | 'mock'; installUrl: string | null; description: string | null; requiresExternalInstall: boolean }[]> =>
       ipcRenderer.invoke(IPC.adapters.list),
     checkProviderReady: (): Promise<ProviderReadyResult> =>
       ipcRenderer.invoke(IPC.adapters.checkProviderReady),
@@ -121,6 +128,19 @@ const api = {
       const listener = () => handler()
       ipcRenderer.on(IPC.adapters.onUsageUpdate, listener)
       return () => ipcRenderer.off(IPC.adapters.onUsageUpdate, listener)
+    },
+  },
+  adapter: {
+    checkReadiness: (): Promise<Record<string, AdapterReadiness>> =>
+      ipcRenderer.invoke(IPC.adapter.checkReadiness),
+    recheck: (adapterId: string): Promise<AdapterReadiness> =>
+      ipcRenderer.invoke(IPC.adapter.recheck, adapterId),
+    getCached: (adapterId: string): Promise<AdapterReadiness | null> =>
+      ipcRenderer.invoke(IPC.adapter.getCached, adapterId),
+    onReadinessChanged: (handler: (r: AdapterReadiness) => void): (() => void) => {
+      const listener = (_e: unknown, r: AdapterReadiness) => handler(r)
+      ipcRenderer.on(IPC.adapter.onReadinessChanged, listener)
+      return () => ipcRenderer.off(IPC.adapter.onReadinessChanged, listener)
     },
   },
   step: {
@@ -161,6 +181,13 @@ const api = {
       dedup_key?: string
     }): Promise<SourceStepConfig & { id: string }> =>
       ipcRenderer.invoke(IPC.step.addSource, input),
+    addOutlet: (input: {
+      project: string
+      workflow: string
+      name: string
+      description?: string
+    }): Promise<OutletStepConfig & { id: string }> =>
+      ipcRenderer.invoke(IPC.step.addOutlet, input),
     readProcess: (project: string, workflow: string, stepId: string): Promise<string> =>
       ipcRenderer.invoke(IPC.step.readProcess, project, workflow, stepId),
     updateProcess: (input: {
@@ -169,6 +196,12 @@ const api = {
       stepId: string
       processMd: string
     }): Promise<void> => ipcRenderer.invoke(IPC.step.updateProcess, input),
+    moveUp: (input: {
+      project: string
+      workflow: string
+      stepId: string
+    }): Promise<{ newStepId: string; displacedStepId: string }> =>
+      ipcRenderer.invoke(IPC.step.moveUp, input),
   },
   worker: {
     triggerRun: (project: string, workflow: string, stepId: string, cardId: string): Promise<{ runId: string }> =>
@@ -190,28 +223,6 @@ const api = {
       ipcRenderer.on(IPC.worker.onRunEvent, listener)
       return () => ipcRenderer.off(IPC.worker.onRunEvent, listener)
     },
-  },
-  skills: {
-    fetchCatalog: (opts?: { forceRefresh?: boolean }): Promise<SkillCatalogFetchResult> =>
-      ipcRenderer.invoke(IPC.skills.fetchCatalog, opts),
-    listInstalled: (): Promise<InstalledSkillRow[]> =>
-      ipcRenderer.invoke(IPC.skills.listInstalled),
-    install: (skillId: string): Promise<InstalledSkillRow> =>
-      ipcRenderer.invoke(IPC.skills.install, skillId),
-    installFromUrl: (url: string): Promise<InstalledSkillRow> =>
-      ipcRenderer.invoke(IPC.skills.installFromUrl, url),
-    validateFromUrl: (url: string): Promise<SkillValidationResult> =>
-      ipcRenderer.invoke(IPC.skills.validateFromUrl, url),
-    confirmInstall: (tempDir: string, acceptedWarnings: string[], sourceUrl: string, source: 'url' | 'catalog'): Promise<InstalledSkillRow> =>
-      ipcRenderer.invoke(IPC.skills.confirmInstall, tempDir, acceptedWarnings, sourceUrl, source),
-    cancelValidation: (tempDir: string): Promise<void> =>
-      ipcRenderer.invoke(IPC.skills.cancelValidation, tempDir),
-    update: (skillId: string): Promise<InstalledSkillRow> =>
-      ipcRenderer.invoke(IPC.skills.update, skillId),
-    uninstall: (skillId: string): Promise<void> =>
-      ipcRenderer.invoke(IPC.skills.uninstall, skillId),
-    revalidateAll: (): Promise<{ skillId: string; quarantined: boolean }[]> =>
-      ipcRenderer.invoke(IPC.skills.revalidateAll),
   },
   card: {
     list: (project: string, workflow: string, stepId: string, status: CardStatus): Promise<Card[]> =>
@@ -260,37 +271,73 @@ const api = {
       ipcRenderer.invoke(IPC.source.resume, project, workflow, stepId),
     getState: (project: string, workflow: string, stepId: string): Promise<SourceState> =>
       ipcRenderer.invoke(IPC.source.getState, project, workflow, stepId),
-    readInstructions: (project: string, workflow: string, stepId: string): Promise<string> =>
-      ipcRenderer.invoke(IPC.source.readInstructions, project, workflow, stepId),
-    updateInstructions: (input: { project: string; workflow: string; stepId: string; content: string }): Promise<void> =>
-      ipcRenderer.invoke(IPC.source.updateInstructions, input),
     listRuns: (project: string, workflow: string, stepId: string): Promise<SourceRunMeta[]> =>
       ipcRenderer.invoke(IPC.source.listRuns, project, workflow, stepId),
+    resetDedup: (project: string, workflow: string, stepId: string): Promise<void> =>
+      ipcRenderer.invoke(IPC.source.resetDedup, project, workflow, stepId),
     onRunEvent: (handler: (event: SourceRunEvent) => void): (() => void) => {
       const listener = (_e: unknown, ev: SourceRunEvent) => handler(ev)
       ipcRenderer.on(IPC.source.onRunEvent, listener)
       return () => ipcRenderer.off(IPC.source.onRunEvent, listener)
     },
   },
-  mcp: {
-    listInstalled: (): Promise<InstalledMcpRow[]> =>
-      ipcRenderer.invoke(IPC.mcp.listInstalled),
-    listCatalog: (): Promise<McpCatalogEntry[]> =>
-      ipcRenderer.invoke(IPC.mcp.listCatalog),
-    install: (mcpId: string): Promise<InstalledMcpRow> =>
-      ipcRenderer.invoke(IPC.mcp.install, mcpId),
-    uninstall: (mcpId: string): Promise<void> =>
-      ipcRenderer.invoke(IPC.mcp.uninstall, mcpId),
-    readStatus: (mcpId: string): Promise<McpStatus> =>
-      ipcRenderer.invoke(IPC.mcp.readStatus, mcpId),
-    writeStatus: (mcpId: string, partial: Partial<McpStatus>): Promise<McpStatus> =>
-      ipcRenderer.invoke(IPC.mcp.writeStatus, mcpId, partial),
-    saveCredential: (mcpId: string, credId: string, value: string): Promise<void> =>
-      ipcRenderer.invoke(IPC.mcp.saveCredential, mcpId, credId, value),
-    deleteCredentials: (mcpId: string): Promise<void> =>
-      ipcRenderer.invoke(IPC.mcp.deleteCredentials, mcpId),
-    testConnection: (mcpId: string): Promise<{ ok: boolean; error?: string }> =>
-      ipcRenderer.invoke(IPC.mcp.testConnection, mcpId),
+  notifications: {
+    getSettings: (): Promise<NotificationSettings> =>
+      ipcRenderer.invoke(IPC.notifications.getSettings),
+    updateSettings: (partial: Partial<NotificationSettings>): Promise<NotificationSettings> =>
+      ipcRenderer.invoke(IPC.notifications.updateSettings, partial),
+    clearAllNotified: (): Promise<void> =>
+      ipcRenderer.invoke(IPC.notifications.clearAllNotified),
+    getBadgeCount: (): Promise<number> =>
+      ipcRenderer.invoke(IPC.notifications.getBadgeCount),
+    onNavigate: (handler: (payload: { projectName: string; workflowName: string; cardId: string }) => void): (() => void) => {
+      const listener = (_e: unknown, payload: { projectName: string; workflowName: string; cardId: string }) => handler(payload)
+      ipcRenderer.on(IPC.notification.navigate, listener)
+      return () => ipcRenderer.off(IPC.notification.navigate, listener)
+    },
+  },
+  credential: {
+    list: (): Promise<CredentialSummary[]> => ipcRenderer.invoke(IPC.credential.list),
+    get: (id: string): Promise<Credential | null> => ipcRenderer.invoke(IPC.credential.get, id),
+    save: (credential: Credential): Promise<void> => ipcRenderer.invoke(IPC.credential.save, credential),
+    delete: (id: string): Promise<void> => ipcRenderer.invoke(IPC.credential.delete, id),
+    saveSecret: (credentialId: string, account: string, value: string): Promise<void> =>
+      ipcRenderer.invoke(IPC.credential.saveSecret, credentialId, account, value),
+    testConnection: (id: string): Promise<{ ok: boolean; error?: string }> =>
+      ipcRenderer.invoke(IPC.credential.testConnection, id),
+  },
+  outlet: {
+    runNow: (project: string, workflow: string, stepId: string, cardId: string, prevStepId: string, config: OutletStepConfig): Promise<void> =>
+      ipcRenderer.invoke(IPC.outlet.runNow, project, workflow, stepId, cardId, prevStepId, config),
+    listRuns: (project: string, workflow: string, stepId: string): Promise<OutletRunMeta[]> =>
+      ipcRenderer.invoke(IPC.outlet.listRuns, project, workflow, stepId),
+    onStarted: (handler: (event: OutletRunEvent) => void): (() => void) => {
+      const listener = (_e: unknown, ev: OutletRunEvent) => handler(ev)
+      ipcRenderer.on(IPC.outlet.onStarted, listener)
+      return () => ipcRenderer.off(IPC.outlet.onStarted, listener)
+    },
+    onCompleted: (handler: (event: OutletRunEvent) => void): (() => void) => {
+      const listener = (_e: unknown, ev: OutletRunEvent) => handler(ev)
+      ipcRenderer.on(IPC.outlet.onCompleted, listener)
+      return () => ipcRenderer.off(IPC.outlet.onCompleted, listener)
+    },
+    onFailed: (handler: (event: OutletRunEvent) => void): (() => void) => {
+      const listener = (_e: unknown, ev: OutletRunEvent) => handler(ev)
+      ipcRenderer.on(IPC.outlet.onFailed, listener)
+      return () => ipcRenderer.off(IPC.outlet.onFailed, listener)
+    },
+  },
+  ai: {
+    query: (prompt: string): Promise<void> => ipcRenderer.invoke(IPC.ai.query, prompt),
+    abort: (): void => ipcRenderer.send(IPC.ai.abort),
+    onChunk: (handler: (chunk: string) => void): (() => void) => {
+      const listener = (_e: unknown, chunk: string) => handler(chunk)
+      ipcRenderer.on(IPC.ai.onChunk, listener)
+      return () => ipcRenderer.off(IPC.ai.onChunk, listener)
+    },
+  },
+  aiLog: {
+    getLines: (): Promise<string[]> => ipcRenderer.invoke(IPC.aiLog.getLines),
   },
   platform: process.platform as NodeJS.Platform,
 }

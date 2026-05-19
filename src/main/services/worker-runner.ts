@@ -19,10 +19,12 @@ import { projectService } from './project-service'
 import { auditDb } from './audit-db'
 import { settingsStore } from './settings-store'
 import { adapterRegistry } from '../ai-terminals/registry'
-import { mcpRegistry } from './mcp-registry'
-import { mcpCredentials } from './mcp-credentials'
+import { adapterReadinessService } from './adapter-readiness-service'
+import { detectPermissionPrompt, permissionPromptResponse } from '../ai-terminals/claude-code'
+import { ANSI_RE } from '../ai-terminals/prompt-utils'
+import { aiOutputLog } from './ai-output-log'
 import { IPC } from '../../shared/ipc-channels'
-import type { AISession, MCPDefinition } from '../ai-terminals/adapter'
+import type { AISession } from '../ai-terminals/adapter'
 import type { Card, CardHistoryEntry } from '../../shared/card'
 import type { WorkerRunEvent, WorkerRunMeta, WorkerRunStatus } from '../../shared/worker-run'
 
@@ -53,8 +55,6 @@ interface WorkerStepJson {
   id: string
   kind: 'worker'
   name: string
-  skills?: string[]
-  mcps?: string[]
   context_packs?: string[]
   execution?: {
     command?: string
@@ -104,21 +104,6 @@ function findNextStep(wf: WorkflowJson, workerId: string): string | null {
   const idx = wf.step_ids.indexOf(workerId)
   if (idx === -1 || idx >= wf.step_ids.length - 1) return null
   return wf.step_ids[idx + 1]
-}
-
-// ── Skill / context-pack resolution ───────────────────────────────────────────
-
-async function resolveSkill(skillId: string): Promise<{ id: string; content: string } | null> {
-  const candidates = [
-    join(Paths.skills, skillId, 'skill.md'),
-    join(Paths.systemSkills, skillId, 'skill.md'),
-  ]
-  for (const p of candidates) {
-    if (await pathExists(p)) {
-      return { id: skillId, content: await fs.readFile(p, 'utf-8') }
-    }
-  }
-  return null
 }
 
 /**
@@ -249,55 +234,9 @@ async function nextCardIdForStep(project: string, workflow: string, stepId: stri
   return `card_${date}_${String(max + 1).padStart(3, '0')}`
 }
 
-// ── MCP pre-flight ────────────────────────────────────────────────────────────
+// ── Permission auto-accept ────────────────────────────────────────────────────
 
-/**
- * For each MCP id listed by the worker, verify it is installed and in Ready
- * state, then read credentials from the OS keychain. Returns the full
- * MCPDefinition array ready to pass to the adapter. Throws with a user-facing
- * message and logs `run_aborted_mcp_not_ready` when any MCP blocks the run.
- */
-async function resolveMcps(
-  project: string, workflow: string, stepId: string, cardId: string, runId: string,
-  mcpIds: string[],
-): Promise<MCPDefinition[]> {
-  const defs: MCPDefinition[] = []
-  for (const id of mcpIds) {
-    const manifest = await mcpRegistry.readManifest(id)
-    if (!manifest) {
-      auditDb.insert({
-        project_id: project, workflow_id: workflow, step_id: stepId, card_id: cardId,
-        event: 'run_aborted_mcp_not_ready', actor: 'system',
-        details_json: JSON.stringify({ run_id: runId, mcp_id: id, reason: 'not_installed' }),
-      })
-      throw new Error(`MCP "${id}" is not installed. Set it up in the MCPs screen before running.`)
-    }
-    const status = await mcpRegistry.readStatus(id)
-    if (status.disabled) {
-      auditDb.insert({
-        project_id: project, workflow_id: workflow, step_id: stepId, card_id: cardId,
-        event: 'run_aborted_mcp_not_ready', actor: 'system',
-        details_json: JSON.stringify({ run_id: runId, mcp_id: id, reason: 'disabled' }),
-      })
-      throw new Error(`MCP "${manifest.name}" is disabled. Enable it in the MCPs screen before running.`)
-    }
-    if (!status.configured && manifest.credentials_schema.length > 0) {
-      auditDb.insert({
-        project_id: project, workflow_id: workflow, step_id: stepId, card_id: cardId,
-        event: 'run_aborted_mcp_not_ready', actor: 'system',
-        details_json: JSON.stringify({ run_id: runId, mcp_id: id, reason: 'not_configured' }),
-      })
-      throw new Error(`MCP "${manifest.name}" needs credentials. Configure it in the MCPs screen before running.`)
-    }
-    const credentials: Record<string, string> = {}
-    for (const cred of manifest.credentials_schema) {
-      const val = await mcpCredentials.readCredential(id, cred.id)
-      if (val) credentials[cred.id] = val
-    }
-    defs.push({ id, manifest: manifest as unknown as Record<string, unknown>, credentials })
-  }
-  return defs
-}
+const MAX_PERMISSION_RETRIES = 3
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
@@ -365,8 +304,6 @@ async function runInner(input: TriggerRunInput): Promise<TriggerRunResult> {
   }
   const sourceCard = await fsService.readJson<Card>(sourceCardPath)
 
-  const mcpIds = worker.mcps ?? []
-
   // 1. Allocate run + write input.json, meta.json (status=running)
   const workerDir = projectService.paths.stepDir(project, workflow, stepId)
   const runId = await nextRunId(workerDir)
@@ -383,7 +320,6 @@ async function runInner(input: TriggerRunInput): Promise<TriggerRunResult> {
     workflow,
     started_at: startedAt,
     status: 'running',
-    ...(mcpIds.length > 0 ? { mcps_active: mcpIds } : {}),
   }
   await fsService.writeJsonAtomic(join(runDir, 'meta.json'), meta)
 
@@ -395,12 +331,7 @@ async function runInner(input: TriggerRunInput): Promise<TriggerRunResult> {
   })
   emit({ type: 'started', project, workflow, stepId, runId, cardId })
 
-  // 3. Resolve skills + context packs
-  // Always inject `trayline-worker-contract` first so every worker is told how
-  // to signal failure via the trayline_error envelope.
-  const workerSkillIds = ['trayline-worker-contract', ...(worker.skills ?? [])]
-  const skills = (await Promise.all(workerSkillIds.map(resolveSkill))).filter((s): s is { id: string; content: string } => s !== null)
-
+  // 3. Resolve context packs
   // Base context files (prefix '_') are auto-loaded for every run regardless of worker selection.
   // Explicit context_packs drop any '_'-prefixed names to prevent duplication.
   const allContextFiles = await projectService.listContextFiles(project)
@@ -429,14 +360,15 @@ async function runInner(input: TriggerRunInput): Promise<TriggerRunResult> {
   // machine. The renderer pops a modal for user-triggered runs, but watchers
   // and the scheduler call straight through — without this check they'd race
   // through to a confusing "claude: command not found" PTY failure.
-  if (adapter.kind === 'production' && !(await adapter.detectInstalled())) {
-    throw new Error(
-      `AI provider "${adapter.displayName}" is not installed on this machine. ` +
-      `Open Settings → AI Terminal and install a provider before running workers.`,
-    )
+  if (adapter.kind === 'production' && !(await adapterReadinessService.isReadyToRun(adapterId))) {
+    const readiness = adapterReadinessService.getCached(adapterId)
+    const detail = readiness?.blockers[0]?.message ?? `${adapter.displayName} is not installed on this machine.`
+    throw new Error(detail)
   }
 
   const timeoutMs = (worker.execution?.timeout_seconds ?? 180) * 1000
+  const projectMeta = await projectService.getProject(project)
+  const permissions = projectService.getPermissions(projectMeta)
 
   let exitCode = -1
   let output: object | string | null = null
@@ -444,45 +376,74 @@ async function runInner(input: TriggerRunInput): Promise<TriggerRunResult> {
 
   const sessionKey = runKey(project, workflow, stepId, runId)
   let session: AISession | null = null
+  let maxRetriesExceeded = false
   try {
-    // 3c. Pre-flight check + credential injection for MCPs
-    const mcpDefs = mcpIds.length > 0
-      ? await resolveMcps(project, workflow, stepId, cardId, runId, mcpIds)
-      : []
-
     session = await adapter.spawn({
       processFile,
       cardData: sourceCard.data,
-      skills,
       contextPacks,
-      mcps: mcpDefs,
       workingDir: runDir,
       timeout: timeoutMs,
+      permissions,
       onAwaitingInputChange: (awaiting) => {
         emit({ type: 'awaiting_input', project, workflow, stepId, runId, awaiting })
       },
     })
     liveSessions.set(sessionKey, session)
 
-    // Stream log chunks to renderer as they arrive
-    void (async () => {
+    let permissionRetries = 0
+    let permissionBuffer = ''
+    const activeSession = session
+
+    // consumeStdout drives permission auto-accept; stderr is truly fire-and-forget
+    const consumeStdout = async () => {
       try {
-        for await (const chunk of session.stdout) {
+        for await (const chunk of activeSession.stdout) {
           emit({ type: 'log', project, workflow, stepId, runId, chunk })
+          const clean = chunk.replace(ANSI_RE, '')
+          if (clean.trim()) {
+            console.log('[worker]', clean.trimEnd())
+            void aiOutputLog.append('worker', clean.trimEnd())
+          }
+          permissionBuffer += chunk
+          if (permissionBuffer.length > 4096) permissionBuffer = permissionBuffer.slice(-4096)
+          if (detectPermissionPrompt(permissionBuffer)) {
+            const response = permissionPromptResponse(permissionBuffer)
+            permissionBuffer = ''
+            if (permissionRetries >= MAX_PERMISSION_RETRIES) {
+              maxRetriesExceeded = true
+              await activeSession.kill()
+            } else {
+              permissionRetries++
+              auditDb.insert({
+                project_id: project, workflow_id: workflow, step_id: stepId, card_id: cardId,
+                event: 'ai_permission_auto_accepted', actor: 'system',
+                details_json: JSON.stringify({ run_id: runId, retry: permissionRetries }),
+              })
+              await activeSession.sendInput(response)
+            }
+          }
         }
       } catch { /* ignore */ }
-    })()
+    }
     void (async () => {
       try {
-        for await (const chunk of session.stderr) {
+        for await (const chunk of activeSession.stderr) {
           emit({ type: 'log', project, workflow, stepId, runId, chunk })
         }
       } catch { /* ignore */ }
     })()
 
-    const result = await session.result()
-    exitCode = result.exitCode
-    output = result.output
+    // Run stdout consumer and result() concurrently; Promise.all ensures
+    // permission detection completes before we inspect maxRetriesExceeded
+    await Promise.all([
+      consumeStdout(),
+      session.result().then(r => { exitCode = r.exitCode; output = r.output }),
+    ])
+
+    if (maxRetriesExceeded && runError === undefined) {
+      runError = 'max_permission_retries_exceeded'
+    }
   } catch (err) {
     runError = err instanceof Error ? err.message : String(err)
   } finally {
@@ -590,14 +551,21 @@ async function runInner(input: TriggerRunInput): Promise<TriggerRunResult> {
     const historyEntry: CardHistoryEntry = {
       at: endedAt, step: stepId, event: 'run_completed', by: 'worker',
     }
+    const rawWorkerOutput: Record<string, unknown> = typeof output === 'object' && output !== null
+      ? (output as Record<string, unknown>)
+      : { raw: output }
+    const cardData: Record<string, unknown> = { ...rawWorkerOutput }
+    for (const field of ['name', 'key', 'id'] as const) {
+      if (!(field in cardData) && field in sourceCard.data) {
+        cardData[field] = sourceCard.data[field]
+      }
+    }
     const producedCard: Card = {
       id: plannedNextCardId,
       created_at: endedAt,
       created_by: 'worker',
       source_step: stepId,
-      data: typeof output === 'object' && output !== null
-        ? (output as Record<string, unknown>)
-        : { raw: output },
+      data: cardData,
       history: [...sourceCard.history, historyEntry, {
         at: endedAt, step: nextStepId, event: 'created', by: 'worker',
       }],
@@ -705,13 +673,11 @@ async function runBatchInner(input: TriggerBatchRunInput): Promise<TriggerRunRes
   await fs.mkdir(runDir, { recursive: true })
   await fsService.writeJsonAtomic(join(runDir, 'input.json'), batchData)
 
-  const batchMcpIds = worker.mcps ?? []
   const startedAt = new Date().toISOString()
   const meta: WorkerRunMeta = {
     run_id: runId, worker_id: stepId, card_id: 'batch',
     project, workflow, started_at: startedAt, status: 'running',
     batch_card_count: sourceCards.length,
-    ...(batchMcpIds.length > 0 ? { mcps_active: batchMcpIds } : {}),
   }
   await fsService.writeJsonAtomic(join(runDir, 'meta.json'), meta)
 
@@ -722,9 +688,7 @@ async function runBatchInner(input: TriggerBatchRunInput): Promise<TriggerRunRes
   })
   emit({ type: 'started', project, workflow, stepId, runId, cardId: 'batch' })
 
-  // 2. Resolve skills + context packs
-  const workerSkillIds = ['trayline-worker-contract', ...(worker.skills ?? [])]
-  const skills = (await Promise.all(workerSkillIds.map(resolveSkill))).filter((s): s is { id: string; content: string } => s !== null)
+  // 2. Resolve context packs
   const allContextFiles = await projectService.listContextFiles(project)
   const baseContextPacks = (await Promise.all(
     allContextFiles.filter((f) => f.startsWith('_')).map((f) => resolveContextPack(project, f)),
@@ -741,36 +705,76 @@ async function runBatchInner(input: TriggerBatchRunInput): Promise<TriggerRunRes
   const adapterId = worker.execution?.adapter ?? 'claude-code'
   const adapter = adapterRegistry.get(adapterId)
   if (!adapter) throw new Error(`Adapter not found: ${adapterId}`)
-  if (adapter.kind === 'production' && !(await adapter.detectInstalled())) {
-    throw new Error(`AI provider "${adapter.displayName}" is not installed on this machine.`)
+  if (adapter.kind === 'production' && !(await adapterReadinessService.isReadyToRun(adapterId))) {
+    const readiness = adapterReadinessService.getCached(adapterId)
+    const detail = readiness?.blockers[0]?.message ?? `${adapter.displayName} is not installed on this machine.`
+    throw new Error(detail)
   }
 
   const timeoutMs = (worker.execution?.timeout_seconds ?? 180) * 1000
+  const projectMetaBatch = await projectService.getProject(project)
+  const permissionsBatch = projectService.getPermissions(projectMetaBatch)
   let exitCode = -1
   let output: object | string | null = null
   let runError: string | undefined
 
   const sessionKey = runKey(project, workflow, stepId, runId)
   let session: AISession | null = null
+  let maxRetriesExceededBatch = false
   try {
-    // Pre-flight check + credential injection for MCPs
-    const batchMcpDefs = batchMcpIds.length > 0
-      ? await resolveMcps(project, workflow, stepId, 'batch', runId, batchMcpIds)
-      : []
-
     session = await adapter.spawn({
-      processFile, cardData: batchData, skills, contextPacks, mcps: batchMcpDefs,
-      workingDir: runDir, timeout: timeoutMs,
+      processFile, cardData: batchData, contextPacks,
+      workingDir: runDir, timeout: timeoutMs, permissions: permissionsBatch,
       onAwaitingInputChange: (awaiting) => {
         emit({ type: 'awaiting_input', project, workflow, stepId, runId, awaiting })
       },
     })
     liveSessions.set(sessionKey, session)
-    void (async () => { try { for await (const chunk of session!.stdout) emit({ type: 'log', project, workflow, stepId, runId, chunk }) } catch { /* ignore */ } })()
-    void (async () => { try { for await (const chunk of session!.stderr) emit({ type: 'log', project, workflow, stepId, runId, chunk }) } catch { /* ignore */ } })()
-    const result = await session.result()
-    exitCode = result.exitCode
-    output = result.output
+
+    let permissionRetriesBatch = 0
+    let permissionBufferBatch = ''
+    const activeSessionBatch = session
+
+    const consumeStdoutBatch = async () => {
+      try {
+        for await (const chunk of activeSessionBatch.stdout) {
+          emit({ type: 'log', project, workflow, stepId, runId, chunk })
+          const clean = chunk.replace(ANSI_RE, '')
+          if (clean.trim()) {
+            console.log('[worker-batch]', clean.trimEnd())
+            void aiOutputLog.append('worker-batch', clean.trimEnd())
+          }
+          permissionBufferBatch += chunk
+          if (permissionBufferBatch.length > 4096) permissionBufferBatch = permissionBufferBatch.slice(-4096)
+          if (detectPermissionPrompt(permissionBufferBatch)) {
+            const response = permissionPromptResponse(permissionBufferBatch)
+            permissionBufferBatch = ''
+            if (permissionRetriesBatch >= MAX_PERMISSION_RETRIES) {
+              maxRetriesExceededBatch = true
+              await activeSessionBatch.kill()
+            } else {
+              permissionRetriesBatch++
+              auditDb.insert({
+                project_id: project, workflow_id: workflow, step_id: stepId, card_id: 'batch',
+                event: 'ai_permission_auto_accepted', actor: 'system',
+                details_json: JSON.stringify({ run_id: runId, retry: permissionRetriesBatch }),
+              })
+              await activeSessionBatch.sendInput(response)
+            }
+          }
+        }
+      } catch { /* ignore */ }
+    }
+    void (async () => { try { for await (const chunk of activeSessionBatch.stderr) emit({ type: 'log', project, workflow, stepId, runId, chunk }) } catch { /* ignore */ } })()
+
+    await Promise.all([
+      consumeStdoutBatch(),
+      session.result().then(r => { exitCode = r.exitCode; output = r.output }),
+    ])
+
+    if (maxRetriesExceededBatch && runError === undefined) {
+      runError = 'max_permission_retries_exceeded'
+    }
   } catch (err) {
     runError = err instanceof Error ? err.message : String(err)
   } finally {
@@ -828,9 +832,21 @@ async function runBatchInner(input: TriggerBatchRunInput): Promise<TriggerRunRes
     const targetCardDir = join(projectService.paths.stepDir(project, workflow, nextStepId), 'cards', targetStatus)
     await fs.mkdir(targetCardDir, { recursive: true })
 
+    const rawBatchOutput: Record<string, unknown> = typeof output === 'object' && output !== null
+      ? (output as Record<string, unknown>)
+      : { raw: output }
+    const batchData: Record<string, unknown> = { ...rawBatchOutput }
+    const firstSource = sourceCards[0]?.card
+    if (firstSource) {
+      for (const field of ['name', 'key', 'id'] as const) {
+        if (!(field in batchData) && field in firstSource.data) {
+          batchData[field] = firstSource.data[field]
+        }
+      }
+    }
     const producedCard: Card = {
       id: plannedNextCardId, created_at: endedAt, created_by: 'worker', source_step: stepId,
-      data: typeof output === 'object' && output !== null ? (output as Record<string, unknown>) : { raw: output },
+      data: batchData,
       history: [
         { at: endedAt, step: stepId, event: 'run_completed', by: 'worker', note: `batch of ${sourceCards.length} cards` },
         { at: endedAt, step: nextStepId, event: 'created', by: 'worker' },
@@ -875,6 +891,7 @@ async function runBatchInner(input: TriggerBatchRunInput): Promise<TriggerRunRes
 async function runNow(project: string, workflow: string, stepId: string): Promise<{ triggered: number }> {
   const wf = await readWorkflow(project, workflow)
   const worker = await readStepJson<WorkerStepJson>(project, workflow, stepId)
+
   const prevStepId = findPrevStep(wf, stepId)
   if (!prevStepId) return { triggered: 0 }
 
@@ -1058,6 +1075,13 @@ export const workerRunner = {
       if (k.startsWith(prefix)) count++
     }
     return count
+  },
+  hasInFlightForStep: (project: string, workflow: string, stepId: string): boolean => {
+    const prefix = `${project}/${workflow}/${stepId}/`
+    for (const k of inFlight) {
+      if (k.startsWith(prefix)) return true
+    }
+    return false
   },
 }
 

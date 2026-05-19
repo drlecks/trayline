@@ -1,14 +1,14 @@
 // Watches all manual-approval tray pending/ folders across every project and
 // workflow. Pushes queue:onUpdate to all windows when any pending/ dir changes.
-// Also fires OS notifications when a new card lands in a watched tray.
+// Delegates OS notifications to notification-service.
 
 import { join, basename } from 'path'
 import fs from 'fs/promises'
-import { Notification, BrowserWindow } from 'electron'
+import { BrowserWindow } from 'electron'
 import { watch as chokidarWatch, type FSWatcher } from 'chokidar'
 import { projectService } from './project-service'
 import { fsService } from './fs-service'
-import { settingsStore } from './settings-store'
+import { notificationService } from './notification-service'
 import type { QueueEntry } from '../../shared/queue'
 
 export type { QueueEntry }
@@ -126,17 +126,35 @@ async function mountWorkflow(project: string, workflow: string): Promise<void> {
     watcher.on('add', (filePath) => {
       const name = basename(filePath)
       if (!name.endsWith('.json') || name.endsWith('.tmp')) return
-      if (settingsStore.get('notificationsEnabled')) {
-        try {
-          new Notification({
-            title: `New card in "${stepName}"`,
-            body: `A card is waiting for your review.`,
-          }).show()
-        } catch { /* Notification may not be supported in all environments */ }
-      }
+      const cardId = name.replace(/\.json$/, '')
+      readJsonSafe<{ id: string; data?: Record<string, unknown> }>(filePath)
+        .then((card) => {
+          const cardTitle = card?.data
+            ? String(card.data.title ?? card.data.name ?? card.data.subject ?? '')
+            : ''
+          notificationService.notifyCardNeedsReview({
+            projectName: project,
+            workflowName: workflow,
+            trayName: stepName,
+            cardId,
+            cardTitle: cardTitle || undefined,
+          })
+        })
+        .catch(() => {
+          notificationService.notifyCardNeedsReview({
+            projectName: project,
+            workflowName: workflow,
+            trayName: stepName,
+            cardId,
+          })
+        })
       pushUpdate()
+      void notificationService.refreshBadgeCount()
     })
-    watcher.on('unlink', () => { pushUpdate() })
+    watcher.on('unlink', () => {
+      pushUpdate()
+      void notificationService.refreshBadgeCount()
+    })
 
     watchedTrays.set(k, {
       project, projectDisplayName, workflow, stepId, stepName, pendingDir, watcher,

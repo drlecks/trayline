@@ -1,9 +1,8 @@
-// Schema of the workflow plan JSON produced by the `trayline-author` system
-// skill and consumed by the scaffold service. Lives in shared/ so both the
-// renderer (for previews) and the main process (for scaffolding) can validate
-// against the same shape.
+// Schema of the workflow plan JSON produced by the author service and consumed
+// by the scaffold service. Lives in shared/ so both the renderer (for previews)
+// and the main process (for scaffolding) can validate against the same shape.
 
-export type StepKind = 'tray' | 'worker' | 'source'
+export type StepKind = 'tray' | 'worker' | 'source' | 'outlet'
 
 export interface PlanFieldDef {
   id: string
@@ -32,8 +31,6 @@ export interface PlanWorkerStep {
   name: string
   description?: string
   icon?: string
-  skills?: string[]
-  mcps?: string[]
   context_packs?: string[]
   process_md: string
   batch_mode?: boolean
@@ -47,16 +44,37 @@ export interface PlanSourceStep {
   description?: string
   icon?: string
   schedule_cron: string
-  dedup: {
+  dedup?: {
     key: string
     max_memory: number
     first_run: 'skip_existing' | 'process_all' | 'process_last_n'
     first_run_n?: number
   }
-  source_md?: string
+  channel?: {
+    type: 'http_get' | 'imap'
+    credential_id: string
+    [key: string]: unknown
+  }
 }
 
-export type PlanStep = PlanTrayStep | PlanWorkerStep | PlanSourceStep
+export interface PlanOutletStep {
+  kind: 'outlet'
+  id: string
+  name: string
+  description?: string
+  icon?: string
+  trigger?: {
+    mode: 'on_ready' | 'scheduled' | 'manual'
+    schedule_cron?: string | null
+  }
+  channel: {
+    type: 'smtp' | 'http_post'
+    credential_id: string
+    [key: string]: unknown
+  }
+}
+
+export type PlanStep = PlanTrayStep | PlanWorkerStep | PlanSourceStep | PlanOutletStep
 
 export interface WorkflowPlan {
   project: {

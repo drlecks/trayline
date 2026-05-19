@@ -11,6 +11,7 @@ const defaults: Settings = {
   defaultModelByAdapter: {},
   defaultEffortByAdapter: {},
   notificationsEnabled: true,
+  notificationSettings: { enabled: true, disabledProjects: [] },
   lastOpenedProject: null,
   onboardingComplete: false,
 }
