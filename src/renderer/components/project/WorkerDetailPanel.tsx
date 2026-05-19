@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from 'react'
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react'
 import { CronExpressionParser } from 'cron-parser'
 import { Cpu, Play, Trash2, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -338,7 +338,6 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
   const [scheduleCron, setScheduleCron] = useState<string>(trigger.schedule_cron ?? '0 * * * *')
   const [batchMode, setBatchMode] = useState(raw.batch_mode ?? false)
   const [batchMax, setBatchMax] = useState<number | ''>(raw.batch_max ?? '')
-  const [busy, setBusy] = useState(false)
 
   const [contextFiles, setContextFiles] = useState<string[]>([])
   const [selectedContextPacks, setSelectedContextPacks] = useState<string[]>(raw.context_packs ?? [])
@@ -346,12 +345,15 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
   // Removal confirmation modal state
   const [removeContextPack, setRemoveContextPack] = useState<string | null>(null)
 
+  const userEditedRef = useRef(false)
+
   useEffect(() => {
     void window.trayline!.project.listContextFiles(project).then(setContextFiles)
   }, [project])
 
   // Re-sync picker state when the step changes (e.g. user picks a different worker)
   useEffect(() => {
+    userEditedRef.current = false
     setSelectedContextPacks(raw.context_packs ?? [])
     setCommand(exec.command ?? 'claude')
     setTimeoutSec(exec.timeout_seconds ?? 180)
@@ -363,41 +365,50 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step.id])
 
+  const save = useCallback(async () => {
+    await window.trayline!.step.update({
+      project, workflow, stepId: step.id,
+      patch: {
+        execution: { ...exec, command, timeout_seconds: timeoutSec, retry_attempts: retries },
+        trigger: {
+          ...trigger,
+          mode: triggerMode,
+          schedule_cron: triggerMode === 'scheduled' ? scheduleCron : null,
+        },
+        context_packs: selectedContextPacks,
+        batch_mode: batchMode,
+        batch_max: typeof batchMax === 'number' ? batchMax : null,
+      } as Record<string, unknown>,
+    })
+    await refreshSteps()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project, workflow, step.id, command, timeoutSec, retries, triggerMode, scheduleCron, selectedContextPacks, batchMode, batchMax, refreshSteps])
+
+  useEffect(() => {
+    if (!userEditedRef.current) return
+    const timer = setTimeout(() => { void save() }, 500)
+    return () => clearTimeout(timer)
+  }, [save])
+
+  function markEdited() { userEditedRef.current = true }
+
   function handleBatchModeToggle(newValue: boolean) {
+    markEdited()
     setBatchMode(newValue)
     if (newValue && triggerMode === 'on_ready') setTriggerMode('manual')
   }
 
   function addContextPack(file: string) {
     if (!file || selectedContextPacks.includes(file)) return
+    markEdited()
     setSelectedContextPacks((prev) => [...prev, file])
   }
 
   function confirmRemoveContextPack() {
     if (!removeContextPack) return
+    markEdited()
     setSelectedContextPacks((prev) => prev.filter((f) => f !== removeContextPack))
     setRemoveContextPack(null)
-  }
-
-  async function save() {
-    setBusy(true)
-    try {
-      await window.trayline!.step.update({
-        project, workflow, stepId: step.id,
-        patch: {
-          execution: { ...exec, command, timeout_seconds: timeoutSec, retry_attempts: retries },
-          trigger: {
-            ...trigger,
-            mode: triggerMode,
-            schedule_cron: triggerMode === 'scheduled' ? scheduleCron : null,
-          },
-          context_packs: selectedContextPacks,
-          batch_mode: batchMode,
-          batch_max: typeof batchMax === 'number' ? batchMax : null,
-        } as Record<string, unknown>,
-      })
-      await refreshSteps()
-    } finally { setBusy(false) }
   }
 
   const TRIGGER_OPTIONS: { value: 'on_ready' | 'scheduled' | 'manual'; label: string; desc: string }[] = [
@@ -418,7 +429,7 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
           <label className="text-xs text-neutral-500">Command</label>
           <input
             value={command}
-            onChange={(e) => setCommand(e.target.value)}
+            onChange={(e) => { markEdited(); setCommand(e.target.value) }}
             className="rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-3 py-1.5 text-xs"
           />
         </div>
@@ -428,7 +439,7 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
             <input
               type="number" min={5}
               value={timeoutSec}
-              onChange={(e) => setTimeoutSec(parseInt(e.target.value, 10) || 0)}
+              onChange={(e) => { markEdited(); setTimeoutSec(parseInt(e.target.value, 10) || 0) }}
               className="rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-3 py-1.5 text-xs"
             />
           </div>
@@ -437,7 +448,7 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
             <input
               type="number" min={0}
               value={retries}
-              onChange={(e) => setRetries(parseInt(e.target.value, 10) || 0)}
+              onChange={(e) => { markEdited(); setRetries(parseInt(e.target.value, 10) || 0) }}
               className="rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-3 py-1.5 text-xs"
             />
           </div>
@@ -452,7 +463,7 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
                 <button
                   key={opt.value}
                   type="button"
-                  onClick={() => !isDisabled && setTriggerMode(opt.value)}
+                  onClick={() => { if (!isDisabled) { markEdited(); setTriggerMode(opt.value) } }}
                   disabled={isDisabled}
                   className={`flex-1 px-3 py-2 rounded-md border text-left text-xs transition-opacity ${
                     triggerMode === opt.value
@@ -470,7 +481,7 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
 
         {triggerMode === 'scheduled' && (
           <>
-            <CronPicker value={scheduleCron} onChange={setScheduleCron} />
+            <CronPicker value={scheduleCron} onChange={(v) => { markEdited(); setScheduleCron(v) }} />
             <NextRunTime expr={scheduleCron} />
           </>
         )}
@@ -503,7 +514,7 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
                 type="number"
                 min={1}
                 value={batchMax}
-                onChange={(e) => setBatchMax(e.target.value ? parseInt(e.target.value, 10) : '')}
+                onChange={(e) => { markEdited(); setBatchMax(e.target.value ? parseInt(e.target.value, 10) : '') }}
                 placeholder="No limit"
                 className="rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-3 py-1.5 text-xs w-32"
               />
@@ -564,9 +575,6 @@ function ConfigTab({ project, workflow, step }: { project: string; workflow: str
           )}
         </div>
 
-        <div className="flex justify-end">
-          <Button size="sm" onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save'}</Button>
-        </div>
       </div>
 
       {/* Remove context pack confirmation */}

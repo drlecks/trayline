@@ -201,10 +201,6 @@ export default function ProjectListScreen() {
           </div>
         )}
       </div>
-      <p className="text-sm text-neutral-500 dark:text-neutral-400 text-center max-w-md mb-8 leading-relaxed w-full text-left">
-        Pick a project to open, or create a new one. Click the status dot to start or stop a project.
-      </p>
-
       {importError && (
         <div className="w-full mb-4 flex gap-2 px-3 py-2.5 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/40">
           <AlertTriangle size={14} strokeWidth={1.75} className="text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
@@ -214,45 +210,44 @@ export default function ProjectListScreen() {
 
       <ul className="w-full space-y-2">
         <li>
-          <button
-            onClick={() => setScreen('author')}
-            className="
-              group w-full flex items-center gap-3
-              rounded-full border border-dashed
-              border-neutral-300 dark:border-neutral-700
-              hover:border-neutral-400 dark:hover:border-neutral-600
-              bg-transparent px-4 py-3 text-left transition-colors
-            "
-          >
-            <span className="flex items-center justify-center w-6 h-6 rounded-full bg-neutral-100 dark:bg-neutral-900 text-neutral-600 dark:text-neutral-400">
-              <Plus size={14} strokeWidth={2} />
-            </span>
-            <span className="flex-1 text-sm font-medium text-neutral-700 dark:text-neutral-300">
-              Create new project
-            </span>
-          </button>
-        </li>
-
-        <li>
-          <button
-            onClick={handleImport}
-            disabled={importing}
-            className="
-              group w-full flex items-center gap-3
-              rounded-full border border-dashed
-              border-neutral-300 dark:border-neutral-700
-              hover:border-neutral-400 dark:hover:border-neutral-600
-              bg-transparent px-4 py-3 text-left transition-colors
-              disabled:opacity-50
-            "
-          >
-            <span className="flex items-center justify-center w-6 h-6 rounded-full bg-neutral-100 dark:bg-neutral-900 text-neutral-600 dark:text-neutral-400">
-              <Download size={14} strokeWidth={2} />
-            </span>
-            <span className="flex-1 text-sm font-medium text-neutral-700 dark:text-neutral-300">
-              {importing ? 'Scanning…' : 'Import project from zip'}
-            </span>
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setScreen('author')}
+              className="
+                group flex-1 flex items-center gap-3
+                rounded-full border border-dashed
+                border-neutral-300 dark:border-neutral-700
+                hover:border-neutral-400 dark:hover:border-neutral-600
+                bg-transparent px-4 py-3 text-left transition-colors
+              "
+            >
+              <span className="flex items-center justify-center w-6 h-6 rounded-full bg-neutral-100 dark:bg-neutral-900 text-neutral-600 dark:text-neutral-400">
+                <Plus size={14} strokeWidth={2} />
+              </span>
+              <span className="flex-1 text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                Create new project
+              </span>
+            </button>
+            <button
+              onClick={handleImport}
+              disabled={importing}
+              className="
+                group flex-1 flex items-center gap-3
+                rounded-full border border-dashed
+                border-neutral-300 dark:border-neutral-700
+                hover:border-neutral-400 dark:hover:border-neutral-600
+                bg-transparent px-4 py-3 text-left transition-colors
+                disabled:opacity-50
+              "
+            >
+              <span className="flex items-center justify-center w-6 h-6 rounded-full bg-neutral-100 dark:bg-neutral-900 text-neutral-600 dark:text-neutral-400">
+                <Download size={14} strokeWidth={2} />
+              </span>
+              <span className="flex-1 text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                {importing ? 'Scanning…' : 'Import project from zip'}
+              </span>
+            </button>
+          </div>
         </li>
 
         {all.map((p) => {
