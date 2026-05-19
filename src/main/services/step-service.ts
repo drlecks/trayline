@@ -380,7 +380,9 @@ async function moveStepUp(input: MoveStepUpInput): Promise<{ newStepId: string; 
 
   // Kind guards
   const targetJson = await fsService.readJson<Record<string, unknown>>(join(stepsRoot, stepId, 'step.json'))
-  if (targetJson.kind !== 'tray') throw new Error('Only tray steps can be reordered with move-up')
+  if (targetJson.kind !== 'tray' && targetJson.kind !== 'worker') {
+    throw new Error('Only tray and worker steps can be reordered with move-up')
+  }
 
   const aboveJson = await fsService.readJson<Record<string, unknown>>(join(stepsRoot, aboveId, 'step.json'))
   if (aboveJson.kind === 'source' || aboveJson.kind === 'outlet') {
