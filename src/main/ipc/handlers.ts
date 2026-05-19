@@ -370,6 +370,9 @@ export function registerIpcHandlers(
     if (workerRunner.hasInFlightForStep(input.project, input.workflow, input.stepId)) {
       throw new Error('Cannot reorder: a worker run is in flight for this step')
     }
+    // Unmount watchers first to release chokidar file handles (required on Windows
+    // before fs.rename — held handles cause EPERM on directory renames).
+    await orchestrator.unmountWorkflow(input.project, input.workflow)
     const result = await stepService.moveStepUp(input)
     await remount(input)
     return result
