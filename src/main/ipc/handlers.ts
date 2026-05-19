@@ -17,11 +17,13 @@ import { queueService } from '../services/queue-service'
 import { notificationService } from '../services/notification-service'
 import { credentialService } from '../services/credential-service'
 import { outletRunner } from '../services/outlet-runner'
+import { aiOutputLog } from '../services/ai-output-log'
 import { join } from 'path'
 import os from 'os'
 import fs from 'fs/promises'
 import { fsService } from '../services/fs-service'
 import type { AISession } from '../ai-terminals/adapter'
+import { ANSI_RE } from '../ai-terminals/prompt-utils'
 import { IPC } from '../../shared/ipc-channels'
 import type { BootstrapInfo, NotificationSettings, ProviderInstallSuggestion, ProviderReadyResult, ExportOptions, ImportSuccess, SourceStepConfig, Credential, OutletStepConfig } from '../../shared/types'
 import type { CardStatus } from '../../shared/card'
@@ -343,6 +345,11 @@ export function registerIpcHandlers(
     await remount(input)
     return r
   })
+  ipcMain.handle('step:addOutlet', async (_: unknown, input: Parameters<typeof stepService.addOutlet>[0]) => {
+    const r = await stepService.addOutlet(input)
+    await remount(input)
+    return r
+  })
   ipcMain.handle('step:update', async (_: unknown, input: Parameters<typeof stepService.updateStep>[0]) => {
     await stepService.updateStep(input)
     await remount(input)
@@ -553,7 +560,8 @@ export function registerIpcHandlers(
         try {
           for await (const chunk of session.stdout) {
             if (!event.sender.isDestroyed()) {
-              event.sender.send(IPC.ai.onChunk, chunk)
+              const clean = chunk.replace(ANSI_RE, '')
+              if (clean) event.sender.send(IPC.ai.onChunk, clean)
             }
           }
         } catch { /* ignore */ }
@@ -572,4 +580,7 @@ export function registerIpcHandlers(
       activeAiSession = null
     }
   })
+
+  // ── AI output log ─────────────────────────────────────────────────────────
+  ipcMain.handle(IPC.aiLog.getLines, () => aiOutputLog.getLines())
 }

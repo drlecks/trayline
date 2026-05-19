@@ -7,6 +7,8 @@ import CardViewer from './CardViewer'
 import { NEW_CARD_EVENT } from '../shortcuts/useGlobalShortcuts'
 import type { StepMeta } from '../../../shared/types'
 import type { Card, CardStatus } from '../../../shared/card'
+import { getCardDisplayName } from '../../../shared/card'
+import type { PlanFieldDef } from '../../../shared/workflow-plan'
 import type { WorkerRunEvent } from '../../../shared/worker-run'
 
 const STATUS_TABS: { id: CardStatus; label: string }[] = [
@@ -169,7 +171,7 @@ export default function CardsTab({ step }: { step: StepMeta }) {
               >
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium truncate flex items-center gap-2">
-                    {previewText(c)}
+                    {getCardDisplayName(c, fields as PlanFieldDef[])}
                     {isProcessing && (
                       <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 shrink-0">
                         <Loader2 size={9} className="animate-spin" />
@@ -222,16 +224,6 @@ function lastRunFailed(card: Card) {
   return null
 }
 
-function previewText(card: Card): string {
-  // Pick the first non-empty string-ish field as the summary
-  for (const [, v] of Object.entries(card.data)) {
-    if (typeof v === 'string' && v.trim().length > 0) {
-      return v.length > 80 ? v.slice(0, 80) + '…' : v
-    }
-    if (typeof v === 'number') return String(v)
-  }
-  return '(empty card)'
-}
 
 function timeAgo(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime()

@@ -6,6 +6,8 @@ import fs from 'fs/promises'
 import { join } from 'path'
 import { adapterRegistry } from '../ai-terminals/registry'
 import { adapterReadinessService } from './adapter-readiness-service'
+import { ANSI_RE } from '../ai-terminals/prompt-utils'
+import { aiOutputLog } from './ai-output-log'
 import type { ProjectPermissions } from '../../shared/types'
 
 export interface AIStepResult {
@@ -51,13 +53,27 @@ export async function runAIStep(opts: {
 
   let result
   try {
+    void (async () => {
+      try {
+        for await (const chunk of session.stdout) {
+          const clean = chunk.replace(ANSI_RE, '')
+          if (clean.trim()) {
+            console.log('[ai-step]', clean.trimEnd())
+            void aiOutputLog.append('ai-step', clean.trimEnd())
+          }
+        }
+      } catch { /* ignore */ }
+    })()
     result = await session.result()
   } finally {
     try { await adapter.clearContext() } catch { /* ignore */ }
   }
 
   if (result.exitCode !== 0) {
-    throw new Error(`AI step exited with code ${result.exitCode}`)
+    const tail = result.terminalLog
+      ? '\n\nAI output:\n' + result.terminalLog.replace(ANSI_RE, '').trimEnd().slice(-600)
+      : ''
+    throw new Error(`AI step exited with code ${result.exitCode}${tail}`)
   }
   if (result.output === null) {
     throw new Error('AI step returned no output')

@@ -65,6 +65,7 @@ export const IPC = {
     addTray: 'step:addTray',
     addWorker: 'step:addWorker',
     addSource: 'step:addSource',
+    addOutlet: 'step:addOutlet',
     update: 'step:update',
     delete: 'step:delete',
     readProcess: 'step:readProcess',
@@ -134,5 +135,8 @@ export const IPC = {
     query:   'ai:query',
     abort:   'ai:abort',
     onChunk: 'ai:query-chunk',
+  },
+  aiLog: {
+    getLines: 'ai-log:get-lines',
   },
 } as const

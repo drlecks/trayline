@@ -181,6 +181,13 @@ const api = {
       dedup_key?: string
     }): Promise<SourceStepConfig & { id: string }> =>
       ipcRenderer.invoke(IPC.step.addSource, input),
+    addOutlet: (input: {
+      project: string
+      workflow: string
+      name: string
+      description?: string
+    }): Promise<OutletStepConfig & { id: string }> =>
+      ipcRenderer.invoke(IPC.step.addOutlet, input),
     readProcess: (project: string, workflow: string, stepId: string): Promise<string> =>
       ipcRenderer.invoke(IPC.step.readProcess, project, workflow, stepId),
     updateProcess: (input: {
@@ -328,6 +335,9 @@ const api = {
       ipcRenderer.on(IPC.ai.onChunk, listener)
       return () => ipcRenderer.off(IPC.ai.onChunk, listener)
     },
+  },
+  aiLog: {
+    getLines: (): Promise<string[]> => ipcRenderer.invoke(IPC.aiLog.getLines),
   },
   platform: process.platform as NodeJS.Platform,
 }

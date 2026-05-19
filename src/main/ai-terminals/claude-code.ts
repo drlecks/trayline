@@ -1,6 +1,6 @@
 import { spawn as childSpawn } from 'child_process'
 import fs from 'fs/promises'
-import { join } from 'path'
+import { join, relative } from 'path'
 import * as pty from 'node-pty'
 import type {
   AITerminalAdapter,
@@ -13,6 +13,28 @@ import type {
   AdapterReadiness,
 } from './adapter'
 import { renderProcessTemplate, ANSI_RE } from './prompt-utils'
+import { Paths } from '../services/fs-service'
+
+async function savePromptToDisk(prompt: string, workingDir: string): Promise<void> {
+  try {
+    const rel = relative(Paths.projects, workingDir).replace(/\\/g, '/')
+    const parts = rel.split('/')
+    const project = parts[0]
+    if (!project || project.startsWith('..')) return
+
+    // parts: [project, workflows, <wf>, steps, <step>, runs, <runId>]
+    const runId = parts[parts.length - 1] ?? 'run'
+    const stepPart = parts.length >= 3 ? parts[parts.length - 3] : ''
+    const wfPart = parts.length >= 5 ? parts[parts.length - 5] : ''
+    const label = [wfPart, stepPart, runId].filter(Boolean).join('__')
+
+    const debugDir = join(Paths.projects, project, 'debug')
+    await fs.mkdir(debugDir, { recursive: true })
+    await fs.writeFile(join(debugDir, `${label}.log`), prompt, 'utf-8')
+  } catch {
+    // Debug logging — never let this fail a run
+  }
+}
 
 // Lightweight heuristic: trailing prompt characters with no following newline
 // suggest the CLI is waiting on input. Conservative on purpose — Claude in
@@ -411,6 +433,10 @@ export const claudeCodeAdapter: AITerminalAdapter = {
     // and platform quoting hell).
     const promptFile = join(opts.workingDir, 'prompt.txt')
     await fs.writeFile(promptFile, prompt, 'utf-8')
+
+    if (process.env.SAVE_PROMPTS_ON_DISK === 'true') {
+      void savePromptToDisk(prompt, opts.workingDir)
+    }
 
     // Build --allowedTools flags from project permissions
     const allowedToolParts: string[] = []

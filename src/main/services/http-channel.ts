@@ -62,8 +62,10 @@ export async function postHttp(
   tokens: Record<string, string>,
 ): Promise<void> {
   const resolved = await credentialService.resolveSecrets(credential)
-  const urlPath = resolveTokensInString(channel.url_path, tokens)
-  const url = resolved.base_url.replace(/\/$/, '') + (urlPath.startsWith('/') ? urlPath : '/' + urlPath)
+  const urlPath = channel.url_path ? resolveTokensInString(channel.url_path, tokens) : ''
+  const url = urlPath
+    ? resolved.base_url.replace(/\/$/, '') + (urlPath.startsWith('/') ? urlPath : '/' + urlPath)
+    : resolved.base_url
   const headers = buildHeaders(resolved)
   const method = channel.method ?? 'POST'
 
