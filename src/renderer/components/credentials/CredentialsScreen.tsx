@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Plus, Trash2, Pencil, CheckCircle2, XCircle, Loader2 } from 'lucide-react'
+import { ArrowLeft, Plus, Trash2, Pencil, CheckCircle2, XCircle, Loader2 } from 'lucide-react'
 import type { CredentialSummary, Credential } from '../../../shared/types'
+import { useProjectStore } from '@/stores/project-store'
 import HttpCredentialDialog from './HttpCredentialDialog'
 import ImapCredentialDialog from './ImapCredentialDialog'
 import SmtpCredentialDialog from './SmtpCredentialDialog'
@@ -22,6 +23,9 @@ const TYPE_COLOR: Record<CredentialType, string> = {
 type TestState = 'idle' | 'testing' | 'ok' | 'fail'
 
 export default function CredentialsScreen() {
+  const setScreen = useProjectStore((s) => s.setScreen)
+  const active = useProjectStore((s) => s.active)
+  const all = useProjectStore((s) => s.all)
   const [credentials, setCredentials] = useState<CredentialSummary[]>([])
   const [addType, setAddType] = useState<CredentialType | null>(null)
   const [editId, setEditId] = useState<string | null>(null)
@@ -72,6 +76,13 @@ export default function CredentialsScreen() {
 
   return (
     <div className="flex-1 max-w-2xl mx-auto px-6 py-8 w-full">
+      <button
+        onClick={() => setScreen(active ? 'project' : all.length > 0 ? 'projectList' : 'splash')}
+        className="flex items-center gap-1 text-xs text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200 mb-6"
+      >
+        <ArrowLeft size={13} strokeWidth={1.75} /> Back
+      </button>
+
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-semibold">Credentials</h1>

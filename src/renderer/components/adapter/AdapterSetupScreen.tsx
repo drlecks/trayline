@@ -1,9 +1,8 @@
 import { useState } from 'react'
-import { Download, ExternalLink, RefreshCw, Zap } from 'lucide-react'
+import { ExternalLink, RefreshCw, Zap } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAdapterStore } from '@/stores/adapter-store'
 import AdapterSetupWizard from './AdapterSetupWizard'
-import ModelDownloadModal from './ModelDownloadModal'
 import type { AdapterReadiness } from '../../../shared/types'
 
 interface AdapterCard {
@@ -18,6 +17,7 @@ interface AdapterCard {
 /**
  * Full-window gate shown when no production AI adapter is installed.
  * Replaces the entire app UI until at least one adapter is ready.
+ * Shows all registered production adapters — currently Claude Code only.
  */
 export default function AdapterSetupScreen({ onReady }: { onReady: () => void }) {
   const readiness = useAdapterStore((s) => s.readiness)
@@ -27,21 +27,21 @@ export default function AdapterSetupScreen({ onReady }: { onReady: () => void })
   const [wizardAdapter, setWizardAdapter] = useState<AdapterCard | null>(null)
   const [wizardOpen, setWizardOpen] = useState(false)
   const [recheckingId, setRecheckingId] = useState<string | null>(null)
-  const [downloadModalOpen, setDownloadModalOpen] = useState(false)
 
-  // Load adapter list once on mount — local-llm always first
+  // Load adapter list once on mount — filter out mock adapters
   useState(() => {
     void (async () => {
       const list = await window.trayline.adapters.list()
-      const production = list.filter((a) => a.kind === 'production').map((a) => ({
-        id: a.id,
-        displayName: a.displayName,
-        description: a.description,
-        installUrl: a.installUrl,
-        requiresExternalInstall: a.requiresExternalInstall,
-        kind: a.kind,
-      }))
-      production.sort((a, b) => (a.id === 'local-llm' ? -1 : b.id === 'local-llm' ? 1 : 0))
+      const production = list
+        .filter((a) => a.kind === 'production')
+        .map((a) => ({
+          id: a.id,
+          displayName: a.displayName,
+          description: a.description,
+          installUrl: a.installUrl,
+          requiresExternalInstall: a.requiresExternalInstall,
+          kind: a.kind,
+        }))
       setAdapters(production)
     })()
   })
@@ -59,11 +59,6 @@ export default function AdapterSetupScreen({ onReady }: { onReady: () => void })
     }
   }
 
-  function openWizard(adapter: AdapterCard) {
-    setWizardAdapter(adapter)
-    setWizardOpen(true)
-  }
-
   function getReadiness(adapterId: string): AdapterReadiness | null {
     return readiness[adapterId] ?? null
   }
@@ -79,7 +74,7 @@ export default function AdapterSetupScreen({ onReady }: { onReady: () => void })
           <div>
             <h1 className="text-lg font-semibold tracking-tight">Set up your AI</h1>
             <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-1 leading-snug">
-              The local model works out of the box — download it once, use it forever, no account needed.
+              Install an AI adapter to get started. Claude Code is the recommended choice.
             </p>
           </div>
         </div>
@@ -89,7 +84,6 @@ export default function AdapterSetupScreen({ onReady }: { onReady: () => void })
           {adapters.map((adapter) => {
             const r = getReadiness(adapter.id)
             const checking = recheckingId === adapter.id
-            const isLocalLlm = adapter.id === 'local-llm'
 
             return (
               <div
@@ -98,18 +92,7 @@ export default function AdapterSetupScreen({ onReady }: { onReady: () => void })
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium">{adapter.displayName}</p>
-                      {isLocalLlm ? (
-                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400">
-                          Recommended
-                        </span>
-                      ) : (
-                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400">
-                          Power user
-                        </span>
-                      )}
-                    </div>
+                    <p className="text-sm font-medium">{adapter.displayName}</p>
                     {adapter.description && (
                       <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5">{adapter.description}</p>
                     )}
@@ -117,7 +100,7 @@ export default function AdapterSetupScreen({ onReady }: { onReady: () => void })
                       <p className="text-[11px] font-mono text-neutral-500 dark:text-neutral-400 mt-0.5">{r.version}</p>
                     )}
                   </div>
-                  {!isLocalLlm && adapter.installUrl && (
+                  {adapter.installUrl && (
                     <a
                       href={adapter.installUrl}
                       target="_blank"
@@ -129,63 +112,33 @@ export default function AdapterSetupScreen({ onReady }: { onReady: () => void })
                   )}
                 </div>
 
-                {!isLocalLlm && r?.blockers[0]?.fixCommand && (
+                {r?.blockers[0]?.fixCommand && (
                   <code className="text-[11px] font-mono bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded px-2.5 py-1.5 text-neutral-600 dark:text-neutral-400">
                     {r.blockers[0].fixCommand}
                   </code>
                 )}
 
                 <div className="flex gap-2">
-                  {isLocalLlm ? (
-                    r?.installed ? (
-                      // Model already downloaded — just offer recheck
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => void recheck(adapter)}
-                        disabled={checking}
-                        className="flex-1"
-                      >
-                        {checking
-                          ? <><RefreshCw size={12} strokeWidth={2} className="animate-spin mr-1.5" /> Checking…</>
-                          : <><RefreshCw size={12} strokeWidth={2} className="mr-1.5" /> Check again</>
-                        }
-                      </Button>
-                    ) : (
-                      // No model downloaded — show download button
-                      <Button
-                        size="sm"
-                        onClick={() => setDownloadModalOpen(true)}
-                        className="flex-1"
-                      >
-                        <Download size={12} strokeWidth={2} className="mr-1.5" />
-                        Download local model
-                      </Button>
-                    )
-                  ) : (
-                    <>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => void recheck(adapter)}
-                        disabled={checking}
-                        className="flex-1"
-                      >
-                        {checking
-                          ? <><RefreshCw size={12} strokeWidth={2} className="animate-spin mr-1.5" /> Checking…</>
-                          : <><RefreshCw size={12} strokeWidth={2} className="mr-1.5" /> Check again</>
-                        }
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => openWizard(adapter)}
-                        className="text-xs"
-                      >
-                        Setup guide
-                      </Button>
-                    </>
-                  )}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void recheck(adapter)}
+                    disabled={checking}
+                    className="flex-1"
+                  >
+                    {checking
+                      ? <><RefreshCw size={12} strokeWidth={2} className="animate-spin mr-1.5" /> Checking…</>
+                      : <><RefreshCw size={12} strokeWidth={2} className="mr-1.5" /> Check again</>
+                    }
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => { setWizardAdapter(adapter); setWizardOpen(true) }}
+                    className="text-xs"
+                  >
+                    Setup guide
+                  </Button>
                 </div>
               </div>
             )
@@ -197,7 +150,6 @@ export default function AdapterSetupScreen({ onReady }: { onReady: () => void })
         </div>
       </div>
 
-      {/* Setup wizard modal (non-local adapters only) */}
       {wizardAdapter && (
         <AdapterSetupWizard
           adapterId={wizardAdapter.id}
@@ -214,13 +166,6 @@ export default function AdapterSetupScreen({ onReady }: { onReady: () => void })
           onComplete={onReady}
         />
       )}
-
-      {/* Model download modal (local-llm only) */}
-      <ModelDownloadModal
-        open={downloadModalOpen}
-        onOpenChange={setDownloadModalOpen}
-        onReady={onReady}
-      />
     </div>
   )
 }

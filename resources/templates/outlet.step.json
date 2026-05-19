@@ -5,6 +5,10 @@
   "description": "{{description}}",
   "color": "#8B5CF6",
   "icon": "send",
+  "trigger": {
+    "mode": "on_ready",
+    "schedule_cron": null
+  },
   "channel": {
     "type": "smtp",
     "credential_id": "",
@@ -12,5 +16,6 @@
     "subject": "",
     "body": "{{card.data}}"
   },
-  "on_failure": "send_to_errors"
+  "on_failure": "send_to_errors",
+  "prompt": null
 }

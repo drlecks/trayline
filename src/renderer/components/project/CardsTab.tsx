@@ -1,5 +1,5 @@
-import { useEffect, useState, useCallback } from 'react'
-import { Plus, ChevronRight } from 'lucide-react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
+import { Plus, ChevronRight, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useProjectStore } from '@/stores/project-store'
 import NewCardDialog from './NewCardDialog'
@@ -7,6 +7,9 @@ import CardViewer from './CardViewer'
 import { NEW_CARD_EVENT } from '../shortcuts/useGlobalShortcuts'
 import type { StepMeta } from '../../../shared/types'
 import type { Card, CardStatus } from '../../../shared/card'
+import { getCardDisplayName } from '../../../shared/card'
+import type { PlanFieldDef } from '../../../shared/workflow-plan'
+import type { WorkerRunEvent } from '../../../shared/worker-run'
 
 const STATUS_TABS: { id: CardStatus; label: string }[] = [
   { id: 'pending', label: 'Pending' },
@@ -23,6 +26,7 @@ const ERROR_STATUS_TABS: { id: CardStatus; label: string }[] = [
 export default function CardsTab({ step }: { step: StepMeta }) {
   const active = useProjectStore((s) => s.active)
   const workflow = useProjectStore((s) => s.workflow)
+  const steps = useProjectStore((s) => s.steps)
 
   const isErrors = step.id === '99-errors'
   const tabs = isErrors ? ERROR_STATUS_TABS : STATUS_TABS
@@ -33,6 +37,15 @@ export default function CardsTab({ step }: { step: StepMeta }) {
   const [openCardId, setOpenCardId] = useState<string | null>(null)
   const jumpTarget = useProjectStore((s) => s.jumpTarget)
   const setJumpTarget = useProjectStore((s) => s.setJumpTarget)
+  const [processingCardId, setProcessingCardId] = useState<string | null>(null)
+
+  // Find the worker that directly follows this tray.
+  const followingWorker = useMemo(() => {
+    const idx = steps.findIndex((s) => s.id === step.id)
+    if (idx < 0 || idx >= steps.length - 1) return null
+    const next = steps[idx + 1]
+    return next.kind === 'worker' ? next : null
+  }, [steps, step.id])
 
   // If a jump target matches this step, auto-open the card and clear the target.
   useEffect(() => {
@@ -52,6 +65,17 @@ export default function CardsTab({ step }: { step: StepMeta }) {
   }, [active, workflow, step.id, status])
 
   useEffect(() => { void refresh() }, [refresh])
+
+  // Track which card the following worker is currently processing.
+  useEffect(() => {
+    if (!followingWorker) return
+    const off = window.trayline.worker.onRunEvent((ev: WorkerRunEvent) => {
+      if (ev.stepId !== followingWorker.id) return
+      if (ev.type === 'started') setProcessingCardId(ev.cardId)
+      if (ev.type === 'finished') { setProcessingCardId(null); void refresh() }
+    })
+    return off
+  }, [followingWorker, refresh])
 
   const allowManualCreate = (step.raw.allow_manual_create as boolean | undefined) ?? true
   const fields = (step.raw.input_schema as { fields?: unknown[] } | undefined)?.fields ?? []
@@ -128,22 +152,32 @@ export default function CardsTab({ step }: { step: StepMeta }) {
         <div className="flex flex-col -mx-3 rounded-md overflow-hidden border border-neutral-200/70 dark:border-neutral-800/70">
           {cards.map((c) => {
             const failEntry = isErrors ? lastRunFailed(c) : null
+            const isProcessing = c.id === processingCardId
             return (
               <button
                 key={c.id}
-                onClick={() => setOpenCardId(c.id)}
-                className="
+                onClick={() => { if (!isProcessing) setOpenCardId(c.id) }}
+                disabled={isProcessing}
+                className={`
                   group flex items-center gap-3 py-2.5 px-3
                   odd:bg-white even:bg-neutral-50/80
                   dark:odd:bg-neutral-950 dark:even:bg-neutral-900/40
-                  hover:!bg-neutral-100 dark:hover:!bg-neutral-800/60
                   text-left transition-colors
                   border-b border-neutral-100 dark:border-neutral-900/60 last:border-b-0
-                "
+                  ${isProcessing
+                    ? 'cursor-default opacity-60'
+                    : 'hover:!bg-neutral-100 dark:hover:!bg-neutral-800/60'}
+                `}
               >
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium truncate">
-                    {previewText(c)}
+                  <div className="text-sm font-medium truncate flex items-center gap-2">
+                    {getCardDisplayName(c, fields as PlanFieldDef[])}
+                    {isProcessing && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 shrink-0">
+                        <Loader2 size={9} className="animate-spin" />
+                        Processing
+                      </span>
+                    )}
                   </div>
                   {failEntry ? (
                     <>
@@ -161,7 +195,10 @@ export default function CardsTab({ step }: { step: StepMeta }) {
                     </div>
                   )}
                 </div>
-                <ChevronRight size={14} className="text-neutral-300 group-hover:text-neutral-500" strokeWidth={1.75} />
+                {isProcessing
+                  ? <Loader2 size={14} className="text-blue-400 animate-spin shrink-0" strokeWidth={1.75} />
+                  : <ChevronRight size={14} className="text-neutral-300 group-hover:text-neutral-500" strokeWidth={1.75} />
+                }
               </button>
             )
           })}
@@ -187,16 +224,6 @@ function lastRunFailed(card: Card) {
   return null
 }
 
-function previewText(card: Card): string {
-  // Pick the first non-empty string-ish field as the summary
-  for (const [, v] of Object.entries(card.data)) {
-    if (typeof v === 'string' && v.trim().length > 0) {
-      return v.length > 80 ? v.slice(0, 80) + '…' : v
-    }
-    if (typeof v === 'number') return String(v)
-  }
-  return '(empty card)'
-}
 
 function timeAgo(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime()

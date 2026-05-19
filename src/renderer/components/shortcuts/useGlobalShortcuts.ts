@@ -7,6 +7,7 @@ interface ShortcutHandlers {
   openSettings: () => void
   openPalette: () => void
   openShortcuts: () => void
+  openAIConsole: () => void
 }
 
 function isTypingTarget(target: EventTarget | null): boolean {
@@ -24,7 +25,7 @@ function isTypingTarget(target: EventTarget | null): boolean {
  * Cmd/Ctrl+K which is intentional global (matches the convention from
  * Slack, VS Code, GitHub, etc.).
  */
-export function useGlobalShortcuts({ openSettings, openPalette, openShortcuts }: ShortcutHandlers): void {
+export function useGlobalShortcuts({ openSettings, openPalette, openShortcuts, openAIConsole }: ShortcutHandlers): void {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const mod = e.metaKey || e.ctrlKey
@@ -38,6 +39,13 @@ export function useGlobalShortcuts({ openSettings, openPalette, openShortcuts }:
       }
 
       if (isTypingTarget(e.target)) return
+
+      // Cmd/Ctrl+Shift+A — Quick AI console
+      if (e.shiftKey && (e.key === 'a' || e.key === 'A')) {
+        e.preventDefault()
+        openAIConsole()
+        return
+      }
 
       // Cmd/Ctrl+, — settings
       if (e.key === ',') {
@@ -65,5 +73,5 @@ export function useGlobalShortcuts({ openSettings, openPalette, openShortcuts }:
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [openSettings, openPalette, openShortcuts])
+  }, [openSettings, openPalette, openShortcuts, openAIConsole])
 }

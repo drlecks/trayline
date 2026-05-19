@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Send } from 'lucide-react'
+import { Send, RotateCcw, Copy } from 'lucide-react'
 import { useProjectStore } from '@/stores/project-store'
 import type { StepMeta, OutletStepConfig, OutletRunMeta, OutletRunEvent, CredentialSummary } from '../../../shared/types'
 
@@ -12,12 +12,11 @@ interface Props {
 export default function OutletDetailPanel({ step }: Props) {
   const active = useProjectStore((s) => s.active)
   const workflow = useProjectStore((s) => s.workflow)
+  const steps = useProjectStore((s) => s.steps)
   const [tab, setTab] = useState<Tab>('config')
   const [config, setConfig] = useState<OutletStepConfig | null>(null)
   const [runs, setRuns] = useState<OutletRunMeta[]>([])
   const [credentials, setCredentials] = useState<CredentialSummary[]>([])
-  const [saving, setSaving] = useState(false)
-  const [saveError, setSaveError] = useState('')
 
   const loadConfig = useCallback(async () => {
     if (!active || !workflow) return
@@ -38,14 +37,8 @@ export default function OutletDetailPanel({ step }: Props) {
 
   useEffect(() => { void loadConfig() }, [loadConfig])
   useEffect(() => { void loadRuns() }, [loadRuns])
+  useEffect(() => { void window.trayline.credential.list().then(setCredentials) }, [])
 
-  useEffect(() => {
-    void window.trayline.credential.list().then((list) => {
-      setCredentials(list)
-    })
-  }, [])
-
-  // Listen for run events to refresh runs list
   useEffect(() => {
     const offC = window.trayline.outlet.onCompleted((ev: OutletRunEvent) => {
       if (ev.stepId === step.id) void loadRuns()
@@ -56,38 +49,42 @@ export default function OutletDetailPanel({ step }: Props) {
     return () => { offC(); offF() }
   }, [step.id, loadRuns])
 
-  async function handleSave() {
-    if (!active || !workflow || !config) return
-    setSaving(true)
-    setSaveError('')
+  const refreshSteps = useProjectStore((s) => s.refreshSteps)
+
+  async function save(patch: Record<string, unknown>) {
+    if (!active || !workflow) return
     try {
-      await window.trayline.step.update({
-        project: active.name,
-        workflow: workflow.name,
-        stepId: step.id,
-        patch: { channel: config.channel },
-      })
-    } catch (err) {
-      setSaveError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setSaving(false)
-    }
+      await window.trayline.step.update({ project: active.name, workflow: workflow.name, stepId: step.id, patch })
+      setConfig((c) => c ? { ...c, ...patch } as OutletStepConfig : c)
+      void refreshSteps()
+    } catch { /* ignore */ }
+  }
+
+  function saveChannel(channelPatch: Record<string, unknown>) {
+    if (!config) return
+    const next = { ...config.channel, ...channelPatch } as OutletStepConfig['channel']
+    setConfig({ ...config, channel: next })
+    void save({ channel: next })
+  }
+
+  async function retryRun(run: OutletRunMeta) {
+    if (!active || !workflow || !config) return
+    const idx = steps.findIndex((s) => s.id === step.id)
+    const prevStep = idx > 0 ? steps[idx - 1] : null
+    if (!prevStep) return
+    await window.trayline.outlet.runNow(active.name, workflow.name, step.id, run.card_id, prevStep.id, config)
+    void loadRuns()
   }
 
   const channelType = config?.channel?.type ?? 'smtp'
   const smtpCreds = credentials.filter((c) => c.type === 'smtp')
   const httpCreds = credentials.filter((c) => c.type === 'http')
 
-  function updateChannel(patch: Record<string, unknown>) {
-    if (!config) return
-    setConfig({ ...config, channel: { ...config.channel, ...patch } as OutletStepConfig['channel'] })
-  }
-
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
       <div className="px-6 py-4 border-b border-black/[0.06] dark:border-white/[0.06] flex items-center gap-3">
-        <div className="w-8 h-8 rounded-lg bg-violet-500 flex items-center justify-center text-white">
+        <div className="w-8 h-8 rounded-lg bg-teal-500 flex items-center justify-center text-white">
           <Send size={16} strokeWidth={2} />
         </div>
         <div>
@@ -111,16 +108,16 @@ export default function OutletDetailPanel({ step }: Props) {
 
       <div className="flex-1 overflow-y-auto">
         {tab === 'config' && config && (
-          <div className="px-6 py-5 space-y-5 max-w-xl">
+          <div key={step.id} className="px-6 py-5 space-y-5 max-w-xl">
             {/* Channel type */}
             <div>
               <label className="block text-xs font-medium mb-1.5">Channel type</label>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 {(['smtp', 'http_post'] as const).map((t) => (
                   <button
                     key={t}
-                    onClick={() => updateChannel({ type: t, credential_id: '' })}
-                    className={`px-3 py-1.5 text-xs rounded-md border transition-colors ${channelType === t ? 'border-violet-400 bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300' : 'border-neutral-200 dark:border-neutral-700 text-neutral-500 hover:border-neutral-300'}`}
+                    onClick={() => saveChannel({ type: t, credential_id: '' })}
+                    className={`px-3 py-1.5 text-xs rounded-md border transition-colors ${channelType === t ? 'border-teal-400 bg-teal-50 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300' : 'border-neutral-200 dark:border-neutral-700 text-neutral-500 hover:border-neutral-300'}`}
                   >
                     {t === 'smtp' ? 'SMTP email' : 'HTTP POST'}
                   </button>
@@ -128,53 +125,64 @@ export default function OutletDetailPanel({ step }: Props) {
               </div>
             </div>
 
-            {/* Credential */}
-            <div>
-              <label className="block text-xs font-medium mb-1.5">Credential</label>
-              <select
-                className="w-full text-sm border border-neutral-200 dark:border-neutral-700 rounded-md px-3 py-2 bg-white dark:bg-neutral-900 focus:outline-none focus:ring-1 focus:ring-violet-500"
-                value={config.channel.credential_id}
-                onChange={(e) => updateChannel({ credential_id: e.target.value })}
-              >
-                <option value="">— Select credential —</option>
-                {(channelType === 'smtp' ? smtpCreds : httpCreds).map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-              {(channelType === 'smtp' ? smtpCreds : httpCreds).length === 0 && (
-                <p className="text-xs text-neutral-400 mt-1">
-                  No {channelType === 'smtp' ? 'SMTP' : 'HTTP'} credentials yet —{' '}
-                  <button className="text-violet-500 hover:underline" onClick={() => useProjectStore.getState().setScreen('credentials')}>
-                    add one in Credentials
-                  </button>
-                </p>
-              )}
-            </div>
+            {/* Credential (smtp / http_post only) */}
+            {(channelType === 'smtp' || channelType === 'http_post') && (
+              <div>
+                <label className="block text-xs font-medium mb-1.5">Credential</label>
+                <select
+                  className="w-full text-sm border border-neutral-200 dark:border-neutral-700 rounded-md px-3 py-2 bg-white dark:bg-neutral-900 focus:outline-none focus:ring-1 focus:ring-teal-500"
+                  value={(config.channel as { credential_id?: string }).credential_id ?? ''}
+                  onChange={(e) => saveChannel({ credential_id: e.target.value })}
+                >
+                  <option value="">— Select credential —</option>
+                  {(channelType === 'smtp' ? smtpCreds : httpCreds).map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+                {(channelType === 'smtp' ? smtpCreds : httpCreds).length === 0 && (
+                  <p className="text-xs text-neutral-400 mt-1">
+                    No {channelType === 'smtp' ? 'SMTP' : 'HTTP'} credentials yet —{' '}
+                    <button className="text-teal-500 hover:underline" onClick={() => useProjectStore.getState().setScreen('credentials')}>
+                      add one in Credentials
+                    </button>
+                  </p>
+                )}
+              </div>
+            )}
 
             {channelType === 'smtp' && (
               <>
-                <TemplateField label="To" value={(config.channel as { to: string }).to ?? ''} onChange={(v) => updateChannel({ to: v })} placeholder="{{card.data.email}}" />
-                <TemplateField label="Subject" value={(config.channel as { subject: string }).subject ?? ''} onChange={(v) => updateChannel({ subject: v })} placeholder="{{card.data.subject}}" />
-                <TemplateField label="Body" multiline value={(config.channel as { body: string }).body ?? ''} onChange={(v) => updateChannel({ body: v })} placeholder="{{card.data}}" />
+                <TemplateField label="To" defaultValue={(config.channel as { to?: string }).to ?? ''} onBlur={(v) => saveChannel({ to: v })} placeholder="{{card.data.email}}" />
+                <TemplateField label="Subject" defaultValue={(config.channel as { subject?: string }).subject ?? ''} onBlur={(v) => saveChannel({ subject: v })} placeholder="{{card.data.subject}}" />
+                <TemplateField label="Body" multiline defaultValue={(config.channel as { body?: string }).body ?? ''} onBlur={(v) => saveChannel({ body: v })} placeholder="{{card.data}}" />
               </>
             )}
 
             {channelType === 'http_post' && (
               <>
-                <TemplateField label="URL path" value={(config.channel as { url_path: string }).url_path ?? ''} onChange={(v) => updateChannel({ url_path: v })} placeholder="/endpoint/{{card.data.id}}" />
+                <div>
+                  <label className="block text-xs font-medium mb-1.5">URL path <span className="font-normal text-neutral-400">(optional)</span></label>
+                  <input
+                    className="w-full text-sm font-mono border border-neutral-200 dark:border-neutral-700 rounded-md px-3 py-2 bg-white dark:bg-neutral-900 focus:outline-none focus:ring-1 focus:ring-teal-500"
+                    defaultValue={(config.channel as { url_path?: string }).url_path ?? ''}
+                    onBlur={(e) => saveChannel({ url_path: e.target.value })}
+                    placeholder="/endpoint/{{card.data.id}}"
+                  />
+                  <p className="text-xs text-neutral-400 mt-1">Leave empty to POST directly to the credential's base URL (e.g. for Discord / Slack webhooks).</p>
+                </div>
                 <div>
                   <label className="block text-xs font-medium mb-1.5">Method</label>
                   <select
                     className="w-28 text-sm border border-neutral-200 dark:border-neutral-700 rounded-md px-3 py-2 bg-white dark:bg-neutral-900 focus:outline-none"
                     value={(config.channel as { method?: string }).method ?? 'POST'}
-                    onChange={(e) => updateChannel({ method: e.target.value })}
+                    onChange={(e) => saveChannel({ method: e.target.value })}
                   >
                     <option>POST</option>
                     <option>PUT</option>
                     <option>PATCH</option>
                   </select>
                 </div>
-                <TemplateField label="Body" multiline value={(config.channel as { body?: string }).body ?? ''} onChange={(v) => updateChannel({ body: v })} placeholder='{"data": {{card.data | json}}}' />
+                <TemplateField label="Body" multiline defaultValue={(config.channel as { body?: string }).body ?? ''} onBlur={(v) => saveChannel({ body: v })} placeholder='{"content": "{{card.data.message}}"}' />
               </>
             )}
 
@@ -185,15 +193,17 @@ export default function OutletDetailPanel({ step }: Props) {
               <p><code className="font-mono">{'{{card.data | json}}'}</code> — full card as compact JSON string</p>
             </div>
 
-            {saveError && <p className="text-xs text-red-500">{saveError}</p>}
-
-            <button
-              onClick={() => void handleSave()}
-              disabled={saving}
-              className="px-4 py-2 text-sm bg-violet-500 text-white rounded-md hover:bg-violet-600 transition-colors disabled:opacity-50"
-            >
-              {saving ? 'Saving…' : 'Save'}
-            </button>
+            <div>
+              <label className="block text-xs font-medium mb-1.5">Instructions (optional)</label>
+              <textarea
+                defaultValue={config.prompt ?? ''}
+                onBlur={(e) => void save({ prompt: e.target.value.trim() || null })}
+                rows={4}
+                className="w-full text-sm rounded-md border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 px-3 py-2 focus:outline-none focus:ring-1 focus:ring-teal-500 resize-none"
+                placeholder="e.g. Format the card data as a professional client-facing email. Keep it under 200 words."
+              />
+              <p className="text-xs text-neutral-400 mt-1">If set, the AI will format the card data using these instructions before sending.</p>
+            </div>
           </div>
         )}
 
@@ -218,10 +228,34 @@ export default function OutletDetailPanel({ step }: Props) {
                       <td className="py-2 font-mono text-neutral-600 dark:text-neutral-400 truncate max-w-[120px]">{r.card_id}</td>
                       <td className="py-2 text-neutral-500">{r.channel_type}</td>
                       <td className="py-2">
-                        <span className={`px-1.5 py-0.5 rounded-full font-medium ${r.status === 'completed' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' : r.status === 'failed' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' : 'bg-neutral-100 text-neutral-600'}`}>
-                          {r.status}
-                        </span>
-                        {r.error && <span className="ml-2 text-red-500 truncate max-w-[200px] inline-block align-bottom" title={r.error}>{r.error}</span>}
+                        <div className="flex items-center gap-2">
+                          <span className={`px-1.5 py-0.5 rounded-full font-medium ${r.status === 'completed' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' : r.status === 'failed' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' : 'bg-neutral-100 text-neutral-600'}`}>
+                            {r.status}
+                          </span>
+                          {r.status === 'failed' && (
+                            <button
+                              title="Retry"
+                              onClick={() => void retryRun(r)}
+                              className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+                            >
+                              <RotateCcw size={10} strokeWidth={2} /> Retry
+                            </button>
+                          )}
+                          {r.error && (
+                            <span className="flex items-center gap-1 min-w-0">
+                              <span className="text-red-500 truncate max-w-[160px] inline-block align-bottom" title={r.error}>{r.error}</span>
+                              <button
+                                title="Copy full error"
+                                onClick={() => void navigator.clipboard.writeText(
+                                  `Run: ${r.run_id}\nCard: ${r.card_id}\nChannel: ${r.channel_type}\nStarted: ${r.started_at}\nError: ${r.error}`
+                                )}
+                                className="shrink-0 p-0.5 rounded text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+                              >
+                                <Copy size={10} strokeWidth={2} />
+                              </button>
+                            </span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -235,26 +269,26 @@ export default function OutletDetailPanel({ step }: Props) {
   )
 }
 
-function TemplateField({ label, value, onChange, placeholder, multiline }: {
+function TemplateField({ label, defaultValue, onBlur, placeholder, multiline }: {
   label: string
-  value: string
-  onChange: (v: string) => void
+  defaultValue: string
+  onBlur: (v: string) => void
   placeholder?: string
   multiline?: boolean
 }) {
-  const cls = 'w-full text-sm font-mono border border-neutral-200 dark:border-neutral-700 rounded-md px-3 py-2 bg-white dark:bg-neutral-900 focus:outline-none focus:ring-1 focus:ring-violet-500'
+  const cls = 'w-full text-sm font-mono border border-neutral-200 dark:border-neutral-700 rounded-md px-3 py-2 bg-white dark:bg-neutral-900 focus:outline-none focus:ring-1 focus:ring-teal-500'
   return (
     <div>
       <label className="block text-xs font-medium mb-1.5">{label}</label>
       {multiline ? (
         <textarea
           className={`${cls} resize-y min-h-[80px]`}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
+          defaultValue={defaultValue}
+          onBlur={(e) => onBlur(e.target.value)}
           placeholder={placeholder}
         />
       ) : (
-        <input className={cls} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} />
+        <input className={cls} defaultValue={defaultValue} onBlur={(e) => onBlur(e.target.value)} placeholder={placeholder} />
       )}
     </div>
   )

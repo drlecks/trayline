@@ -38,6 +38,19 @@ async function unmountProject(projectName: string): Promise<void> {
 }
 
 /**
+ * Unmount a single workflow's sub-services without removing the project from
+ * the mounted set. Used before structural renames (e.g. move-step-up) to
+ * release chokidar file handles on Windows before the fs.rename call.
+ */
+async function unmountWorkflow(projectName: string, workflowName: string): Promise<void> {
+  if (!mounted.has(projectName)) return
+  await watcherService.unmountWorkflow(projectName, workflowName)
+  schedulerService.unmountWorkflow(projectName, workflowName)
+  sourceScheduler.unmountWorkflow(projectName, workflowName)
+  await queueService.unmountWorkflow(projectName, workflowName)
+}
+
+/**
  * Re-mount a single workflow after its step configuration changes.
  * No-op if the project is not currently mounted (project is inactive).
  */
@@ -72,6 +85,7 @@ async function unmountAll(): Promise<void> {
 export const orchestrator = {
   mountProject,
   unmountProject,
+  unmountWorkflow,
   remountWorkflow,
   isMounted,
   mountAll,

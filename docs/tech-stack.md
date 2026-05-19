@@ -26,7 +26,6 @@
 ## Backend / System (Main Process)
 
 - **node-pty** — real PTY for spawning `claude` and other CLI agents
-- **node-llama-cpp** (~3.18.1) — in-process GGUF model inference for the local-llm adapter; runs entirely offline after the model is downloaded. Requires `@electron/rebuild` as a dev dependency to compile native bindings against the app's Electron version.
 - **chokidar** — file system watcher (detects new cards in trays)
 - **better-sqlite3** — local indexed cache for run history and audit log
 - **archiver / adm-zip** — zip-based project import/export (write / read)
@@ -72,7 +71,6 @@ Source steps use `fetchHttp` / `fetchEmails` to pre-fetch data before spawning t
 - No cloud services
 - No accounts
 - No telemetry
-- **Optional one-time download:** the local-llm adapter downloads a GGUF model file (~3–8 GB) from a known URL on first use; all inference after that is fully offline
 
 ---
 
@@ -83,14 +81,12 @@ Workers don't know they're talking to Claude Code specifically. They talk to an 
 ```
 src/main/ai-terminals/
 ├── adapter.ts          # The interface every adapter implements
-├── claude-code.ts      # Claude Code adapter (default)
-├── local-llm.ts        # Local GGUF model adapter (node-llama-cpp)
-├── open-code.ts        # Open Code adapter (future)
+├── claude-code.ts      # Claude Code adapter (default, currently the only production adapter)
 ├── mock.ts             # Test fake — returns scripted responses
 └── registry.ts         # Lookup by name from worker config
 ```
 
-The `local-llm` adapter uses `node-llama-cpp` for in-process inference. It streams token output and enforces JSON-only output via grammar constraints. The model catalog is defined in `app-data/local-models.json` (bundled with the app); downloaded GGUF files live in `~/Documents/Trayline/local-models/`.
+One production adapter ships with Trayline: **Claude Code** (requires the CLI installed). The architecture is designed for more — adding a new adapter (OpenCode, Copilot, etc.) is a single file plus a registry entry. Mock adapters are never exposed in any user-facing UI; they are filtered at the IPC layer.
 
 The adapter interface:
 
@@ -126,6 +122,8 @@ interface AITerminalAdapter {
     workingDir: string;
     timeout: number;
     prefetchedData?: string;
+    /** Project-level permissions. Claude Code translates to --allowedTools flags + a permissions preamble in the prompt. */
+    permissions?: ProjectPermissions;
   }): Promise<AISession>;
 }
 
@@ -159,10 +157,34 @@ interface AISession {
 
 Every worker run — success **or** failure — ends with the runner invoking `adapter.clearContext()` before releasing the adapter back to the pool. This prevents transcript history from one card carrying into the next and burning tokens. Clear failures are non-fatal: the runner writes an `ai_terminal_clear_failed` audit row and the run outcome stands.
 
+### Permission auto-accept loop
+
+While a worker session is running, the worker runner scans the stdout stream for Claude Code permission-request prompts (e.g. `[y/N]` style or TUI numbered-choice boxes). When detected, the runner:
+
+1. Sends the appropriate confirmation input (`y\n` or `1\n`) via `session.sendInput()`.
+2. Writes an `ai_permission_auto_accepted` audit row with the retry counter.
+3. Increments a per-run retry counter.
+
+If the counter reaches **3** and a fourth prompt is detected, the runner calls `session.kill()` and sets `runError = 'max_permission_retries_exceeded'`, failing the run cleanly. The source card lands in `99-errors/`.
+
+Detection lives in `detectPermissionPrompt(rawText: string): boolean` (exported from `claude-code.ts`). The function strips ANSI escape sequences before pattern matching, so it works on raw PTY output. The companion `permissionPromptResponse(rawText)` picks the right reply (`y\n` vs `1\n`) based on the same patterns.
+
 ### Provider / model / effort selection
 
 The Settings screen surfaces a Provider list (sourced from `adapterRegistry.list()` filtered by `detectInstalled()`), a Model dropdown (sourced from `adapter.listModels()`), and an Effort dropdown (sourced from `adapter.listEfforts(modelId)`). Selecting a provider re-issues `listModels`; selecting a model re-issues `listEfforts` because some providers tie efforts to specific models. Selections persist as `defaultAdapterId` / `defaultModelByAdapter` / `defaultEffortByAdapter` on the global Settings object. Worker `step.json` may still override these per-step — when present, the per-step fields are authoritative.
 
 The footer shows the active selection as `Provider · Model · Effort · 5h: used/limit · Weekly: used/limit`. Adapters that don't expose `getUsage()` drop the usage segments instead of rendering placeholders. Footer values refresh whenever a worker run completes (the main process broadcasts `adapters:onUsageUpdate`) and via a manual refresh in Settings.
 
-Two production adapters ship with Trayline: **Claude Code** (the default, requires the CLI installed) and **local-llm** (runs a downloaded GGUF model entirely offline via `node-llama-cpp`). The architecture supports any CLI agent from day one — adding a new adapter is a single file plus a registry entry, no engine changes.
+**Claude Code** is the default and currently only production adapter. The architecture supports any CLI agent from day one — adding a new adapter is a single file plus a registry entry, no engine changes.
+
+### Quick AI Console IPC channels
+
+The Quick AI Console is a lightweight one-shot query modal that fires outside the workflow engine. It uses a dedicated IPC surface:
+
+| Channel | Direction | Description |
+|---|---|---|
+| `ai:query` | invoke (renderer → main) | Spawn the active adapter with the given prompt string. Streams `ai:query-chunk` events to the renderer until done. Resolves when the session exits. |
+| `ai:abort` | send (renderer → main) | Kill any in-flight Quick AI session immediately. |
+| `ai:query-chunk` | push (main → renderer) | One stdout chunk from the active session, forwarded in real time. |
+
+The handler in `src/main/ipc/handlers.ts` spawns the adapter into a temp directory, iterates its stdout async iterator, and broadcasts each chunk. On close the temp directory is cleaned up. There is at most one Quick AI session alive at a time; starting a new query while one is running first kills the old one.

@@ -1,5 +1,15 @@
 import { credentialService } from './credential-service'
-import type { HttpCredential, HttpGetChannel, HttpPostChannel } from '../../shared/types'
+import type { HttpCredential, HttpGetChannel, HttpPostChannel, HttpErrorDetail } from '../../shared/types'
+
+/** Thrown when the server returns a non-2xx status. Carries full diagnostic context. */
+export class HttpChannelError extends Error {
+  readonly detail: HttpErrorDetail
+  constructor(detail: HttpErrorDetail) {
+    super(`HTTP ${detail.status} ${detail.statusText} — ${detail.url}`)
+    this.name = 'HttpChannelError'
+    this.detail = detail
+  }
+}
 
 function resolveTokensInString(template: string, tokens: Record<string, string>): string {
   return template.replace(/\{\{(\w+)\}\}/g, (_, key: string) => tokens[key] ?? '')
@@ -36,7 +46,12 @@ export async function fetchHttp(
 
   const body = await response.text()
   if (!response.ok) {
-    throw new Error(`HTTP ${response.status} ${response.statusText}: ${body.slice(0, 200)}`)
+    throw new HttpChannelError({
+      url,
+      status: response.status,
+      statusText: response.statusText,
+      responseBody: body.slice(0, 4096),
+    })
   }
   return body
 }
@@ -47,8 +62,10 @@ export async function postHttp(
   tokens: Record<string, string>,
 ): Promise<void> {
   const resolved = await credentialService.resolveSecrets(credential)
-  const urlPath = resolveTokensInString(channel.url_path, tokens)
-  const url = resolved.base_url.replace(/\/$/, '') + (urlPath.startsWith('/') ? urlPath : '/' + urlPath)
+  const urlPath = channel.url_path ? resolveTokensInString(channel.url_path, tokens) : ''
+  const url = urlPath
+    ? resolved.base_url.replace(/\/$/, '') + (urlPath.startsWith('/') ? urlPath : '/' + urlPath)
+    : resolved.base_url
   const headers = buildHeaders(resolved)
   const method = channel.method ?? 'POST'
 

@@ -55,7 +55,7 @@ Trayline is **not** for programmers. It is for people who manage real processes 
 - **Linear-only = approachable.** Branching graphs scare people. A stack of steps is something everyone has built (Trello columns, email rules, etc.).
 - **Sources + trays + workers + outlets = one mental model.** It's not "nodes and connections", it's "data comes in, it waits, a thing happens, it waits again, it goes out." Sources handle automatic ingestion with built-in memory so the same item is never processed twice. Outlets send results deterministically with zero AI cost. That maps to how offices actually work.
 - **Terminal is hidden but available.** Power users get full debug access. Everyone else never sees it.
-- **Offline = no pricing dread.** The app itself costs nothing to run. Users can point Trayline at whichever AI they prefer — Claude Code (requires a subscription, best quality), or a downloaded local GGUF model that runs entirely on-device with no ongoing cost or internet requirement.
+- **Offline = no pricing dread.** The app itself costs nothing to run. Trayline uses Claude Code as its AI engine. The adapter architecture is open — future adapters (OpenCode, Copilot, etc.) can be added as single files without touching the engine.
 
 ---
 

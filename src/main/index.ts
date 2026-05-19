@@ -1,4 +1,5 @@
-import { app, BrowserWindow, ipcMain, nativeTheme, dialog } from 'electron'
+import 'dotenv/config'
+import { app, BrowserWindow, ipcMain, nativeTheme, dialog, shell } from 'electron'
 import { join } from 'path'
 import fs from 'fs'
 import { settingsStore } from './services/settings-store'
@@ -11,7 +12,6 @@ import { orchestrator } from './services/orchestrator'
 import { setupAutoUpdater } from './services/auto-update-service'
 import { registerIpcHandlers } from './ipc/handlers'
 import { notificationService } from './services/notification-service'
-import { localModelService } from './services/local-model-service'
 import { dirnameFromMeta } from './util/paths'
 
 const __dirname = dirnameFromMeta(import.meta.url)
@@ -124,6 +124,11 @@ function createWindow() {
     logCrash('preload-error', `${preloadPath}: ${err.message}\n${err.stack ?? ''}`)
   })
 
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    void shell.openExternal(url)
+    return { action: 'deny' }
+  })
+
   if (process.env.VITE_DEV_SERVER_URL) {
     win.loadURL(process.env.VITE_DEV_SERVER_URL)
     win.webContents.openDevTools()
@@ -147,9 +152,6 @@ app.whenReady().then(async () => {
 
     await fsService.bootstrap()
     stage('fsService.bootstrap done')
-
-    await localModelService.cleanupStaleParts()
-    stage('localModelService.cleanupStaleParts done')
 
     auditDb.init()
     stage('auditDb.init done')

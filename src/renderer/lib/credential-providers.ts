@@ -7,6 +7,7 @@ export interface ProviderPreset {
     passwordLabel: string
     steps: string[]
     settingsUrl: string
+    accountUrl?: string
     helpText: string
   }
 }
@@ -20,13 +21,13 @@ export const CREDENTIAL_PROVIDERS: ProviderPreset[] = [
     authGuide: {
       passwordLabel: 'App Password',
       steps: [
-        'Go to your Google Account (myaccount.google.com).',
-        'Open Security → 2-Step Verification (enable it if it\'s not already on).',
-        'Scroll to "App passwords" and click it.',
-        'Select app: Mail, device: Other — type "Trayline" — click Generate.',
+        'Make sure 2-Step Verification is enabled on your Google Account (enable it in Account Settings).',
+        'Go directly to the App Passwords page (link below).',
+        'Type "Trayline" as the app name and click Create.',
         'Copy the 16-character code and paste it in the field below.',
       ],
       settingsUrl: 'https://myaccount.google.com/apppasswords',
+      accountUrl: 'https://myaccount.google.com/security',
       helpText: 'Gmail requires an App Password — not your regular Google password.',
     },
   },

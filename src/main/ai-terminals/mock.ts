@@ -19,6 +19,8 @@ let scriptedOutput: object | string = { summary: 'mock-result', fields: {} }
 let scriptedExitCode = 0
 let clearContextCalls = 0
 let readinessOverride: Partial<AdapterReadiness> | null = null
+let permissionPromptChunks: string[] = []
+let capturedSendInputCalls: string[] = []
 
 export function setMockScript(opts: { output?: object | string; exitCode?: number }) {
   if (opts.output !== undefined) scriptedOutput = opts.output
@@ -33,6 +35,19 @@ export function resetReadinessOverride() {
   readinessOverride = null
 }
 
+/** Pre-pend these chunks to stdout before the final scripted output. */
+export function setPermissionPromptChunks(chunks: string[]) {
+  permissionPromptChunks = [...chunks]
+}
+
+/** Returns a copy of sendInput() calls made on the last session. */
+export function getSendInputCalls(): string[] { return [...capturedSendInputCalls] }
+
+export function resetPermissionState() {
+  permissionPromptChunks = []
+  capturedSendInputCalls = []
+}
+
 export function getMockClearContextCalls(): number { return clearContextCalls }
 export function resetMockClearContextCalls(): void { clearContextCalls = 0 }
 
@@ -44,32 +59,52 @@ class MockSession implements AISession {
   pid = -1
   awaitingInput = false
   private startedAt = Date.now()
-  private endedAt = 0
-  private cached: AISessionResult | null = null
+  private killed = false
 
-  stdout = lines([JSON.stringify(scriptedOutput)])
   stderr = lines([])
+  stdout: AsyncIterable<string>
 
-  async sendInput(_text: string): Promise<void> {
-    // No-op — mock never blocks
+  constructor() {
+    // Snapshot module-level state at spawn time so concurrent tests don't interfere
+    const outputChunk = JSON.stringify(scriptedOutput)
+    const allChunks = [...permissionPromptChunks, outputChunk]
+    let idx = 0
+    const self = this
+
+    this.stdout = {
+      [Symbol.asyncIterator]() {
+        return {
+          async next(): Promise<IteratorResult<string>> {
+            // Yield to the event loop so concurrent permission-detection code can run
+            await Promise.resolve()
+            if (self.killed || idx >= allChunks.length) {
+              return { value: undefined as unknown as string, done: true }
+            }
+            return { value: allChunks[idx++], done: false }
+          },
+        }
+      },
+    }
+  }
+
+  async sendInput(text: string): Promise<void> {
+    capturedSendInputCalls.push(text)
   }
 
   async kill(): Promise<void> {
-    this.endedAt = Date.now()
+    this.killed = true
   }
 
   async result(): Promise<AISessionResult> {
-    if (this.cached) return this.cached
-    this.endedAt = Date.now()
-    const out = JSON.stringify(scriptedOutput)
-    this.cached = {
+    // Resolves immediately — worker-runner uses Promise.all to ensure the
+    // stdout consumer (permission detection) completes before proceeding.
+    return {
       exitCode: scriptedExitCode,
       output: scriptedOutput,
-      terminalLog: out + '\n',
+      terminalLog: JSON.stringify(scriptedOutput) + '\n',
       startedAt: this.startedAt,
-      endedAt: this.endedAt,
+      endedAt: Date.now(),
     }
-    return this.cached
   }
 }
 

@@ -17,12 +17,35 @@ function groupByProject(entries: QueueEntry[]): { project: string; displayName: 
 export default function QueueBadge() {
   const [entries, setEntries] = useState<QueueEntry[]>([])
   const [open, setOpen] = useState(false)
+  const [dismissedCardIds, setDismissedCardIds] = useState(new Set<string>())
   const ref = useRef<HTMLDivElement>(null)
+  const entriesRef = useRef<QueueEntry[]>([])
 
   const setActive = useProjectStore((s) => s.setActive)
   const setSelectedStepId = useProjectStore((s) => s.setSelectedStepId)
   const setJumpTarget = useProjectStore((s) => s.setJumpTarget)
+  const setScreen = useProjectStore((s) => s.setScreen)
   const allProjects = useProjectStore((s) => s.all)
+  const active = useProjectStore((s) => s.active)
+  const selectedStepId = useProjectStore((s) => s.selectedStepId)
+
+  useEffect(() => {
+    entriesRef.current = entries
+  }, [entries])
+
+  // Dismiss queue entries for a tray when the user opens it
+  useEffect(() => {
+    if (!selectedStepId || !active) return
+    const toDiscard = entriesRef.current.filter(
+      (e) => e.stepId === selectedStepId && e.project === active.name,
+    )
+    if (toDiscard.length === 0) return
+    setDismissedCardIds((prev) => {
+      const next = new Set(prev)
+      toDiscard.forEach((e) => next.add(e.cardId))
+      return next
+    })
+  }, [selectedStepId, active])
 
   useEffect(() => {
     let cancelled = false
@@ -47,17 +70,21 @@ export default function QueueBadge() {
 
   async function jumpToCard(entry: QueueEntry) {
     setOpen(false)
-    const project = allProjects.find((p) => p.name === entry.project) ?? null
-    if (!project) return
-    setActive(project)
-    // refreshSteps is triggered by setActive via the project screen mounting,
-    // so we set the jump target which CardsTab will pick up after steps load.
+    if (active?.name !== entry.project) {
+      const project = allProjects.find((p) => p.name === entry.project) ?? null
+      if (!project) return
+      setActive(project)
+    } else {
+      // Same project — just make sure the project screen is visible
+      setScreen('project')
+    }
     setJumpTarget({ stepId: entry.stepId, cardId: entry.cardId })
     setSelectedStepId(entry.stepId)
   }
 
-  const count = entries.length
-  const groups = groupByProject(entries)
+  const visibleEntries = entries.filter((e) => !dismissedCardIds.has(e.cardId))
+  const count = visibleEntries.length
+  const groups = groupByProject(visibleEntries)
 
   return (
     <div ref={ref} className="relative">

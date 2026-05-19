@@ -16,7 +16,6 @@ vi.mock('./smtp-channel', () => ({
 vi.mock('./http-channel', () => ({
   postHttp: vi.fn(),
 }))
-
 import { credentialService } from './credential-service'
 import * as smtpChannel from './smtp-channel'
 import * as httpChannel from './http-channel'
@@ -66,6 +65,7 @@ function makeHttpConfig(): OutletStepConfig {
     on_failure: 'send_to_errors',
   }
 }
+
 
 async function setupStep(project: string, workflow: string, prevStepId: string, stepId: string) {
   const base = join(Paths.projects, project, 'workflows', workflow)
@@ -250,6 +250,7 @@ describe('runOutlet — HTTP POST', () => {
     expect(meta.error).toMatch(/Connection refused/)
   })
 })
+
 
 describe('runOutlet — in-flight guard', () => {
   it('does not run twice for the same card simultaneously', async () => {

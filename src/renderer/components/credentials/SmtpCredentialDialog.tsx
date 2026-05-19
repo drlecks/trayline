@@ -183,16 +183,30 @@ export default function SmtpCredentialDialog({ existing, onSaved, onClose }: Pro
                 </li>
               ))}
             </ol>
-            <a
-              href={provider.authGuide.settingsUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-700 dark:text-amber-400 hover:underline"
-              onClick={(e) => e.stopPropagation()}
-            >
-              Open {provider.name} settings
-              <ExternalLink size={10} strokeWidth={2} />
-            </a>
+            <div className="flex items-center gap-3 flex-wrap">
+              {provider.authGuide.accountUrl && (
+                <a
+                  href={provider.authGuide.accountUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-700 dark:text-amber-400 hover:underline"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  Account settings
+                  <ExternalLink size={10} strokeWidth={2} />
+                </a>
+              )}
+              <a
+                href={provider.authGuide.settingsUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-700 dark:text-amber-400 hover:underline"
+                onClick={(e) => e.stopPropagation()}
+              >
+                Open App Passwords
+                <ExternalLink size={10} strokeWidth={2} />
+              </a>
+            </div>
           </div>
         )}
 

@@ -10,9 +10,8 @@ const EXAMPLES = [
   'Every morning, pull new emails from my inbox, summarise which ones need a decision, and send me the digest.',
   'I paste a meeting transcript and the app gives me a 5-line summary plus a task list for each person mentioned.',
   'Translate any text I paste into English, Spanish, French, and Italian, and return a valid i18n JSON file.',
-  'Fetch the top 10 Hacker News stories every day and email me a digest every Friday morning.',
+  'Fetch the top 10 Hacker News stories once a day and email me the summary immediately.',
   'Read new customer support emails every 10 minutes, draft a first reply, and email me anything critical immediately.',
-  'I add a PDF invoice to a tray and the app extracts the vendor, amount, and due date for me to approve.',
 ]
 
 const LOADING_MESSAGES = [
@@ -22,6 +21,19 @@ const LOADING_MESSAGES = [
   'Setting up your data source…',
   'Configuring the schedule…',
   'Wiring up deduplication…',
+  'Naming your steps…',
+  'Drafting the worker instructions…',
+  'Thinking about edge cases…',
+  'Laying out the folder structure…',
+  'Picking the right triggers…',
+  'Deciding how cards should flow…',
+  'Mapping inputs to outputs…',
+  'Tuning the context window…',
+  'Checking for missing steps…',
+  'Finalising the tray order…',
+  'Connecting the pieces…',
+  'Reviewing the generated plan…',
+  'Writing the scaffold to disk…',
   'Almost there…',
 ]
 
@@ -41,19 +53,10 @@ export default function WorkflowAuthorScreen() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<{ message: string; raw?: string } | null>(null)
   const [postGenOutcome, setPostGenOutcome] = useState<ProjectCreateSuccess | null>(null)
-  const [isLocalLlm, setIsLocalLlm] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
     textareaRef.current?.focus()
-  }, [])
-
-  useEffect(() => {
-    void (async () => {
-      const settings = await window.trayline.settings.get()
-      setIsLocalLlm(settings.defaultAdapterId === 'local-llm')
-    })()
-    return window.trayline.settings.onChange((s) => setIsLocalLlm(s.defaultAdapterId === 'local-llm'))
   }, [])
 
   // Clear regenerateOf when the user navigates away
@@ -94,6 +97,7 @@ export default function WorkflowAuthorScreen() {
   if (postGenOutcome) return <PostGenBanner outcome={postGenOutcome} onOpen={openProject} />
 
   return (
+  <>
     <div className="flex flex-col items-center justify-center w-full max-w-2xl mx-auto px-8">
       <button
         onClick={() => setScreen(all.length > 0 ? 'projectList' : 'splash')}
@@ -127,14 +131,6 @@ export default function WorkflowAuthorScreen() {
           resize-y
         "
       />
-
-      {isLocalLlm && (
-        <p className="w-full text-[11px] text-neutral-500 dark:text-neutral-400 mb-3 -mt-2">
-          <strong className="text-neutral-600 dark:text-neutral-300">Using local AI model.</strong>{' '}
-          Workflow generation works best with Claude Code — local models may produce simpler or incomplete plans.
-          You can edit the result after creation.
-        </p>
-      )}
 
       <div className="w-full mb-6">
         <div className="text-[11px] uppercase tracking-wider text-neutral-400 mb-2">
@@ -197,6 +193,8 @@ export default function WorkflowAuthorScreen() {
         <ArrowRight size={14} strokeWidth={1.75} />
       </Button>
     </div>
+
+  </>
   )
 }
 

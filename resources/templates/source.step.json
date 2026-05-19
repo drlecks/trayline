@@ -11,9 +11,7 @@
     "max_memory": 10000,
     "first_run": "{{first_run}}"
   },
-  "execution": {
-    "timeout_seconds": 60,
-    "adapter": "claude-code"
-  },
-  "paused": false
+  "paused": false,
+  "channel": null,
+  "prompt": null
 }

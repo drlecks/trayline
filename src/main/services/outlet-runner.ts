@@ -10,6 +10,7 @@ import { projectService } from './project-service'
 import { credentialService } from './credential-service'
 import { auditDb } from './audit-db'
 import { resolveTokens } from '../ai-terminals/prompt-utils'
+import { runAIStep } from './ai-step-helper'
 import { IPC } from '../../shared/ipc-channels'
 import type { OutletStepConfig, OutletRunMeta, OutletRunEvent, HttpCredential, SmtpCredential } from '../../shared/types'
 import type { Card } from '../../shared/card'
@@ -124,32 +125,97 @@ async function runOutletInner(
     return
   }
 
-  const cardData = card.data as Record<string, unknown>
+  let cardData = card.data as Record<string, unknown>
+  // When an AI step returns a plain string (e.g. a pre-formatted HTTP body),
+  // we use it directly instead of passing it through the body template.
+  let aiBodyOverride: string | undefined
 
-  // Load credential
-  const credential = await credentialService.get(stepConfig.channel.credential_id)
-  if (!credential) {
-    await completeWithError(project, workflow, stepId, runId, runDir, cardId, prevStepDir, meta, `Credential not found: ${stepConfig.channel.credential_id}`)
-    return
+  // Apply AI formatting if a prompt is configured
+  if (stepConfig.prompt) {
+    try {
+      const projectMeta = await projectService.getProject(project)
+      const permissions = projectService.getPermissions(projectMeta)
+
+      // For HTTP outlets, prepend a system preamble so the AI knows:
+      // (a) the target endpoint & expected body format, and
+      // (b) to output ONLY the body — not to make HTTP calls itself.
+      let preamble = ''
+      if (stepConfig.channel.type === 'http_post') {
+        const ch = stepConfig.channel
+        const rawCred = await credentialService.get(ch.credential_id).catch(() => null)
+        const httpCred = rawCred as HttpCredential | null
+        const baseUrl = httpCred?.base_url?.replace(/\/$/, '') ?? ''
+        const urlPath = ch.url_path ? (ch.url_path.startsWith('/') ? ch.url_path : '/' + ch.url_path) : ''
+        const fullUrl = baseUrl + urlPath
+        const method = ch.method ?? 'POST'
+        const headerLines = httpCred?.headers.map(h => `  - ${h.name}: ${h.value}`).join('\n') ?? ''
+        preamble = [
+          '## HTTP Request Context',
+          'You are preparing the body for the HTTP request below.',
+          'Output ONLY the final request body — raw text or JSON — with no code fences, no markdown, and no explanation.',
+          'The system sends the request automatically; do NOT use any tools, make HTTP calls, or run shell commands.',
+          '',
+          `Method: ${method}`,
+          `URL: ${fullUrl}`,
+          headerLines ? `Headers:\n${headerLines}` : '',
+          ch.body ? `Body template: ${ch.body}` : '',
+          '',
+          '---',
+          '',
+        ].filter(l => l !== null).join('\n')
+      }
+
+      const hasDataToken = stepConfig.prompt.includes('{{card.data')
+      const userInstructions = hasDataToken
+        ? stepConfig.prompt
+        : `${stepConfig.prompt}\n\n## Card data\n\n\`\`\`json\n${JSON.stringify(cardData, null, 2)}\n\`\`\`\n\nApply the instructions above to the card data and output only the result.`
+      const aiPrompt = preamble ? preamble + userInstructions : userInstructions
+
+      const aiResult = await runAIStep({
+        runDir,
+        prompt: aiPrompt,
+        cardData,
+        permissions,
+        timeoutMs: 60_000,
+      })
+      if (typeof aiResult.output === 'object') {
+        cardData = aiResult.output as Record<string, unknown>
+      } else {
+        // String output for HTTP outlet — use directly as the request body.
+        // For other channel types fall back to keying under ai_output.
+        if (stepConfig.channel.type === 'http_post') {
+          aiBodyOverride = aiResult.output
+        } else {
+          cardData = { ...cardData, ai_output: aiResult.output }
+        }
+      }
+    } catch (err) {
+      await completeWithError(project, workflow, stepId, runId, runDir, cardId, prevStepDir, meta, `AI step failed: ${err instanceof Error ? err.message : String(err)}`)
+      return
+    }
   }
 
   try {
     if (stepConfig.channel.type === 'smtp') {
+      const cred = await credentialService.get(stepConfig.channel.credential_id)
+      if (!cred) throw new Error(`Credential not found: ${stepConfig.channel.credential_id}`)
       const { sendEmail } = await import('./smtp-channel')
       const ch = stepConfig.channel
-      await sendEmail(credential as SmtpCredential, {
+      await sendEmail(cred as SmtpCredential, {
         to: resolveTokens(ch.to, cardData),
         subject: resolveTokens(ch.subject, cardData),
         body: resolveTokens(ch.body, cardData),
       })
     } else if (stepConfig.channel.type === 'http_post') {
+      const cred = await credentialService.get(stepConfig.channel.credential_id)
+      if (!cred) throw new Error(`Credential not found: ${stepConfig.channel.credential_id}`)
       const { postHttp } = await import('./http-channel')
       const ch = stepConfig.channel
-      const tokens: Record<string, string> = {}
-      for (const [k, v] of Object.entries(cardData)) {
-        if (typeof v === 'string') tokens[k] = v
-      }
-      await postHttp(credential as HttpCredential, ch, { 'card.data': JSON.stringify(cardData), ...tokens })
+      // If AI produced a string body override, use it directly.
+      // Otherwise resolve the body template with the rich token system.
+      const resolvedBody = aiBodyOverride ?? (ch.body ? resolveTokens(ch.body, cardData) : undefined)
+      const resolvedCh = resolvedBody !== undefined ? { ...ch, body: resolvedBody } : ch
+      await postHttp(cred as HttpCredential, resolvedCh, {})
     }
   } catch (err) {
     await completeWithError(project, workflow, stepId, runId, runDir, cardId, prevStepDir, meta, err instanceof Error ? err.message : String(err))

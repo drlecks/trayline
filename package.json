@@ -9,6 +9,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "predev": "npm run rebuild:electron",
     "typecheck": "tsc -p tsconfig.node.json && tsc -p tsconfig.web.json",
     "build": "npm run typecheck && vite build",
     "preview": "vite preview",
@@ -51,7 +52,6 @@
     "keytar": "^7.9.0",
     "lucide-react": "^0.469.0",
     "node-cron": "^4.2.1",
-    "node-llama-cpp": "~3.18.1",
     "node-pty": "^1.1.0",
     "nodemailer": "^8.0.7",
     "pnpm": "^11.1.2",
@@ -61,7 +61,6 @@
     "zustand": "^5.0.0"
   },
   "devDependencies": {
-    "@electron/rebuild": "^4.0.4",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^20.17.0",
     "@types/node-cron": "^3.0.11",
@@ -70,7 +69,7 @@
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.0",
     "autoprefixer": "^10.4.20",
-    "electron": "^31.0.0",
+    "electron": "^31.7.7",
     "electron-builder": "^24.13.0",
     "eslint": "^9.0.0",
     "postcss": "^8.4.47",
@@ -98,9 +97,7 @@
     "asarUnpack": [
       "**/node_modules/better-sqlite3/**",
       "**/node_modules/bindings/**",
-      "**/node_modules/node-pty/**",
-      "**/node_modules/node-llama-cpp/**",
-      "**/node_modules/@node-llama-cpp/**"
+      "**/node_modules/node-pty/**"
     ],
     "extraResources": [
       {
@@ -118,10 +115,6 @@
       {
         "from": "resources/example-project",
         "to": "example-project"
-      },
-      {
-        "from": "src/main/ai-terminals/local-models.json",
-        "to": "local-models.json"
       }
     ],
     "publish": [
