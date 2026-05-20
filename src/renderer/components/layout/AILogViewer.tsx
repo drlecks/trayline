@@ -31,8 +31,14 @@ function fmtDate(iso: string): string {
   return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
 }
 
-const levelStyle: Record<LogLevel, string> = {
+const levelBadgeStyle: Record<LogLevel, string> = {
   info:    'text-neutral-500',
+  warning: 'text-yellow-400',
+  error:   'text-red-400',
+}
+
+const levelTextStyle: Record<LogLevel, string> = {
+  info:    'text-neutral-300',
   warning: 'text-yellow-400',
   error:   'text-red-400',
 }
@@ -135,10 +141,10 @@ export default function AILogViewer({ onClose }: Props) {
                   <div className="pr-4 py-[3px] text-sky-400/80 border-b border-neutral-800/50 whitespace-nowrap select-text" title={entry.tag}>
                     {entry.tag}
                   </div>
-                  <div className={`pr-4 py-[3px] border-b border-neutral-800/50 whitespace-nowrap select-text ${levelStyle[entry.level]}`}>
+                  <div className={`pr-4 py-[3px] border-b border-neutral-800/50 whitespace-nowrap select-text ${levelBadgeStyle[entry.level]}`}>
                     {levelLabel[entry.level]}
                   </div>
-                  <div className="pr-4 py-[3px] text-neutral-300 border-b border-neutral-800/50 break-all select-text">
+                  <div className={`pr-4 py-[3px] border-b border-neutral-800/50 break-all select-text ${levelTextStyle[entry.level]}`}>
                     {entry.text}
                   </div>
                 </Fragment>

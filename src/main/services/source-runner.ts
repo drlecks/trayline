@@ -22,6 +22,7 @@ import { notificationService } from './notification-service'
 import { auditDb } from './audit-db'
 import { IPC } from '../../shared/ipc-channels'
 import { runAIStep } from './ai-step-helper'
+import { outputLog } from './output-log'
 import type { SourceStepConfig, SourceCounters, SeenIdsEntry, SourceRunMeta, SourceState, SourceRunEvent, HttpCredential, ImapCredential, HttpErrorDetail, FileWatchChannel } from '../../shared/types'
 import type { Card, CardHistoryEntry } from '../../shared/card'
 
@@ -553,6 +554,7 @@ async function failRun({ project, workflow, stepId, runId, stateDir, runDir, sta
     event: 'source_run_failed', actor: 'system',
     details_json: JSON.stringify({ run_id: runId, error, duration_ms: elapsedMs }),
   })
+  void outputLog.append('source', `Run failed: ${error}`, 'error')
   emit({ type: 'failed', project, workflow, stepId, runId, error })
   notificationService.notifySourceRunFailed({ projectName: project, workflowName: workflow, error })
 }
