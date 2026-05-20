@@ -423,3 +423,61 @@ Response present:
 
 - Modal is stateless — no history persists between opens.
 - Each open is a fresh session; the previous response is not shown.
+
+---
+
+## Closing the window (N12)
+
+```
+User presses × (or Cmd+W):
+  └── win.on('close') fires
+        └── isQuitting is false → e.preventDefault()
+        └── platformAdapter.hideWindow() → win.hide()
+        └── Window is hidden; Trayline process stays alive
+        └── Tray icon remains visible; workflows keep running
+```
+
+---
+
+## Surfacing from tray (N12)
+
+```
+User left-clicks the tray icon (Windows / Linux):
+  └── platformAdapter.surfaceWindow()
+        ├── win.isMinimized() → win.restore()
+        ├── !win.isVisible() → win.show()
+        └── win.focus()
+
+User left-clicks the tray icon (macOS):
+  └── tray.popUpContextMenu() (macOS convention — left-click shows menu, not window)
+
+User clicks the macOS dock icon:
+  └── app.on('activate') → platformAdapter.surfaceWindow() → win.show() + win.focus()
+```
+
+---
+
+## Quitting Trayline (N12)
+
+```
+User clicks Quit in the tray context menu:
+  └── onQuit callback: isQuitting = true; app.quit()
+  └── app.on('before-quit') fires:
+        ├── platformAdapter.destroy() → tray.destroy()
+        └── orchestrator.unmountAll()
+  └── Process exits
+```
+
+---
+
+## Launching a second instance (N12)
+
+```
+OS launches a new Trayline process:
+  └── app.requestSingleInstanceLock() → returns false (lock already held)
+  └── new process: app.quit() immediately
+
+Surviving (first) instance:
+  └── app.on('second-instance') → platformAdapter.surfaceWindow()
+        └── Window brought to foreground
+```
