@@ -487,3 +487,32 @@ After all implementation tasks are done, update every relevant doc to reflect th
 - The workflow author produces plans that include an Outlet step when the description mentions email sending or webhook posting
 - Credentials screen is accessible from the top bar; the MCPs screen is gone
 - No doc outside `docs/implementation/` contains stale references to skills or MCPs
+
+---
+
+## N9 Extension — File channels
+
+Added after initial N9 completion.
+
+### File-watch source channel
+
+- [x] Add `FileWatchChannel` type (`type: 'file_watch'`, `directory_path`, `file_pattern?`, `include_subdirs?`) to `SourceChannel` union in `src/shared/types.ts`
+- [x] Create `src/main/services/file-source-channel.ts` — `scanFiles(channel)` returns `FileItem[]` (one per readable text file ≤ 10 MB); `testFileWatchChannel()` validates the directory
+- [x] Integrate into `source-runner.ts` — `file_watch` branch follows the same dedup pattern as IMAP, using `file_path` as the dedup key; no credential needed
+- [x] Register a chokidar watcher in `source-scheduler.ts` when mounting a `file_watch` source — fires `runSource()` on `add` events; cron schedule acts as backup catchup scan
+- [x] Update `SourceDetailPanel.tsx` — add `file_watch` to channel type selector; show directory path, file pattern, include-subdirs toggle; dedup section uses `file_path` as default key
+- [x] Tests: `file-source-channel.test.ts` — scan, pattern filter, subdirs, dedup key consistency, error on missing dir
+
+**Card data shape:** `{ file_path, filename, extension, content, size_bytes, modified_at, created_at }`  
+**Dedup key:** `file_path` (absolute). Each unique path creates exactly one card.
+
+### File-export outlet channel
+
+- [x] Add `FileExportChannel` type (`type: 'file_export'`, `directory_path`, `filename_template`, `format`, `append?`, `body_template?`, `field_map?`) and `FileExportFormat` (`'txt' | 'csv' | 'pdf' | 'docx' | 'xlsx'`) to `OutletChannel` union in `src/shared/types.ts`
+- [x] Create `src/main/services/file-export-channel.ts` — `exportFile(input)` dispatches to format handlers: TXT (fs, append), CSV (manual escape, append), PDF (pdfkit), DOCX (docx), XLSX (exceljs, append)
+- [x] Integrate into `outlet-runner.ts` — `file_export` branch resolves `{{card.id}}` + `{{card.data.*}}` tokens in the filename and body/field templates; no credential needed
+- [x] Update `OutletDetailPanel.tsx` — add `file_export` button; show directory, filename template, format selector, append toggle (txt/csv/xlsx), body template (txt/pdf/docx), column field-map editor (csv/xlsx)
+- [x] Tests: `file-export-channel.test.ts` — TXT write/append, CSV header+row/append/escaping, PDF magic bytes, DOCX ZIP signature, XLSX row append
+
+**Append support:** TXT, CSV, XLSX. PDF and DOCX always overwrite.  
+**Token `{{card.id}}`** supported in `filename_template` in addition to standard `{{card.data.*}}` tokens.

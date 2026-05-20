@@ -19,6 +19,7 @@ vi.mock('./credential-service', () => ({
 
 vi.mock('./http-channel', () => ({ fetchHttp: vi.fn() }))
 vi.mock('./imap-channel', () => ({ fetchEmails: vi.fn() }))
+vi.mock('./file-source-channel', () => ({ scanFiles: vi.fn() }))
 vi.mock('./ai-step-helper', () => ({ runAIStep: vi.fn() }))
 
 async function setHttpBody(text: string) {
@@ -44,6 +45,21 @@ async function setAIOutput(output: object | string) {
 async function setAIError(message: string) {
   const mod = await import('./ai-step-helper')
   vi.mocked(mod.runAIStep).mockRejectedValue(new Error(message))
+}
+
+async function setScanFiles(files: unknown[]) {
+  const mod = await import('./file-source-channel')
+  vi.mocked(mod.scanFiles).mockResolvedValue(files as never)
+}
+
+function makeFileWatchConfig(overrides: Partial<SourceStepConfig> = {}): SourceStepConfig {
+  return {
+    id: '00-source', kind: 'source', name: 'Test Source', description: '',
+    color: '#4CB87E', icon: 'rss', schedule_cron: '0 * * * *', paused: false,
+    dedup: { key: 'file_path', max_memory: 10000, first_run: 'process_all' },
+    channel: { type: 'file_watch', directory_path: '/tmp/watch', file_pattern: '*', include_subdirs: false },
+    ...overrides,
+  }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -515,5 +531,129 @@ describe('sourceRunner.listRuns', () => {
     const runs = await sourceRunner.listRuns(project, 'wf', stepId)
     expect(runs[0].run_id).toBe(run2.run_id)
     expect(runs[1].run_id).toBe(run1.run_id)
+  })
+})
+
+describe('sourceRunner — skip empty successful runs', () => {
+  it('IMAP: run directory is not persisted when 0 items found and 0 new', async () => {
+    const project = `sr-imap-empty-${Date.now()}`
+    const stepId = '00-source'
+    const cfg = makeImapConfig()
+    await setupSourceStep(project, 'wf', stepId, cfg)
+    await setImapEmails([])
+
+    await sourceRunner.runSource({ project, workflow: 'wf', stepId, stepConfig: cfg })
+
+    const runs = await sourceRunner.listRuns(project, 'wf', stepId)
+    expect(runs).toHaveLength(0)
+  })
+
+  it('IMAP: counters are still updated even when run directory is skipped', async () => {
+    const project = `sr-imap-empty-ctr-${Date.now()}`
+    const stepId = '00-source'
+    const cfg = makeImapConfig()
+    await setupSourceStep(project, 'wf', stepId, cfg)
+    await setImapEmails([])
+
+    await sourceRunner.runSource({ project, workflow: 'wf', stepId, stepConfig: cfg })
+    await sourceRunner.runSource({ project, workflow: 'wf', stepId, stepConfig: cfg })
+
+    const counters = await readJson<{ runs_total: number; items_found: number; items_new: number }>(
+      join(Paths.projects, project, 'workflows', 'wf', 'steps', stepId, 'state', 'counters.json'),
+    )
+    expect(counters.runs_total).toBe(2)
+    expect(counters.items_found).toBe(0)
+    expect(counters.items_new).toBe(0)
+  })
+
+  it('IMAP: run directory is NOT persisted when items are found but 0 new', async () => {
+    const project = `sr-imap-found-${Date.now()}`
+    const stepId = '00-source'
+    const cfg = makeImapConfig()
+    await setupSourceStep(project, 'wf', stepId, cfg)
+
+    const stateDir = join(Paths.projects, project, 'workflows', 'wf', 'steps', stepId, 'state')
+    await writeJson(join(stateDir, 'seen-ids.json'), [
+      { id: 'msg-a', seen_at: new Date().toISOString() },
+      { id: 'msg-b', seen_at: new Date().toISOString() },
+    ])
+    await setImapEmails([{ message_id: 'msg-a', subject: 'Alpha' }, { message_id: 'msg-b', subject: 'Beta' }])
+
+    await sourceRunner.runSource({ project, workflow: 'wf', stepId, stepConfig: cfg })
+
+    const runs = await sourceRunner.listRuns(project, 'wf', stepId)
+    expect(runs).toHaveLength(0)
+  })
+
+  it('IMAP: failed runs are always persisted', async () => {
+    const project = `sr-imap-fail-persist-${Date.now()}`
+    const stepId = '00-source'
+    const cfg = makeImapConfig()
+    await setupSourceStep(project, 'wf', stepId, cfg)
+    const mod = await import('./imap-channel')
+    vi.mocked(mod.fetchEmails).mockRejectedValue(new Error('connection refused'))
+
+    await sourceRunner.runSource({ project, workflow: 'wf', stepId, stepConfig: cfg })
+
+    const runs = await sourceRunner.listRuns(project, 'wf', stepId)
+    expect(runs).toHaveLength(1)
+    expect(runs[0].status).toBe('failed')
+  })
+
+  it('file_watch: run directory is not persisted when 0 files found and 0 new', async () => {
+    const project = `sr-fw-empty-${Date.now()}`
+    const stepId = '00-source'
+    const cfg = makeFileWatchConfig()
+    await setupSourceStep(project, 'wf', stepId, cfg)
+    await setScanFiles([])
+
+    await sourceRunner.runSource({ project, workflow: 'wf', stepId, stepConfig: cfg })
+
+    const runs = await sourceRunner.listRuns(project, 'wf', stepId)
+    expect(runs).toHaveLength(0)
+  })
+
+  it('file_watch: run directory IS persisted when new files are found', async () => {
+    const project = `sr-fw-found-${Date.now()}`
+    const stepId = '00-source'
+    const cfg = makeFileWatchConfig()
+    await setupSourceStep(project, 'wf', stepId, cfg)
+    await setScanFiles([{ file_path: '/tmp/watch/report.pdf', filename: 'report.pdf', size_bytes: 1024, content: '' }])
+
+    await sourceRunner.runSource({ project, workflow: 'wf', stepId, stepConfig: cfg })
+
+    const runs = await sourceRunner.listRuns(project, 'wf', stepId)
+    expect(runs).toHaveLength(1)
+    expect(runs[0].status).toBe('completed')
+  })
+
+  it('file_watch: run directory is NOT persisted when files found are all already seen', async () => {
+    const project = `sr-fw-allseen-${Date.now()}`
+    const stepId = '00-source'
+    const cfg = makeFileWatchConfig()
+    await setupSourceStep(project, 'wf', stepId, cfg)
+
+    const stateDir = join(Paths.projects, project, 'workflows', 'wf', 'steps', stepId, 'state')
+    await writeJson(join(stateDir, 'seen-ids.json'), [{ id: '/tmp/watch/report.pdf', seen_at: new Date().toISOString() }])
+    await setScanFiles([{ file_path: '/tmp/watch/report.pdf', filename: 'report.pdf', size_bytes: 1024, content: '' }])
+
+    await sourceRunner.runSource({ project, workflow: 'wf', stepId, stepConfig: cfg })
+
+    const runs = await sourceRunner.listRuns(project, 'wf', stepId)
+    expect(runs).toHaveLength(0)
+  })
+
+  it('file_watch: first run always processes unseen files regardless of dedup.first_run setting', async () => {
+    const project = `sr-fw-firstrun-${Date.now()}`
+    const stepId = '00-source'
+    // dedup.first_run = 'skip_existing' must NOT prevent file processing for file_watch
+    const cfg = makeFileWatchConfig({ dedup: { key: 'file_path', max_memory: 10000, first_run: 'skip_existing' } })
+    await setupSourceStep(project, 'wf', stepId, cfg)
+    await setScanFiles([{ file_path: '/tmp/watch/report.pdf', filename: 'report.pdf', size_bytes: 1024, content: '' }])
+
+    await sourceRunner.runSource({ project, workflow: 'wf', stepId, stepConfig: cfg })
+
+    const readyDir = join(Paths.projects, project, 'workflows', 'wf', 'steps', stepId, 'cards', 'ready')
+    expect((await fs.readdir(readyDir)).filter((f) => f.endsWith('.json'))).toHaveLength(1)
   })
 })

@@ -157,9 +157,9 @@ describe('runOutlet — SMTP', () => {
 
     await runOutlet(project, 'wf', stepId, makeSmtpConfig(), card.id, prevId)
 
-    // Card moved to 99-errors
-    const errReady = join(Paths.projects, project, 'workflows', 'wf', 'steps', '99-errors', 'cards', 'ready', `${card.id}.json`)
-    expect(await pathExists(errReady)).toBe(true)
+    // Card moved to 99-errors/pending (not ready) so retryFromErrors and live-stats can find it
+    const errPending = join(Paths.projects, project, 'workflows', 'wf', 'steps', '99-errors', 'cards', 'pending', `${card.id}.json`)
+    expect(await pathExists(errPending)).toBe(true)
 
     const runsDir = join(Paths.projects, project, 'workflows', 'wf', 'steps', stepId, 'runs')
     const entries = await fs.readdir(runsDir)
@@ -241,8 +241,8 @@ describe('runOutlet — HTTP POST', () => {
 
     await runOutlet(project, 'wf', stepId, makeHttpConfig(), card.id, prevId)
 
-    const errReady = join(Paths.projects, project, 'workflows', 'wf', 'steps', '99-errors', 'cards', 'ready', `${card.id}.json`)
-    expect(await pathExists(errReady)).toBe(true)
+    const errPending = join(Paths.projects, project, 'workflows', 'wf', 'steps', '99-errors', 'cards', 'pending', `${card.id}.json`)
+    expect(await pathExists(errPending)).toBe(true)
     const runsDir = join(Paths.projects, project, 'workflows', 'wf', 'steps', stepId, 'runs')
     const entries = await fs.readdir(runsDir)
     const meta = await readJson<OutletRunMeta>(join(runsDir, entries[0], 'meta.json'))
