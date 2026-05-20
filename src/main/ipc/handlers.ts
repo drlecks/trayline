@@ -595,4 +595,5 @@ export function registerIpcHandlers(
 
   // ── AI output log ─────────────────────────────────────────────────────────
   ipcMain.handle(IPC.aiLog.getLines, () => aiOutputLog.getLines())
+  ipcMain.handle(IPC.aiLog.clear,    () => aiOutputLog.clear())
 }
