@@ -596,4 +596,14 @@ export function registerIpcHandlers(
   // ── AI output log ─────────────────────────────────────────────────────────
   ipcMain.handle(IPC.aiLog.getLines, () => aiOutputLog.getLines())
   ipcMain.handle(IPC.aiLog.clear,    () => aiOutputLog.clear())
+
+  // ── FS utilities ──────────────────────────────────────────────────────────
+  ipcMain.handle(IPC.fs.dirExists, async (_: unknown, dirPath: string): Promise<boolean> => {
+    try {
+      const stat = await fs.stat(dirPath)
+      return stat.isDirectory()
+    } catch {
+      return false
+    }
+  })
 }
