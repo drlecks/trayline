@@ -34,6 +34,9 @@
 - **keytar** — OS keychain access (Keychain on macOS, Credential Manager on Windows, libsecret on Linux); used by the Credentials store to hold passwords for HTTP, IMAP, and SMTP credentials
 - **imapflow** — modern IMAP client used by the Source step IMAP channel to fetch emails; promise-based, handles search, seen-flag marking, and clean disconnection
 - **nodemailer** — SMTP email sending used by the Outlet step SMTP channel
+- **pdfkit** — PDF generation for the File export outlet channel; pure Node.js, no Chromium dependency
+- **docx** — DOCX generation for the File export outlet channel
+- **exceljs** — XLSX read/write for the File export outlet channel (supports append mode)
 - **Electron.Notification** (built-in) — OS push notifications when cards need review; guarded by `Notification.isSupported()`
 - **app.setBadgeCount / BrowserWindow.setOverlayIcon** (built-in) — dock/taskbar badge showing pending-review count; SVG-drawn overlay on Windows, native badge count on macOS and Linux
 
@@ -53,7 +56,7 @@
 
 Trayline has a global **Credentials store** (`~/Documents/Trayline/credentials/`) that holds named auth configs for HTTP, IMAP, and SMTP. Non-secret fields (host, port, username, headers, base URL) are written as JSON. Passwords and API keys are stored in the OS keychain via keytar, never on disk.
 
-Three channel service files implement the I/O:
+Five channel service files implement the I/O:
 
 | File | Purpose |
 |---|---|
@@ -61,8 +64,12 @@ Three channel service files implement the I/O:
 | `src/main/services/http-channel.ts` | HTTP GET (`fetchHttp`) and HTTP POST (`postHttp`) with token resolution and secret header injection |
 | `src/main/services/imap-channel.ts` | IMAP fetch (`fetchEmails`) via imapflow with seen-flag handling |
 | `src/main/services/smtp-channel.ts` | SMTP send (`sendEmail`) via nodemailer; auto-detects HTML vs plain text |
+| `src/main/services/file-source-channel.ts` | Directory scan (`scanFiles`) — returns one `FileItem` per readable file; chokidar watcher triggers runs in real time |
+| `src/main/services/file-export-channel.ts` | File write (`exportFile`) — supports TXT, CSV, PDF (pdfkit), DOCX (docx), XLSX (exceljs); CSV/TXT/XLSX support append mode |
 
-Source steps use `fetchHttp` / `fetchEmails` to pre-fetch data before spawning the AI. Outlet steps use `postHttp` / `sendEmail` to dispatch card data after token resolution, with no AI involved.
+Source steps use `fetchHttp` / `fetchEmails` / `scanFiles` to pre-fetch data before spawning the AI. Outlet steps use `postHttp` / `sendEmail` / `exportFile` to dispatch card data after token resolution, with no AI involved.
+
+**File-watch source behavior:** When a `file_watch` source is mounted, the source scheduler registers both a chokidar watcher (real-time trigger on `add` events) and a cron backup scan. The dedup system (`seen-ids.json`, keyed on `file_path`) ensures each file creates exactly one card regardless of which trigger fires first. Files larger than 10 MB and binary files are silently skipped.
 
 ---
 

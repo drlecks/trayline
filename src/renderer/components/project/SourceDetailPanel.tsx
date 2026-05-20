@@ -7,7 +7,7 @@ import { CopyButton } from '@/components/ui/copy-button'
 import SchedulePicker from '@/components/shared/SchedulePicker'
 import { useProjectStore } from '@/stores/project-store'
 import { useProviderGuard } from '@/stores/provider-guard-store'
-import type { StepMeta, SourceState, SourceRunMeta, SourceRunEvent, SourceStepConfig, CredentialSummary } from '../../../shared/types'
+import type { StepMeta, SourceState, SourceRunMeta, SourceRunEvent, SourceStepConfig, CredentialSummary, FileWatchChannel } from '../../../shared/types'
 
 type Tab = 'config' | 'runs'
 
@@ -124,7 +124,7 @@ export default function SourceDetailPanel({ step }: SourceDetailPanelProps) {
           <div className="mt-3 flex gap-6 text-[12px] text-neutral-500 dark:text-neutral-400">
             <span><strong className="text-neutral-700 dark:text-neutral-300">{sourceState.counters.runs_total}</strong> runs</span>
             <span><strong className="text-neutral-700 dark:text-neutral-300">{sourceState.counters.items_new}</strong> cards created</span>
-            {(step.raw as { channel?: { type?: string } }).channel?.type === 'imap' && (
+            {(['imap', 'file_watch'] as const).includes((step.raw as { channel?: { type?: string } }).channel?.type as 'imap' | 'file_watch') && (
               <span><strong className="text-neutral-700 dark:text-neutral-300">{sourceState.seenCount}</strong> seen</span>
             )}
             {sourceState.nextRunAt && !sourceState.paused && (
@@ -336,6 +336,8 @@ function SourceConfigTab({
                 void save({ channel: { type: 'http_get', credential_id: '', url_path: '' } })
               } else if (t === 'imap') {
                 void save({ channel: { type: 'imap', credential_id: '', folder: 'INBOX', unseen_only: true, max_messages: 50 } })
+              } else if (t === 'file_watch') {
+                void save({ channel: { type: 'file_watch', directory_path: '', file_pattern: '*', include_subdirs: false } })
               }
             }}
             className="h-8 w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-2 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-300 dark:focus:ring-neutral-700"
@@ -343,6 +345,7 @@ function SourceConfigTab({
             <option value="">— Select channel —</option>
             <option value="http_get">HTTP GET</option>
             <option value="imap">IMAP inbox</option>
+            <option value="file_watch">File watch</option>
           </select>
         </div>
 
@@ -453,6 +456,46 @@ function SourceConfigTab({
             </div>
           </>
         )}
+
+        {config.channel?.type === 'file_watch' && (
+          <>
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs">Watch directory</Label>
+              <Input
+                defaultValue={(config.channel as FileWatchChannel).directory_path ?? ''}
+                onBlur={(e) => void save({ channel: { ...config.channel, directory_path: e.target.value } })}
+                className="h-8 text-sm font-mono"
+                placeholder="/Users/you/Dropbox/incoming"
+              />
+              <p className="text-xs text-neutral-500">Absolute path to the folder to watch. A card is created for each new file that appears.</p>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="flex flex-col gap-1.5 flex-1">
+                <Label className="text-xs">File pattern (optional)</Label>
+                <Input
+                  defaultValue={(config.channel as FileWatchChannel).file_pattern ?? '*'}
+                  onBlur={(e) => void save({ channel: { ...config.channel, file_pattern: e.target.value || '*' } })}
+                  className="h-8 text-sm font-mono"
+                  placeholder="*.txt"
+                />
+                <p className="text-xs text-neutral-500">Glob filter, e.g. <code className="font-mono">*.txt</code> or <code className="font-mono">report_*</code>. Default matches all files.</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="include-subdirs"
+                checked={(config.channel as FileWatchChannel).include_subdirs ?? false}
+                onChange={(e) => void save({ channel: { ...config.channel, include_subdirs: e.target.checked } })}
+                className="rounded"
+              />
+              <label htmlFor="include-subdirs" className="text-xs">Include subdirectories</label>
+            </div>
+            <p className="text-xs text-neutral-500">
+              Files are detected in real time as they are created or moved in. The schedule below acts as a backup catchup scan.
+            </p>
+          </>
+        )}
       </div>
 
       <div className="flex flex-col gap-1.5">
@@ -479,19 +522,19 @@ function SourceConfigTab({
         onChange={(cron) => void save({ schedule_cron: cron })}
       />
 
-      {channelType === 'imap' && (
+      {(channelType === 'imap' || channelType === 'file_watch') && (
         <div className="flex flex-col gap-3 rounded-md border border-neutral-200 dark:border-neutral-800 p-4">
           <div className="text-[11px] uppercase tracking-wider text-neutral-400">Deduplication</div>
 
           <div className="flex flex-col gap-1.5">
             <Label className="text-xs">Dedup key</Label>
             <Input
-              defaultValue={config.dedup?.key ?? 'message_id'}
+              defaultValue={config.dedup?.key ?? (channelType === 'file_watch' ? 'file_path' : 'message_id')}
               onBlur={(e) => { void save({ dedup: { ...config.dedup, key: e.target.value } }) }}
               className="h-8 text-sm font-mono"
-              placeholder="message_id"
+              placeholder={channelType === 'file_watch' ? 'file_path' : 'message_id'}
             />
-            <p className="text-xs text-neutral-500">JSON field used to identify unique emails</p>
+            <p className="text-xs text-neutral-500">{channelType === 'file_watch' ? 'Field used to identify unique files — default is file_path' : 'JSON field used to identify unique emails'}</p>
           </div>
 
           <div className="flex flex-col gap-1.5">

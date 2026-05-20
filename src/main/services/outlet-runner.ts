@@ -216,6 +216,20 @@ async function runOutletInner(
       const resolvedBody = aiBodyOverride ?? (ch.body ? resolveTokens(ch.body, cardData) : undefined)
       const resolvedCh = resolvedBody !== undefined ? { ...ch, body: resolvedBody } : ch
       await postHttp(cred as HttpCredential, resolvedCh, {})
+    } else if (stepConfig.channel.type === 'file_export') {
+      const { exportFile } = await import('./file-export-channel')
+      const ch = stepConfig.channel
+      // Support {{card.id}} in filename templates in addition to {{card.data.*}}
+      const rawFilename = ch.filename_template.replace(/\{\{card\.id\}\}/g, card.id)
+      const resolvedFilename = resolveTokens(rawFilename, cardData)
+      const { join: pathJoin } = await import('path')
+      const filePath = pathJoin(ch.directory_path, resolvedFilename)
+      const body = ch.body_template ? resolveTokens(ch.body_template, cardData) : resolveTokens('{{card.data}}', cardData)
+      const fields = (ch.field_map ?? []).map((f) => ({
+        header: f.header,
+        value: resolveTokens(f.value, cardData),
+      }))
+      await exportFile({ filePath, format: ch.format, append: ch.append ?? false, body, fields })
     }
   } catch (err) {
     await completeWithError(project, workflow, stepId, runId, runDir, cardId, prevStepDir, meta, err instanceof Error ? err.message : String(err))

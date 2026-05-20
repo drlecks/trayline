@@ -5,6 +5,7 @@
 // Overlapping runs are prevented by the sourceRunner's in-flight guard.
 
 import cron, { type ScheduledTask } from 'node-cron'
+import chokidar, { type FSWatcher } from 'chokidar'
 import { join } from 'path'
 import { projectService } from './project-service'
 import { fsService } from './fs-service'
@@ -21,6 +22,9 @@ interface StepKindProbe {
 
 // taskKey → { task, nextRunAt }
 const tasks = new Map<string, { task: ScheduledTask; nextRunAt: string | null }>()
+
+// taskKey → chokidar FSWatcher (for file_watch sources)
+const fileWatchers = new Map<string, FSWatcher>()
 
 function taskKey(project: string, workflow: string, stepId: string): string {
   return `${project}/${workflow}/${stepId}`
@@ -90,10 +94,33 @@ async function mountWorkflow(project: string, workflow: string): Promise<void> {
     if (!stepJson || stepJson.kind !== 'source') continue
     if (stepJson.paused) continue
 
+    const k = taskKey(project, workflow, stepId)
+
+    // File-watch sources use chokidar for real-time detection in addition to their cron backup scan.
+    if (stepJson.channel?.type === 'file_watch' && stepJson.channel.directory_path) {
+      const existing = fileWatchers.get(k)
+      if (existing) await existing.close()
+
+      const watcher = chokidar.watch(stepJson.channel.directory_path, {
+        persistent: true,
+        ignoreInitial: true,  // existing files handled by dedup on explicit run/cron
+        depth: stepJson.channel.include_subdirs ? undefined : 0,
+        awaitWriteFinish: { stabilityThreshold: 500, pollInterval: 100 },
+      })
+
+      watcher.on('add', () => {
+        void sourceRunner.runSource({ project, workflow, stepId, stepConfig: stepJson }).catch((err) => {
+          // eslint-disable-next-line no-console
+          console.error(`[source-scheduler] file_watch runSource failed for ${k}:`, err)
+        })
+      })
+
+      fileWatchers.set(k, watcher)
+    }
+
     const expr = stepJson.schedule_cron
     if (!expr || !cron.validate(expr)) continue
 
-    const k = taskKey(project, workflow, stepId)
     tasks.get(k)?.task.stop()
 
     const task = cron.schedule(expr, () => {
@@ -107,12 +134,19 @@ async function mountWorkflow(project: string, workflow: string): Promise<void> {
   }
 }
 
-/** Stop and deregister all cron tasks for a workflow. */
+/** Stop and deregister all cron tasks and file watchers for a workflow. */
 function unmountWorkflow(project: string, workflow: string): void {
+  const prefix = `${project}/${workflow}/`
   for (const [k, entry] of tasks.entries()) {
-    if (k.startsWith(`${project}/${workflow}/`)) {
+    if (k.startsWith(prefix)) {
       entry.task.stop()
       tasks.delete(k)
+    }
+  }
+  for (const [k, watcher] of fileWatchers.entries()) {
+    if (k.startsWith(prefix)) {
+      void watcher.close()
+      fileWatchers.delete(k)
     }
   }
 }
@@ -134,10 +168,12 @@ async function mountAll(): Promise<void> {
   }
 }
 
-/** Stop every cron task. Called on before-quit. */
+/** Stop every cron task and file watcher. Called on before-quit. */
 function stopAll(): void {
   for (const entry of tasks.values()) entry.task.stop()
   tasks.clear()
+  for (const watcher of fileWatchers.values()) void watcher.close()
+  fileWatchers.clear()
 }
 
 /** Get the next scheduled run time for a source step (ISO string or null). */
