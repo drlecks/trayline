@@ -76,10 +76,7 @@ async function mountWorkflow(project: string, workflow: string): Promise<void> {
         const name = basename(filePath)
         if (!name.endsWith('.json') || name.endsWith('.tmp')) return
         const cardId = name.replace(/\.json$/, '')
-        void workerRunner.triggerRun({ project, workflow, stepId, cardId }).catch((err) => {
-          // eslint-disable-next-line no-console
-          console.error(`[watcher] triggerRun failed for ${cardId}:`, err)
-        })
+        workerRunner.enqueueForWatcher(project, workflow, stepId, cardId)
       })
       watchers.push(watcher)
     } else if (stepJson.kind === 'outlet') {
