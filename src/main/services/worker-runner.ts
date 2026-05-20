@@ -527,6 +527,7 @@ async function runInner(input: TriggerRunInput): Promise<TriggerRunResult> {
         run_id: runId, exit_code: exitCode, error: runError, elapsed_ms: elapsedMs,
       }),
     })
+    void aiOutputLog.append('worker', `Run failed: ${runError ?? `exit code ${exitCode}`}`, 'error')
   }
 
   // 8. Move source card out of prev/ready and write produced card
@@ -823,6 +824,7 @@ async function runBatchInner(input: TriggerBatchRunInput): Promise<TriggerRunRes
       event: 'run_failed', actor: 'system',
       details_json: JSON.stringify({ run_id: runId, exit_code: exitCode, batch: true, card_count: sourceCards.length, error: runError, elapsed_ms: elapsedMs }),
     })
+    void aiOutputLog.append('worker-batch', `Batch run failed: ${runError ?? `exit code ${exitCode}`}`, 'error')
   }
 
   if (succeeded && nextStepId && plannedNextCardId) {

@@ -33,6 +33,8 @@ export type { BootstrapInfo }
 export function registerIpcHandlers(
   ipcMain: IpcMain,
   getBootstrapInfo: () => BootstrapInfo,
+  onMountChanged?: () => void,
+  onLaunchAtLoginChanged?: (enabled: boolean) => void,
 ) {
   // ── Settings ──────────────────────────────────────────────────────────────
   ipcMain.handle('settings:get', () => settingsStore.store)
@@ -43,6 +45,10 @@ export function registerIpcHandlers(
     if (key === 'theme') {
       const t = value as Settings['theme']
       nativeTheme.themeSource = t === 'system' ? 'system' : t
+    }
+
+    if (key === 'launchAtLogin') {
+      onLaunchAtLoginChanged?.(value as boolean)
     }
 
     // Broadcast so other panes (e.g. the footer) refresh without waiting for
@@ -103,6 +109,7 @@ export function registerIpcHandlers(
     if (result.ok) {
       await orchestrator.mountProject(result.project.name)
     }
+    onMountChanged?.()
     return result
   })
   ipcMain.handle('project:updateMeta', async (
@@ -123,6 +130,7 @@ export function registerIpcHandlers(
     } else {
       await orchestrator.unmountProject(name)
     }
+    onMountChanged?.()
     const mounted = orchestrator.isMounted(name)
     for (const win of BrowserWindow.getAllWindows()) {
       if (!win.isDestroyed()) win.webContents.send('project:onStatusChanged', { name, status, mounted })
@@ -183,6 +191,7 @@ export function registerIpcHandlers(
   ipcMain.handle('project:delete', async (_: unknown, name: string) => {
     await orchestrator.unmountProject(name)
     await projectCreateService.deleteProject(name)
+    onMountChanged?.()
   })
 
   // ── Import / Export ───────────────────────────────────────────────────────
@@ -208,6 +217,7 @@ export function registerIpcHandlers(
     // Only mount if immediately committed (clean scan); needs_review defers to importCommit
     if (result.ok === true) {
       await orchestrator.mountProject(result.projectName)
+      onMountChanged?.()
     }
     return result
   })
@@ -215,6 +225,7 @@ export function registerIpcHandlers(
   ipcMain.handle('project:importCommit', async (_: unknown, token: string): Promise<ImportSuccess> => {
     const result = await exportService.commitImport(token)
     await orchestrator.mountProject(result.projectName)
+    onMountChanged?.()
     return result
   })
 
@@ -225,6 +236,7 @@ export function registerIpcHandlers(
   ipcMain.handle('project:openExample', async () => {
     const result = await exportService.openExampleProject()
     await orchestrator.mountProject(result.projectName)
+    onMountChanged?.()
     return result
   })
 
@@ -583,4 +595,5 @@ export function registerIpcHandlers(
 
   // ── AI output log ─────────────────────────────────────────────────────────
   ipcMain.handle(IPC.aiLog.getLines, () => aiOutputLog.getLines())
+  ipcMain.handle(IPC.aiLog.clear,    () => aiOutputLog.clear())
 }

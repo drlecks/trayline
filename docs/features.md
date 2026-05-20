@@ -585,3 +585,53 @@ A lightweight, non-blocking guide that appears in the right panel the first time
 **Footer:** "Take a quick tour" button dispatches `trayline:open-tour` to open the `OnboardingTour` overlay. "Dismiss" clears `justCreatedProject`.
 
 The `OnboardingTour` no longer auto-fires on app boot. It is purely opt-in: via the first-project guide or **Settings → Help → Run onboarding tour**.
+
+
+---
+
+## 7.23 System Tray & Background Mode (N12)
+
+Trayline runs as a background-service application. Closing the window does not quit the process — workflows keep running.
+
+### Close-to-tray behaviour
+
+Pressing the window's **×** close button hides the window instead of destroying it. The Trayline process stays alive and the orchestrator continues mounting/watching all active workflows. A `window:close` IPC call (from the custom title bar) follows the same path — it calls `win.close()` which the interceptor catches.
+
+To truly quit, the user must choose **Quit** from the tray context menu.
+
+### System tray icon
+
+A tray icon is present whenever the app is running:
+
+| Platform | Location | Left-click | Right-click |
+|---|---|---|---|
+| Windows | Notification area (bottom-right) | Show & focus window | Context menu |
+| macOS | Menu bar (top-right) | Context menu (macOS norm) | Context menu |
+| Linux | DE tray area | Show & focus window | Context menu (static — set via `setContextMenu`, not `popUpContextMenu`) |
+
+Tooltip: `"Trayline"`.
+
+### Context menu
+
+```
+Resume All   [disabled when all active projects are mounted]
+Stop All     [disabled when no projects are mounted]
+─────────────
+Quit
+```
+
+**Resume All** — calls `orchestrator.mountAll()` then refreshes the tray state.  
+**Stop All** — calls `orchestrator.unmountAll()` then refreshes the tray state.  
+**Quit** — sets `isQuitting = true` then calls `app.quit()`, which triggers `before-quit` → `orchestrator.unmountAll()` + `platformAdapter.destroy()`.
+
+The enabled/disabled state of Resume All and Stop All is kept in sync via `refreshTrayState()` in `index.ts`, which is called after every mount/unmount operation (at startup, after tray actions, and after any IPC handler that mounts or unmounts a project).
+
+### Single-instance enforcement
+
+`app.requestSingleInstanceLock()` is called before `app.whenReady()`. If a second Trayline process is launched:
+- The second process receives `false` from `requestSingleInstanceLock()` and immediately calls `app.quit()`.
+- The `second-instance` event fires on the surviving (first) process, calling `platformAdapter.surfaceWindow()` to bring the existing window to the front.
+
+### macOS dock icon
+
+On macOS, clicking the dock icon while the window is hidden calls `surfaceWindow()` (registered via `app.on('activate', ...)`). The dock icon is always visible while the process is running — `app.dock.hide()` is deliberately **not** called, so Cmd+Tab still shows Trayline.

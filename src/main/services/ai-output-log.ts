@@ -6,6 +6,8 @@ import fs from 'fs/promises'
 import { Paths } from './fs-service'
 import { join } from 'path'
 
+export type LogLevel = 'info' | 'warning' | 'error'
+
 const MAX_LINES = 1000
 
 class AIOutputLog {
@@ -14,14 +16,15 @@ class AIOutputLog {
   private loaded = false
   private writeScheduled = false
 
-  async append(prefix: string, text: string): Promise<void> {
+  async append(prefix: string, text: string, level?: LogLevel): Promise<void> {
     if (!this.loaded) await this.load()
     const ts = new Date().toISOString()
     // Split multi-line chunks into individual log lines
     for (const line of text.split('\n')) {
       const trimmed = line.trimEnd()
       if (!trimmed) continue
-      this.lines.push(`[${ts}] [${prefix}] ${trimmed}`)
+      const lvl = level ?? 'info'
+      this.lines.push(`[${ts}] [${prefix}] [${lvl}] ${trimmed}`)
     }
     if (this.lines.length > MAX_LINES) {
       this.lines = this.lines.slice(-MAX_LINES)
@@ -32,6 +35,14 @@ class AIOutputLog {
   async getLines(): Promise<string[]> {
     if (!this.loaded) await this.load()
     return [...this.lines]
+  }
+
+  async clear(): Promise<void> {
+    this.lines = []
+    this.loaded = true
+    try {
+      await fs.writeFile(this.logFile, '', 'utf-8')
+    } catch { /* non-fatal */ }
   }
 
   private scheduleSave() {
