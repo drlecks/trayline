@@ -69,6 +69,7 @@ jobs:
   build:
     name: Build (${{ matrix.os }})
     needs: [test, create-release]
+    if: always() && needs.test.result == 'success' && (needs.create-release.result == 'success' || needs.create-release.result == 'skipped')
     strategy:
       fail-fast: false
       matrix:
