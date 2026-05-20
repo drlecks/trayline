@@ -26,20 +26,23 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
           node-version: '22'
-          cache: 'npm'
+          cache: 'pnpm'
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Typecheck
-        run: npm run typecheck
+        run: pnpm run typecheck
 
       - name: Tests
-        run: npm test
+        run: pnpm test
 
   create-release:
     name: Create GitHub Release
@@ -78,11 +81,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
           node-version: '22'
-          cache: 'npm'
+          cache: 'pnpm'
 
       - name: Cache Electron binaries
         uses: actions/cache@v5
@@ -94,10 +100,10 @@ jobs:
             ~/Library/Caches/electron-builder
             ~\AppData\Local\electron\Cache
             ~\AppData\Local\electron-builder\Cache
-          key: electron-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          key: electron-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       # Patch version to 1.0.<run_number> so each release is monotonic and
       # uniquely tagged on GitHub. The package.json floor stays at 1.0.0; we
@@ -167,7 +173,7 @@ jobs:
           } else {
             $env:CSC_IDENTITY_AUTO_DISCOVERY = 'false'
           }
-          npm run build
+          pnpm run build
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npx electron-builder --win --publish ${{ github.event_name == 'pull_request' && 'never' || 'always' }}
 
@@ -188,7 +194,7 @@ jobs:
             export APPLE_APP_SPECIFIC_PASSWORD="${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}"
             export APPLE_TEAM_ID="${{ secrets.APPLE_TEAM_ID }}"
           fi
-          npm run build
+          pnpm run build
           if [ "${{ steps.mac_signing.outputs.notarize }}" = "true" ]; then
             npx electron-builder --mac --publish ${{ github.event_name == 'pull_request' && 'never' || 'always' }} --config.mac.notarize=true
           else
@@ -199,7 +205,7 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm run build && npx electron-builder --linux --publish ${{ github.event_name == 'pull_request' && 'never' || 'always' }}
+        run: pnpm run build && npx electron-builder --linux --publish ${{ github.event_name == 'pull_request' && 'never' || 'always' }}
 
       # ── Always upload installer artifacts even on failure (debug aid) ──────
       - name: Upload installer artifacts
