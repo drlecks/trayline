@@ -41,6 +41,10 @@ export class DarwinAdapter implements PlatformAdapter {
     this.tray = null
   }
 
+  setLaunchAtLogin(enabled: boolean): void {
+    app.setLoginItemSettings({ openAtLogin: enabled, openAsHidden: true })
+  }
+
   private buildMenu(): Electron.Menu {
     return Menu.buildFromTemplate([
       {

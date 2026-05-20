@@ -34,6 +34,7 @@ export function registerIpcHandlers(
   ipcMain: IpcMain,
   getBootstrapInfo: () => BootstrapInfo,
   onMountChanged?: () => void,
+  onLaunchAtLoginChanged?: (enabled: boolean) => void,
 ) {
   // ── Settings ──────────────────────────────────────────────────────────────
   ipcMain.handle('settings:get', () => settingsStore.store)
@@ -44,6 +45,10 @@ export function registerIpcHandlers(
     if (key === 'theme') {
       const t = value as Settings['theme']
       nativeTheme.themeSource = t === 'system' ? 'system' : t
+    }
+
+    if (key === 'launchAtLogin') {
+      onLaunchAtLoginChanged?.(value as boolean)
     }
 
     // Broadcast so other panes (e.g. the footer) refresh without waiting for

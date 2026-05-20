@@ -1,4 +1,4 @@
-import { Tray, Menu } from 'electron'
+import { app, Tray, Menu } from 'electron'
 import type { BrowserWindow } from 'electron'
 import type { PlatformAdapter, PlatformCallbacks, TrayState } from './adapter'
 import { resolveAppIcon } from '../util/app-icon'
@@ -38,6 +38,10 @@ export class LinuxAdapter implements PlatformAdapter {
   destroy(): void {
     this.tray?.destroy()
     this.tray = null
+  }
+
+  setLaunchAtLogin(enabled: boolean): void {
+    app.setLoginItemSettings({ openAtLogin: enabled, openAsHidden: true })
   }
 
   private buildMenu(): Electron.Menu {
