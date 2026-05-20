@@ -138,5 +138,6 @@ export const IPC = {
   },
   aiLog: {
     getLines: 'ai-log:get-lines',
+    clear:    'ai-log:clear',
   },
 } as const

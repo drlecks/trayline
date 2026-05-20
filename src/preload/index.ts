@@ -338,6 +338,7 @@ const api = {
   },
   aiLog: {
     getLines: (): Promise<string[]> => ipcRenderer.invoke(IPC.aiLog.getLines),
+    clear:    (): Promise<void>     => ipcRenderer.invoke(IPC.aiLog.clear),
   },
   platform: process.platform as NodeJS.Platform,
 }
