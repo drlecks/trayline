@@ -105,7 +105,13 @@ Each task corresponds to a phase file in this folder. Check off tasks as they ar
 
 ## N11 Phases (Adapter Simplification, Connected AI, & Project UX)
 
-- [x] [Phase N11 — Adapter Simplification, Connected AI, & Project UX](./phase-n11.md)
+- [x] [Phase N11 — Adapter Simplification, Connected AI, & Project UX](./phase-n11-connected-ai.md)
+
+---
+
+## N12 Phases (System Tray & Single-Instance Mode)
+
+- [x] [Phase N12 — System Tray & Single-Instance Mode](./phase-n12-background-process.md)
 
 ---
 

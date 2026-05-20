@@ -22,7 +22,7 @@ import { adapterRegistry } from '../ai-terminals/registry'
 import { adapterReadinessService } from './adapter-readiness-service'
 import { detectPermissionPrompt, permissionPromptResponse } from '../ai-terminals/claude-code'
 import { ANSI_RE } from '../ai-terminals/prompt-utils'
-import { aiOutputLog } from './ai-output-log'
+import { outputLog } from './output-log'
 import { IPC } from '../../shared/ipc-channels'
 import type { AISession } from '../ai-terminals/adapter'
 import type { Card, CardHistoryEntry } from '../../shared/card'
@@ -403,7 +403,7 @@ async function runInner(input: TriggerRunInput): Promise<TriggerRunResult> {
           const clean = chunk.replace(ANSI_RE, '')
           if (clean.trim()) {
             console.log('[worker]', clean.trimEnd())
-            void aiOutputLog.append('worker', clean.trimEnd())
+            void outputLog.append('worker', clean.trimEnd())
           }
           permissionBuffer += chunk
           if (permissionBuffer.length > 4096) permissionBuffer = permissionBuffer.slice(-4096)
@@ -527,6 +527,7 @@ async function runInner(input: TriggerRunInput): Promise<TriggerRunResult> {
         run_id: runId, exit_code: exitCode, error: runError, elapsed_ms: elapsedMs,
       }),
     })
+    void outputLog.append('worker', `Run failed: ${runError ?? `exit code ${exitCode}`}`, 'error')
   }
 
   // 8. Move source card out of prev/ready and write produced card
@@ -742,7 +743,7 @@ async function runBatchInner(input: TriggerBatchRunInput): Promise<TriggerRunRes
           const clean = chunk.replace(ANSI_RE, '')
           if (clean.trim()) {
             console.log('[worker-batch]', clean.trimEnd())
-            void aiOutputLog.append('worker-batch', clean.trimEnd())
+            void outputLog.append('worker-batch', clean.trimEnd())
           }
           permissionBufferBatch += chunk
           if (permissionBufferBatch.length > 4096) permissionBufferBatch = permissionBufferBatch.slice(-4096)
@@ -823,6 +824,7 @@ async function runBatchInner(input: TriggerBatchRunInput): Promise<TriggerRunRes
       event: 'run_failed', actor: 'system',
       details_json: JSON.stringify({ run_id: runId, exit_code: exitCode, batch: true, card_count: sourceCards.length, error: runError, elapsed_ms: elapsedMs }),
     })
+    void outputLog.append('worker-batch', `Batch run failed: ${runError ?? `exit code ${exitCode}`}`, 'error')
   }
 
   if (succeeded && nextStepId && plannedNextCardId) {
@@ -1059,8 +1061,64 @@ async function openExternalTerminal(
   }
 }
 
+// ── Per-step card queue for on_ready watcher triggering ───────────────────────
+//
+// When multiple cards land in a tray's ready/ simultaneously, chokidar fires
+// one 'add' event per card in the same event-loop tick. Without a queue, all
+// calls to triggerRun start concurrently and race on nextRunId / nextCardIdForStep
+// allocation, leaving cards in limbo when a run throws before moving the card.
+//
+// enqueueForWatcher serialises runs for each worker step: cards are processed
+// one at a time, in arrival order. The async function runs synchronously to its
+// first `await`, so watcherDraining.add(key) is set before any concurrent caller
+// can re-enter — a second simultaneous call just pushes to the already-running
+// queue instead of starting a duplicate drain.
+
+const watcherQueues = new Map<string, string[]>()
+const watcherDraining = new Set<string>()
+
+function watcherStepKey(project: string, workflow: string, stepId: string): string {
+  return `${project}/${workflow}/${stepId}`
+}
+
+function enqueueForWatcher(project: string, workflow: string, stepId: string, cardId: string): void {
+  const key = watcherStepKey(project, workflow, stepId)
+  const q = watcherQueues.get(key) ?? []
+  if (!q.includes(cardId)) q.push(cardId)
+  watcherQueues.set(key, q)
+  if (!watcherDraining.has(key)) void drainWatcherQueue(project, workflow, stepId, key)
+}
+
+async function drainWatcherQueue(project: string, workflow: string, stepId: string, key: string): Promise<void> {
+  if (watcherDraining.has(key)) return
+  watcherDraining.add(key)
+  try {
+    for (;;) {
+      const q = watcherQueues.get(key)
+      if (!q || q.length === 0) break
+      const cardId = q.shift()!
+      watcherQueues.set(key, q)
+      try {
+        await triggerRun({ project, workflow, stepId, cardId })
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error(`[worker-runner] queue: run failed for ${cardId}:`, err)
+      }
+    }
+  } finally {
+    watcherDraining.delete(key)
+  }
+}
+
+function isWatcherQueueActive(project: string, workflow: string, stepId: string): boolean {
+  const key = watcherStepKey(project, workflow, stepId)
+  return watcherDraining.has(key) || (watcherQueues.get(key)?.length ?? 0) > 0
+}
+
 export const workerRunner = {
   triggerRun,
+  enqueueForWatcher,
+  isWatcherQueueActive,
   runNow,
   listRuns,
   getRun,

@@ -11,6 +11,7 @@ import { credentialService } from './credential-service'
 import { auditDb } from './audit-db'
 import { resolveTokens } from '../ai-terminals/prompt-utils'
 import { runAIStep } from './ai-step-helper'
+import { outputLog } from './output-log'
 import { IPC } from '../../shared/ipc-channels'
 import type { OutletStepConfig, OutletRunMeta, OutletRunEvent, HttpCredential, SmtpCredential } from '../../shared/types'
 import type { Card } from '../../shared/card'
@@ -216,6 +217,25 @@ async function runOutletInner(
       const resolvedBody = aiBodyOverride ?? (ch.body ? resolveTokens(ch.body, cardData) : undefined)
       const resolvedCh = resolvedBody !== undefined ? { ...ch, body: resolvedBody } : ch
       await postHttp(cred as HttpCredential, resolvedCh, {})
+    } else if (stepConfig.channel.type === 'file_export') {
+      const { exportFile } = await import('./file-export-channel')
+      const ch = stepConfig.channel
+      // Support {{card.id}} in filename templates in addition to {{card.data.*}}
+      const rawFilename = ch.filename_template.replace(/\{\{card\.id\}\}/g, card.id)
+      const resolvedFilename = resolveTokens(rawFilename, cardData)
+      const { join: pathJoin } = await import('path')
+      const filePath = pathJoin(ch.directory_path, resolvedFilename)
+      const body = ch.body_template ? resolveTokens(ch.body_template, cardData) : resolveTokens('{{card.data}}', cardData)
+      // Auto-derive columns from card data keys when no field_map is configured.
+      const rawFields: Array<{ header: string; value: string }> =
+        ch.field_map && ch.field_map.length > 0
+          ? ch.field_map.map((f) => ({ header: f.header ?? '', value: f.value ?? '' }))
+          : Object.keys(cardData).map((k) => ({ header: k, value: `{{card.data.${k}}}` }))
+      const fields = rawFields.map((f) => ({
+        header: f.header,
+        value: resolveTokens(f.value, cardData),
+      }))
+      await exportFile({ filePath, format: ch.format, append: ch.append ?? false, body, fields })
     }
   } catch (err) {
     await completeWithError(project, workflow, stepId, runId, runDir, cardId, prevStepDir, meta, err instanceof Error ? err.message : String(err))
@@ -259,15 +279,15 @@ async function completeWithError(
     event: 'outlet_run_failed', actor: 'system',
     details_json: JSON.stringify({ run_id: runId, error }),
   })
+  void outputLog.append('outlet', `Run failed: ${error}`, 'error')
   emitTyped(IPC.outlet.onFailed, { type: 'failed', project, workflow, stepId, runId, cardId, error })
 
-  // Move card to 99-errors
+  // Move card to 99-errors/pending so retryFromErrors and live-stats can see it
   const cardPath = join(prevStepDir, 'cards', 'ready', `${cardId}.json`)
   if (await pathExists(cardPath)) {
-    const wfRoot = join(projectService.paths.stepDir(project, workflow, '99-errors'))
-    const errReady = join(wfRoot, 'cards', 'ready')
-    await fs.mkdir(errReady, { recursive: true })
-    await fs.rename(cardPath, join(errReady, basename(cardPath)))
+    const errPending = join(projectService.paths.stepDir(project, workflow, '99-errors'), 'cards', 'pending')
+    await fs.mkdir(errPending, { recursive: true })
+    await fs.rename(cardPath, join(errPending, basename(cardPath)))
   }
 }
 
