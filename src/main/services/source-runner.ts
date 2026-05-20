@@ -396,6 +396,11 @@ async function runSourceInner({ project, workflow, stepId, stepConfig }: RunSour
       items_new: counters.items_new + cardsToCreate.length,
       last_run_at: endedAt,
     })
+    if (cardsToCreate.length === 0) {
+      await fs.rm(runDir, { recursive: true, force: true })
+      emit({ type: 'completed', project, workflow, stepId, runId, itemsFound: items.length, itemsNew: 0 })
+      return
+    }
     await fsService.writeJsonAtomic(join(runDir, 'meta.json'), {
       ...meta, ended_at: endedAt, elapsed_ms: elapsedMs, status: 'completed',
       items_found: items.length, items_new: cardsToCreate.length,
@@ -413,7 +418,6 @@ async function runSourceInner({ project, workflow, stepId, stepConfig }: RunSour
   if (channel.type === 'file_watch') {
     const seenEntries = await readSeenIds(stateDir)
     const seenSet = new Set(seenEntries.map((e) => e.id))
-    const isFirstRun = seenEntries.length === 0
 
     let items: Record<string, unknown>[]
     try {
@@ -427,37 +431,25 @@ async function runSourceInner({ project, workflow, stepId, stepConfig }: RunSour
 
     await fs.writeFile(join(runDir, 'output.json'), JSON.stringify(items.map((i) => ({ file_path: i.file_path, filename: i.filename, size_bytes: i.size_bytes })), null, 2), 'utf-8')
 
-    const dedup = stepConfig.dedup ?? { key: 'file_path', max_memory: 10000, first_run: 'skip_existing' as const }
-    const dedupKey = dedup.key
-    const firstRunPolicy = dedup.first_run
-    const maxMemory = dedup.max_memory ?? 10000
+    // file_path is always the dedup key for file_watch — not configurable.
+    // Every unseen file path is processed regardless of first-run policy.
+    const maxMemory = stepConfig.dedup?.max_memory ?? 10000
 
     const newItems: Record<string, unknown>[] = []
     const allIds: string[] = []
 
     for (const item of items) {
-      const itemId = String(item[dedupKey] ?? '')
+      const itemId = String(item['file_path'] ?? '')
       if (!itemId) continue
       allIds.push(itemId)
       if (!seenSet.has(itemId)) newItems.push(item)
     }
 
-    let cardsToCreate: Record<string, unknown>[]
-    if (isFirstRun) {
-      if (firstRunPolicy === 'skip_existing') {
-        cardsToCreate = []
-      } else if (firstRunPolicy === 'process_last_n') {
-        cardsToCreate = newItems.slice(-(dedup.first_run_n ?? 10))
-      } else {
-        cardsToCreate = newItems
-      }
-    } else {
-      cardsToCreate = newItems
-    }
+    const cardsToCreate = newItems
 
     for (let i = 0; i < cardsToCreate.length; i++) {
       const item = cardsToCreate[i]
-      const itemId = String(item[dedupKey] ?? '')
+      const itemId = String(item['file_path'] ?? '')
       const cardId = await nextCardId(project, workflow, autoForwarded && forwardedToStepId ? forwardedToStepId : stepId, i + 1)
 
       let cardData: object = item
@@ -505,6 +497,11 @@ async function runSourceInner({ project, workflow, stepId, stepConfig }: RunSour
       items_new: counters.items_new + cardsToCreate.length,
       last_run_at: endedAt,
     })
+    if (cardsToCreate.length === 0) {
+      await fs.rm(runDir, { recursive: true, force: true })
+      emit({ type: 'completed', project, workflow, stepId, runId, itemsFound: items.length, itemsNew: 0 })
+      return
+    }
     await fsService.writeJsonAtomic(join(runDir, 'meta.json'), {
       ...meta, ended_at: endedAt, elapsed_ms: elapsedMs, status: 'completed',
       items_found: items.length, items_new: cardsToCreate.length,

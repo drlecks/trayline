@@ -6,7 +6,9 @@ import fs from 'fs/promises'
 import os from 'os'
 import { app } from 'electron'
 import { adapterRegistry } from '../ai-terminals/registry'
+import { ANSI_RE } from '../ai-terminals/prompt-utils'
 import { settingsStore } from './settings-store'
+import { aiOutputLog } from './ai-output-log'
 import type { WorkflowPlan } from '../../shared/workflow-plan'
 
 export interface AuthorResult {
@@ -177,13 +179,22 @@ async function generate(description: string, opts: { adapterId?: string } = {}):
     })
     const result = await session.result()
 
+    // Log all terminal output to the global AI log regardless of success/failure
+    const cleanLog = result.terminalLog.replace(ANSI_RE, '')
+    for (const line of cleanLog.split('\n')) {
+      const trimmed = line.trimEnd()
+      if (trimmed) void aiOutputLog.append('author', trimmed)
+    }
+
     if (result.exitCode !== 0) {
-      return {
+      const err: AuthorError = {
         ok: false,
         reason: 'spawn_failed',
         message: `${adapter.displayName} exited with code ${result.exitCode}`,
         raw: result.terminalLog,
       }
+      void aiOutputLog.append('author', err.message, 'error')
+      return err
     }
 
     let parsed: unknown
@@ -196,40 +207,50 @@ async function generate(description: string, opts: { adapterId?: string } = {}):
     }
 
     if (parsed === null) {
-      return {
+      const raw = typeof result.output === 'string' ? result.output : JSON.stringify(result.output)
+      const err: AuthorError = {
         ok: false,
         reason: 'invalid_json',
         message: 'The agent did not return valid JSON. Try rephrasing your description.',
-        raw: typeof result.output === 'string' ? result.output : JSON.stringify(result.output),
+        raw,
       }
+      void aiOutputLog.append('author', err.message, 'error')
+      if (raw) void aiOutputLog.append('author', `Raw output: ${raw}`, 'error')
+      return err
     }
 
     if (!isWorkflowPlan(parsed)) {
-      return {
+      const raw = JSON.stringify(parsed, null, 2)
+      const err: AuthorError = {
         ok: false,
         reason: 'invalid_plan',
         message: 'The returned JSON did not match the expected workflow plan shape.',
-        raw: JSON.stringify(parsed, null, 2),
+        raw,
       }
+      void aiOutputLog.append('author', err.message, 'error')
+      void aiOutputLog.append('author', `Raw output: ${raw}`, 'error')
+      return err
     }
 
     const placementError = validateWorkerPlacement(parsed)
     if (placementError) {
-      return {
+      const raw = JSON.stringify(parsed, null, 2)
+      const err: AuthorError = {
         ok: false,
         reason: 'invalid_plan',
         message: placementError,
-        raw: JSON.stringify(parsed, null, 2),
+        raw,
       }
+      void aiOutputLog.append('author', err.message, 'error')
+      void aiOutputLog.append('author', `Raw output: ${raw}`, 'error')
+      return err
     }
 
     return { ok: true, plan: parsed }
   } catch (err) {
-    return {
-      ok: false,
-      reason: 'unknown',
-      message: err instanceof Error ? err.message : String(err),
-    }
+    const message = err instanceof Error ? err.message : String(err)
+    void aiOutputLog.append('author', message, 'error')
+    return { ok: false, reason: 'unknown', message }
   } finally {
     // Clean up the temp working dir (best effort)
     try { await fs.rm(workingDir, { recursive: true, force: true }) } catch { /* ignore */ }

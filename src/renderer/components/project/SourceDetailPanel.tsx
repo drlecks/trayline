@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Rss, Play, Pause, RotateCcw, AlertTriangle, Trash2, XCircle } from 'lucide-react'
+import { Rss, Play, Pause, RotateCcw, AlertTriangle, Trash2, XCircle, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -215,22 +215,36 @@ function SourceStatusPill({ state }: { state: SourceState | null }) {
 
 // ── Next run countdown ────────────────────────────────────────────────────────
 
+function formatCountdown(diff: number): string {
+  if (diff < 0) return 'now'
+  if (diff < 300_000) {
+    const mins = Math.floor(diff / 60_000)
+    const secs = Math.floor((diff % 60_000) / 1000)
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+  }
+  if (diff < 3_600_000) {
+    const mins = Math.floor(diff / 60_000)
+    return `${mins} minute${mins === 1 ? '' : 's'}`
+  }
+  const hrs = Math.floor(diff / 3_600_000)
+  const mins = Math.floor((diff % 3_600_000) / 60_000)
+  return mins > 0 ? `${hrs}h ${mins}m` : `${hrs}h`
+}
+
 function NextRunCountdown({ nextRunAt }: { nextRunAt: string }) {
   const [display, setDisplay] = useState('')
 
   useEffect(() => {
     function update() {
-      const diff = Date.parse(nextRunAt) - Date.now()
-      if (diff <= 0) { setDisplay('now'); return }
-      const mins = Math.floor(diff / 60000)
-      const secs = Math.floor((diff % 60000) / 1000)
-      setDisplay(mins > 0 ? `${mins}m ${secs}s` : `${secs}s`)
+      setDisplay(formatCountdown(Date.parse(nextRunAt) - Date.now()))
     }
     update()
     const id = setInterval(update, 1000)
     return () => clearInterval(id)
   }, [nextRunAt])
 
+  if (!display) return null
+  if (display === 'now') return <span>next run <strong className="text-neutral-700 dark:text-neutral-300">now</strong></span>
   return <span>next in <strong className="text-neutral-700 dark:text-neutral-300">{display}</strong></span>
 }
 
@@ -251,8 +265,15 @@ function SourceConfigTab({
   const [loaded, setLoaded] = useState(false)
   const [saving, setSaving] = useState(false)
   const [resetting, setResetting] = useState(false)
+  const [watchDirStatus, setWatchDirStatus] = useState<'ok' | 'missing' | null>(null)
 
   const [credentials, setCredentials] = useState<CredentialSummary[]>([])
+
+  async function checkWatchDir(path: string) {
+    if (!path.trim()) { setWatchDirStatus(null); return }
+    const exists = await window.trayline.fs.dirExists(path.trim())
+    setWatchDirStatus(exists ? 'ok' : 'missing')
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -263,6 +284,10 @@ function SourceConfigTab({
       if (found) {
         const raw = found.raw as Partial<SourceStepConfig>
         setConfig(raw)
+        if (raw.channel?.type === 'file_watch') {
+          const dirPath = (raw.channel as FileWatchChannel).directory_path ?? ''
+          void checkWatchDir(dirPath)
+        }
       }
       setLoaded(true)
       void window.trayline.credential.list().then(setCredentials)
@@ -326,27 +351,29 @@ function SourceConfigTab({
 
         <div className="flex flex-col gap-1.5">
           <Label className="text-xs">Channel type</Label>
-          <select
-            value={channelType ?? ''}
-            onChange={(e) => {
-              const t = e.target.value
-              if (!t) {
-                void save({ channel: null })
-              } else if (t === 'http_get') {
-                void save({ channel: { type: 'http_get', credential_id: '', url_path: '' } })
-              } else if (t === 'imap') {
-                void save({ channel: { type: 'imap', credential_id: '', folder: 'INBOX', unseen_only: true, max_messages: 50 } })
-              } else if (t === 'file_watch') {
-                void save({ channel: { type: 'file_watch', directory_path: '', file_pattern: '*', include_subdirs: false } })
-              }
-            }}
-            className="h-8 w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-2 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-300 dark:focus:ring-neutral-700"
-          >
-            <option value="">— Select channel —</option>
-            <option value="http_get">HTTP GET</option>
-            <option value="imap">IMAP inbox</option>
-            <option value="file_watch">File watch</option>
-          </select>
+          <div className="flex gap-2 flex-wrap">
+            {([
+              { type: 'http_get', label: 'HTTP GET' },
+              { type: 'imap', label: 'IMAP inbox' },
+              { type: 'file_watch', label: 'File watch' },
+            ] as const).map(({ type: t, label }) => (
+              <button
+                key={t}
+                onClick={() => {
+                  if (t === 'http_get') {
+                    void save({ channel: { type: 'http_get', credential_id: '', url_path: '' } })
+                  } else if (t === 'imap') {
+                    void save({ channel: { type: 'imap', credential_id: '', folder: 'INBOX', unseen_only: true, max_messages: 50 } })
+                  } else if (t === 'file_watch') {
+                    void save({ channel: { type: 'file_watch', directory_path: '', file_pattern: '*', include_subdirs: false } })
+                  }
+                }}
+                className={`px-3 py-1.5 text-xs rounded-md border transition-colors ${channelType === t ? 'border-teal-400 bg-teal-50 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300' : 'border-neutral-200 dark:border-neutral-700 text-neutral-500 hover:border-neutral-300'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {config.channel?.type === 'http_get' && (
@@ -461,12 +488,23 @@ function SourceConfigTab({
           <>
             <div className="flex flex-col gap-1.5">
               <Label className="text-xs">Watch directory</Label>
-              <Input
-                defaultValue={(config.channel as FileWatchChannel).directory_path ?? ''}
-                onBlur={(e) => void save({ channel: { ...config.channel, directory_path: e.target.value } })}
-                className="h-8 text-sm font-mono"
-                placeholder="/Users/you/Dropbox/incoming"
-              />
+              <div className="relative flex items-center">
+                <Input
+                  defaultValue={(config.channel as FileWatchChannel).directory_path ?? ''}
+                  onBlur={(e) => {
+                    void save({ channel: { ...config.channel, directory_path: e.target.value } })
+                    void checkWatchDir(e.target.value)
+                  }}
+                  className="h-8 text-sm font-mono pr-7"
+                  placeholder="/Users/you/Dropbox/incoming"
+                />
+                {watchDirStatus === 'ok' && (
+                  <CheckCircle2 size={14} className="absolute right-2 text-emerald-500 pointer-events-none" />
+                )}
+                {watchDirStatus === 'missing' && (
+                  <XCircle size={14} className="absolute right-2 text-red-500 pointer-events-none" />
+                )}
+              </div>
               <p className="text-xs text-neutral-500">Absolute path to the folder to watch. A card is created for each new file that appears.</p>
             </div>
             <div className="flex items-center gap-4">
@@ -526,16 +564,54 @@ function SourceConfigTab({
         <div className="flex flex-col gap-3 rounded-md border border-neutral-200 dark:border-neutral-800 p-4">
           <div className="text-[11px] uppercase tracking-wider text-neutral-400">Deduplication</div>
 
-          <div className="flex flex-col gap-1.5">
-            <Label className="text-xs">Dedup key</Label>
-            <Input
-              defaultValue={config.dedup?.key ?? (channelType === 'file_watch' ? 'file_path' : 'message_id')}
-              onBlur={(e) => { void save({ dedup: { ...config.dedup, key: e.target.value } }) }}
-              className="h-8 text-sm font-mono"
-              placeholder={channelType === 'file_watch' ? 'file_path' : 'message_id'}
-            />
-            <p className="text-xs text-neutral-500">{channelType === 'file_watch' ? 'Field used to identify unique files — default is file_path' : 'JSON field used to identify unique emails'}</p>
-          </div>
+          {channelType === 'file_watch' && (
+            <p className="text-xs text-neutral-500">
+              Each file is processed exactly once, identified by its path. New files are always picked up automatically.
+            </p>
+          )}
+
+          {channelType === 'imap' && (
+            <>
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs">Dedup key</Label>
+                <Input
+                  defaultValue={config.dedup?.key ?? 'message_id'}
+                  onBlur={(e) => { void save({ dedup: { ...config.dedup, key: e.target.value } }) }}
+                  className="h-8 text-sm font-mono"
+                  placeholder="message_id"
+                />
+                <p className="text-xs text-neutral-500">JSON field used to identify unique emails</p>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs">First run policy</Label>
+                <select
+                  value={config.dedup?.first_run ?? 'skip_existing'}
+                  onChange={(e) => void save({ dedup: { ...config.dedup, first_run: e.target.value } })}
+                  className="h-8 w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-2 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-300 dark:focus:ring-neutral-700"
+                >
+                  <option value="skip_existing">Skip existing (no cards on first run)</option>
+                  <option value="process_all">Process all (create cards for everything)</option>
+                  <option value="process_last_n">Process last N emails</option>
+                </select>
+              </div>
+
+              {config.dedup?.first_run === 'process_last_n' && (
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs">N (last N emails on first run)</Label>
+                  <Input
+                    type="number"
+                    defaultValue={config.dedup?.first_run_n ?? 10}
+                    onBlur={(e) => {
+                      const n = parseInt(e.target.value, 10)
+                      if (!isNaN(n) && n > 0) void save({ dedup: { ...config.dedup, first_run_n: n } })
+                    }}
+                    className="h-8 text-sm"
+                  />
+                </div>
+              )}
+            </>
+          )}
 
           <div className="flex flex-col gap-1.5">
             <Label className="text-xs">Max memory</Label>
@@ -548,39 +624,15 @@ function SourceConfigTab({
               }}
               className="h-8 text-sm"
             />
-            <p className="text-xs text-neutral-500">Maximum number of message IDs to remember</p>
+            <p className="text-xs text-neutral-500">Maximum number of {channelType === 'file_watch' ? 'file paths' : 'message IDs'} to remember</p>
           </div>
-
-          <div className="flex flex-col gap-1.5">
-            <Label className="text-xs">First run policy</Label>
-            <select
-              value={config.dedup?.first_run ?? 'skip_existing'}
-              onChange={(e) => void save({ dedup: { ...config.dedup, first_run: e.target.value } })}
-              className="h-8 w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-2 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-300 dark:focus:ring-neutral-700"
-            >
-              <option value="skip_existing">Skip existing (no cards on first run)</option>
-              <option value="process_all">Process all (create cards for everything)</option>
-              <option value="process_last_n">Process last N emails</option>
-            </select>
-          </div>
-
-          {config.dedup?.first_run === 'process_last_n' && (
-            <div className="flex flex-col gap-1.5">
-              <Label className="text-xs">N (last N emails on first run)</Label>
-              <Input
-                type="number"
-                defaultValue={config.dedup?.first_run_n ?? 10}
-                onBlur={(e) => {
-                  const n = parseInt(e.target.value, 10)
-                  if (!isNaN(n) && n > 0) void save({ dedup: { ...config.dedup, first_run_n: n } })
-                }}
-                className="h-8 text-sm"
-              />
-            </div>
-          )}
 
           <div className="flex items-center justify-between pt-1">
-            <p className="text-xs text-neutral-500">Reset seen-IDs so the next run processes all emails as new.</p>
+            <p className="text-xs text-neutral-500">
+              {channelType === 'file_watch'
+                ? 'Reset seen paths so the next run reprocesses all existing files.'
+                : 'Reset seen-IDs so the next run processes all emails as new.'}
+            </p>
             <Button
               size="sm"
               variant="outline"

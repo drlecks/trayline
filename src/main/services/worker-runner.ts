@@ -1061,8 +1061,64 @@ async function openExternalTerminal(
   }
 }
 
+// ── Per-step card queue for on_ready watcher triggering ───────────────────────
+//
+// When multiple cards land in a tray's ready/ simultaneously, chokidar fires
+// one 'add' event per card in the same event-loop tick. Without a queue, all
+// calls to triggerRun start concurrently and race on nextRunId / nextCardIdForStep
+// allocation, leaving cards in limbo when a run throws before moving the card.
+//
+// enqueueForWatcher serialises runs for each worker step: cards are processed
+// one at a time, in arrival order. The async function runs synchronously to its
+// first `await`, so watcherDraining.add(key) is set before any concurrent caller
+// can re-enter — a second simultaneous call just pushes to the already-running
+// queue instead of starting a duplicate drain.
+
+const watcherQueues = new Map<string, string[]>()
+const watcherDraining = new Set<string>()
+
+function watcherStepKey(project: string, workflow: string, stepId: string): string {
+  return `${project}/${workflow}/${stepId}`
+}
+
+function enqueueForWatcher(project: string, workflow: string, stepId: string, cardId: string): void {
+  const key = watcherStepKey(project, workflow, stepId)
+  const q = watcherQueues.get(key) ?? []
+  if (!q.includes(cardId)) q.push(cardId)
+  watcherQueues.set(key, q)
+  if (!watcherDraining.has(key)) void drainWatcherQueue(project, workflow, stepId, key)
+}
+
+async function drainWatcherQueue(project: string, workflow: string, stepId: string, key: string): Promise<void> {
+  if (watcherDraining.has(key)) return
+  watcherDraining.add(key)
+  try {
+    for (;;) {
+      const q = watcherQueues.get(key)
+      if (!q || q.length === 0) break
+      const cardId = q.shift()!
+      watcherQueues.set(key, q)
+      try {
+        await triggerRun({ project, workflow, stepId, cardId })
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error(`[worker-runner] queue: run failed for ${cardId}:`, err)
+      }
+    }
+  } finally {
+    watcherDraining.delete(key)
+  }
+}
+
+function isWatcherQueueActive(project: string, workflow: string, stepId: string): boolean {
+  const key = watcherStepKey(project, workflow, stepId)
+  return watcherDraining.has(key) || (watcherQueues.get(key)?.length ?? 0) > 0
+}
+
 export const workerRunner = {
   triggerRun,
+  enqueueForWatcher,
+  isWatcherQueueActive,
   runNow,
   listRuns,
   getRun,

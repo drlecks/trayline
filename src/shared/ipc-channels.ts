@@ -140,4 +140,7 @@ export const IPC = {
     getLines: 'ai-log:get-lines',
     clear:    'ai-log:clear',
   },
+  fs: {
+    dirExists: 'fs:dir-exists',
+  },
 } as const

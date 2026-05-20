@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Send, RotateCcw, Copy, Plus, Trash2 } from 'lucide-react'
+import { Send, RotateCcw, Copy, Plus, Trash2, CheckCircle2, XCircle } from 'lucide-react'
 import { useProjectStore } from '@/stores/project-store'
 import type { StepMeta, OutletStepConfig, OutletRunMeta, OutletRunEvent, CredentialSummary, FileExportFormat, FileExportFieldMap } from '../../../shared/types'
 
@@ -83,13 +83,15 @@ export default function OutletDetailPanel({ step }: Props) {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
-      <div className="px-6 py-4 border-b border-black/[0.06] dark:border-white/[0.06] flex items-center gap-3">
-        <div className="w-8 h-8 rounded-lg bg-teal-500 flex items-center justify-center text-white">
-          <Send size={16} strokeWidth={2} />
-        </div>
-        <div>
-          <h2 className="font-semibold text-sm">{step.name}</h2>
-          <p className="text-xs text-neutral-500 dark:text-neutral-400">Outlet · {channelType === 'smtp' ? 'SMTP email' : channelType === 'http_post' ? 'HTTP POST' : 'File export'}</p>
+      <div className="px-6 py-5 border-b border-black/[0.06] dark:border-white/[0.06] shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 rounded-lg bg-teal-500 flex items-center justify-center text-white">
+            <Send size={20} strokeWidth={2} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h1 className="text-lg font-semibold tracking-tight truncate">{step.name}</h1>
+            <p className="text-[13px] text-neutral-500 dark:text-neutral-400 truncate">Outlet · {channelType === 'smtp' ? 'SMTP email' : channelType === 'http_post' ? 'HTTP POST' : 'File export'}</p>
+          </div>
         </div>
       </div>
 
@@ -296,6 +298,19 @@ function FileExportConfig({ config, saveChannel }: {
   const ch = config.channel as { type: 'file_export'; directory_path?: string; filename_template?: string; format?: FileExportFormat; append?: boolean; body_template?: string; field_map?: FileExportFieldMap[] }
   const format: FileExportFormat = ch.format ?? 'txt'
   const fieldMap: FileExportFieldMap[] = ch.field_map ?? []
+  const [dirStatus, setDirStatus] = useState<'ok' | 'missing' | null>(null)
+
+  useEffect(() => {
+    const path = ch.directory_path ?? ''
+    if (!path.trim()) return
+    void window.trayline.fs.dirExists(path.trim()).then((exists) => setDirStatus(exists ? 'ok' : 'missing'))
+  }, [ch.directory_path])
+
+  async function checkDir(path: string) {
+    if (!path.trim()) { setDirStatus(null); return }
+    const exists = await window.trayline.fs.dirExists(path.trim())
+    setDirStatus(exists ? 'ok' : 'missing')
+  }
 
   function setFieldMap(next: FileExportFieldMap[]) {
     saveChannel({ field_map: next })
@@ -305,12 +320,20 @@ function FileExportConfig({ config, saveChannel }: {
     <div className="space-y-4">
       <div>
         <label className="block text-xs font-medium mb-1.5">Output directory</label>
-        <input
-          className="w-full text-sm font-mono border border-neutral-200 dark:border-neutral-700 rounded-md px-3 py-2 bg-white dark:bg-neutral-900 focus:outline-none focus:ring-1 focus:ring-teal-500"
-          defaultValue={ch.directory_path ?? ''}
-          onBlur={(e) => saveChannel({ directory_path: e.target.value })}
-          placeholder="/Users/you/Documents/output"
-        />
+        <div className="relative flex items-center">
+          <input
+            className="w-full text-sm font-mono border border-neutral-200 dark:border-neutral-700 rounded-md px-3 py-2 pr-8 bg-white dark:bg-neutral-900 focus:outline-none focus:ring-1 focus:ring-teal-500"
+            defaultValue={ch.directory_path ?? ''}
+            onBlur={(e) => { saveChannel({ directory_path: e.target.value }); void checkDir(e.target.value) }}
+            placeholder="/Users/you/Documents/output"
+          />
+          {dirStatus === 'ok' && (
+            <CheckCircle2 size={14} className="absolute right-2.5 text-emerald-500 pointer-events-none" />
+          )}
+          {dirStatus === 'missing' && (
+            <XCircle size={14} className="absolute right-2.5 text-red-500 pointer-events-none" />
+          )}
+        </div>
         <p className="text-xs text-neutral-400 mt-1">Absolute path where files will be written. Created automatically if it doesn't exist.</p>
       </div>
 

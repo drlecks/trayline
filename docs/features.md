@@ -205,7 +205,7 @@ A first-class feature, not just a setup screen. Available whenever the user star
 - **Edit before scaffolding** (post-MVP): preview the proposed plan and tweak before files are written
 
 The workflow author understands:
-- **Source steps** (`kind: "source"`): generated when the description involves polling, monitoring, or ingesting from an external source on a schedule. The plan includes `schedule_cron`, `dedup.key`, `dedup.first_run`, and a `channel` block (`http_get` or `imap`). No AI is involved in fetching — the runner calls the channel directly. A Worker step immediately after handles AI processing of the raw data.
+- **Source steps** (`kind: "source"`): generated when the description involves polling, monitoring, or ingesting from an external source on a schedule. The plan includes `schedule_cron`, `dedup.key`, `dedup.first_run`, and a `channel` block (`http_get`, `imap`, or `file_watch`). No AI is involved in fetching — the runner calls the channel directly. A Worker step immediately after handles AI processing of the raw data.
 - **Batch workers** (`batch_mode: true`): generated when the description involves summarising or digesting many items into one output. The plan sets `batch_max` and coerces the trigger to `scheduled` or `manual`.
 
 The author prompt lives in `resources/author-prompt.md` in the app bundle.
@@ -260,7 +260,7 @@ Status states on the left rail card:
 
 Two tabs: **Config** and **Runs**.
 
-Source steps are **channel-based**. The runner calls the configured channel directly (HTTP GET or IMAP) and creates cards from the raw response. An optional **Instructions** field allows the AI adapter to shape `card.data` before the card is written — useful when you want structured fields extracted directly from the raw response rather than passing the raw text to a downstream worker.
+Source steps are **channel-based**. The runner calls the configured channel directly (HTTP GET, IMAP, or file watch) and creates cards from the raw response. An optional **Instructions** field allows the AI adapter to shape `card.data` before the card is written — useful when you want structured fields extracted directly from the raw response rather than passing the raw text to a downstream worker.
 
 **Config tab:**
 
@@ -268,6 +268,9 @@ Source steps are **channel-based**. The runner calls the configured channel dire
 ┌──────────────────────────────────────────────────────────────┐
 │  DATA CHANNEL                         [Required]             │
 │  Channel type  [HTTP GET ▼]                                  │
+│                  HTTP GET                                    │
+│                  IMAP inbox                                  │
+│                  File watch                                  │
 │                                                              │
 │  [HTTP GET selected]                                         │
 │  Credential   [GitHub API ▼]  (HTTP credentials only)        │
@@ -282,6 +285,14 @@ Source steps are **channel-based**. The runner calls the configured channel dire
 │  Folder       [INBOX]                                        │
 │  Max messages [50]    [☑] Unseen only                        │
 │  Subject contains  [______]   From contains  [______]        │
+│                                                              │
+│  [File watch selected]                                       │
+│  Directory    [/Users/alex/Desktop/invoices  ] [Browse...]   │
+│  File pattern [*.pdf          ]  (glob, leave blank for all) │
+│  [☐] Include subdirectories                                  │
+│  Cards contain: file_path, filename, extension, content,     │
+│  size_bytes, modified_at, created_at                         │
+│  No credential needed — reads the local filesystem.          │
 ├──────────────────────────────────────────────────────────────┤
 │  Name          [GitHub Issues                    ]           │
 │  Description   [Polls for new issues every hour  ]           │
@@ -289,13 +300,13 @@ Source steps are **channel-based**. The runner calls the configured channel dire
 │  Schedule      [Every hour                 ▼] [Custom...]   │
 │                cron: 0 * * * *                               │
 │                                                              │
-│  DEDUPLICATION                                               │
-│  Dedup key     [id                          ]               │
+│  DEDUPLICATION  (IMAP and File watch only)                   │
+│  Dedup key     [file_path                   ]               │
 │  Max memory    [10000                       ]               │
 │                                                              │
 │  First run     ○ Skip existing (default)                     │
 │                ○ Process all                                 │
-│                ○ Process last N  [N: ___]                    │
+│                ○ Process last N  [N: ___]  (IMAP only)       │
 ├──────────────────────────────────────────────────────────────┤
 │  INSTRUCTIONS (optional)                                     │
 │  ┌──────────────────────────────────────────────────────┐   │
@@ -442,7 +453,7 @@ Two tabs: **Config** and **Runs**.
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│  Channel type    [SMTP email]  [HTTP POST]                    │
+│  Channel type    [SMTP email]  [HTTP POST]  [File export]     │
 │                                                              │
 │  Credential      [Gmail SMTP ▼]                              │
 │  (Only SMTP credentials shown when SMTP type selected)       │
@@ -457,7 +468,23 @@ Two tabs: **Config** and **Runs**.
 │  Method     [POST ▼]                                         │
 │  Body       [{"data": {{card.data | json}}}     ]            │
 │                                                              │
+│  [File export fields]                                        │
+│  Directory      [/Users/alex/Desktop/reports  ] [Browse...]  │
+│  Filename       [report-{{card.id}}.txt        ]             │
+│  Format         [TXT ▼]  (TXT · CSV · PDF · DOCX · XLSX)    │
+│  [☐] Append to existing file  (TXT, CSV, XLSX only)          │
+│                                                              │
+│  Body template  (TXT / PDF / DOCX — free text with tokens)  │
+│  [{{card.data.summary}}                        ]             │
+│                                                              │
+│  Column map  (CSV / XLSX — add a row per column)             │
+│  Header [Date      ]  Token [{{card.data.date}}    ] [✕]    │
+│  Header [Summary   ]  Token [{{card.data.summary}} ] [✕]    │
+│  [+ Add column]                                              │
+│  No credential needed — writes to the local filesystem.      │
+│                                                              │
 │  Available tokens:                                           │
+│  {{card.id}}          — card unique ID                       │
 │  {{card.data.field}}  — specific field value                 │
 │  {{card.data}}        — full card as pretty JSON             │
 │  {{card.data | json}} — full card as compact JSON string     │
@@ -480,7 +507,7 @@ Two tabs: **Config** and **Runs**.
 |---|---|
 | Time | When the run fired |
 | Card | Card ID (truncated) |
-| Channel | smtp / http_post |
+| Channel | smtp / http_post / file_export |
 | Status | ✓ Completed / ✗ Failed + error preview |
 
 ---
