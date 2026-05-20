@@ -24,13 +24,16 @@ vi.mock('chokidar', () => ({
   },
 }))
 
-// Stub workerRunner so the watcher's triggerRun calls are observable
+// Stub workerRunner so the watcher's enqueueForWatcher calls are observable
 const triggered: Array<{ project: string; workflow: string; stepId: string; cardId: string }> = []
 vi.mock('./worker-runner', () => ({
   workerRunner: {
     triggerRun: vi.fn(async (args: { project: string; workflow: string; stepId: string; cardId: string }) => {
       triggered.push(args)
       return { runId: 'run_x' }
+    }),
+    enqueueForWatcher: vi.fn((project: string, workflow: string, stepId: string, cardId: string) => {
+      triggered.push({ project, workflow, stepId, cardId })
     }),
   },
 }))
