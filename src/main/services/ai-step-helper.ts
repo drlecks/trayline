@@ -7,7 +7,7 @@ import { join } from 'path'
 import { adapterRegistry } from '../ai-terminals/registry'
 import { adapterReadinessService } from './adapter-readiness-service'
 import { ANSI_RE } from '../ai-terminals/prompt-utils'
-import { aiOutputLog } from './ai-output-log'
+import { outputLog } from './output-log'
 import type { ProjectPermissions } from '../../shared/types'
 
 export interface AIStepResult {
@@ -59,7 +59,7 @@ export async function runAIStep(opts: {
           const clean = chunk.replace(ANSI_RE, '')
           if (clean.trim()) {
             console.log('[ai-step]', clean.trimEnd())
-            void aiOutputLog.append('ai-step', clean.trimEnd())
+            void outputLog.append('ai-step', clean.trimEnd())
           }
         }
       } catch { /* ignore */ }
@@ -70,6 +70,7 @@ export async function runAIStep(opts: {
   }
 
   if (result.exitCode !== 0) {
+    void outputLog.append('ai-step', `Step failed with exit code ${result.exitCode}`, 'error')
     const tail = result.terminalLog
       ? '\n\nAI output:\n' + result.terminalLog.replace(ANSI_RE, '').trimEnd().slice(-600)
       : ''

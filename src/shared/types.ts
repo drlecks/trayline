@@ -34,6 +34,14 @@ export interface Settings {
    * Help menu to re-trigger.
    */
   onboardingComplete: boolean
+  /**
+   * When true, Trayline registers itself as a login item so it launches
+   * automatically at OS startup. Managed via app.setLoginItemSettings() —
+   * the entry is visible in Windows Task Manager's Startup tab, macOS
+   * System Settings → Login Items, and the XDG autostart directory on Linux.
+   * Default: true.
+   */
+  launchAtLogin: boolean
 }
 
 // ── Audit log ─────────────────────────────────────────────────────────────────
@@ -190,7 +198,16 @@ export interface ImapChannel {
   from_contains?: string
 }
 
-export type SourceChannel = HttpGetChannel | ImapChannel
+export interface FileWatchChannel {
+  type: 'file_watch'
+  directory_path: string
+  /** Glob-style filename filter (e.g. "*.txt", "report_*"). Default: "*" matches all files. */
+  file_pattern?: string
+  /** When true, subdirectories are scanned recursively. Default: false. */
+  include_subdirs?: boolean
+}
+
+export type SourceChannel = HttpGetChannel | ImapChannel | FileWatchChannel
 
 // ── Outlet types ──────────────────────────────────────────────────────────────
 
@@ -210,7 +227,29 @@ export interface HttpPostChannel {
   method?: 'POST' | 'PUT' | 'PATCH'
 }
 
-export type OutletChannel = SmtpChannel | HttpPostChannel
+export type FileExportFormat = 'txt' | 'csv' | 'pdf' | 'docx' | 'xlsx'
+
+export interface FileExportFieldMap {
+  header: string
+  /** Template token resolving to the cell value, e.g. {{card.data.name}} */
+  value: string
+}
+
+export interface FileExportChannel {
+  type: 'file_export'
+  directory_path: string
+  /** Filename with optional tokens, e.g. "report_{{card.id}}.pdf" */
+  filename_template: string
+  format: FileExportFormat
+  /** Append to existing file instead of overwriting. Supported by txt, csv, xlsx. */
+  append?: boolean
+  /** Content template for txt, pdf, docx formats */
+  body_template?: string
+  /** Column definitions for csv and xlsx formats */
+  field_map?: FileExportFieldMap[]
+}
+
+export type OutletChannel = SmtpChannel | HttpPostChannel | FileExportChannel
 
 export interface OutletStepConfig {
   id: string

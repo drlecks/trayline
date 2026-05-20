@@ -338,6 +338,10 @@ const api = {
   },
   aiLog: {
     getLines: (): Promise<string[]> => ipcRenderer.invoke(IPC.aiLog.getLines),
+    clear:    (): Promise<void>     => ipcRenderer.invoke(IPC.aiLog.clear),
+  },
+  fs: {
+    dirExists: (dirPath: string): Promise<boolean> => ipcRenderer.invoke(IPC.fs.dirExists, dirPath),
   },
   platform: process.platform as NodeJS.Platform,
 }

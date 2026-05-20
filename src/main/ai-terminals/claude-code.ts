@@ -14,6 +14,7 @@ import type {
 } from './adapter'
 import { renderProcessTemplate, ANSI_RE } from './prompt-utils'
 import { Paths } from '../services/fs-service'
+import { outputLog } from '../services/output-log'
 
 async function savePromptToDisk(prompt: string, workingDir: string): Promise<void> {
   try {
@@ -122,6 +123,40 @@ class ClaudePtySession implements AISession {
                 output = JSON.parse(jsonGuess)
               } catch {
                 try { output = JSON.parse(sanitizeJsonStrings(jsonGuess)) } catch { /* keep as string */ }
+              }
+            }
+          }
+          // Unwrap Claude Code --output-format json envelope and log token usage
+          if (output && typeof output === 'object') {
+            const env = output as Record<string, unknown>
+            if (env.type === 'result') {
+              const usage = env.usage as Record<string, number> | undefined
+              const costUsd = env.cost_usd as number | undefined
+              if (usage || costUsd !== undefined) {
+                const parts: string[] = []
+                if (usage) {
+                  parts.push(`input=${usage.input_tokens ?? 0}`, `output=${usage.output_tokens ?? 0}`)
+                  if (usage.cache_read_input_tokens) parts.push(`cache_read=${usage.cache_read_input_tokens}`)
+                  if (usage.cache_creation_input_tokens) parts.push(`cache_write=${usage.cache_creation_input_tokens}`)
+                }
+                if (costUsd !== undefined) parts.push(`cost=$${costUsd.toFixed(6)}`)
+                void outputLog.append('adapter', `Token usage: ${parts.join(', ')}`)
+              }
+              const rawResult = env.result
+              if (typeof rawResult === 'string') {
+                const trimmed = rawResult.trim()
+                const inner = extractTrailingJson(trimmed)
+                if (inner) {
+                  try {
+                    output = JSON.parse(inner)
+                  } catch {
+                    try { output = JSON.parse(sanitizeJsonStrings(inner)) } catch { output = trimmed || null }
+                  }
+                } else {
+                  output = trimmed || null
+                }
+              } else {
+                output = rawResult != null ? rawResult as object : null
               }
             }
           }
@@ -458,8 +493,8 @@ export const claudeCodeAdapter: AITerminalAdapter = {
     // "filename/directory/volume label syntax is incorrect". `/s /c "<cmd>"`
     // tells cmd to use everything between the outer quotes verbatim.
     const shellArgs: string | string[] = isWin
-      ? `/s /c "claude -p${allowedToolsFlag} < "${promptFile}""`
-      : ['-c', `claude -p${allowedToolsFlag} < "${promptFile}"`]
+      ? `/s /c "claude -p --output-format json${allowedToolsFlag} < "${promptFile}""`
+      : ['-c', `claude -p --output-format json${allowedToolsFlag} < "${promptFile}"`]
 
     // Use a very wide PTY so the CLI does not soft-wrap its stdout. ConPTY on
     // Windows emits awkward last-column autowrap artifacts that split JSON

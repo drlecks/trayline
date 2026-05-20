@@ -22,7 +22,8 @@ import { notificationService } from './notification-service'
 import { auditDb } from './audit-db'
 import { IPC } from '../../shared/ipc-channels'
 import { runAIStep } from './ai-step-helper'
-import type { SourceStepConfig, SourceCounters, SeenIdsEntry, SourceRunMeta, SourceState, SourceRunEvent, HttpCredential, ImapCredential, HttpErrorDetail } from '../../shared/types'
+import { outputLog } from './output-log'
+import type { SourceStepConfig, SourceCounters, SeenIdsEntry, SourceRunMeta, SourceState, SourceRunEvent, HttpCredential, ImapCredential, HttpErrorDetail, FileWatchChannel } from '../../shared/types'
 import type { Card, CardHistoryEntry } from '../../shared/card'
 
 // ── Broadcast ─────────────────────────────────────────────────────────────────
@@ -210,11 +211,6 @@ async function runSourceInner({ project, workflow, stepId, stepConfig }: RunSour
   }
 
   const channel = stepConfig.channel
-  const credential = await credentialService.get(channel.credential_id)
-  if (!credential) {
-    await failRun({ project, workflow, stepId, runId, stateDir, runDir, startedAt, meta, error: `Credential not found: ${channel.credential_id}` })
-    return
-  }
 
   const { dir: cardOutputDir, autoForwarded, forwardedToStepId } = await resolveCardOutputDir(project, workflow, stepId)
   await fs.mkdir(cardOutputDir, { recursive: true })
@@ -222,6 +218,11 @@ async function runSourceInner({ project, workflow, stepId, stepConfig }: RunSour
 
   // ── HTTP GET: one fetch → one card (full response text as card.data.body) ──
   if (channel.type === 'http_get') {
+    const credential = await credentialService.get(channel.credential_id)
+    if (!credential) {
+      await failRun({ project, workflow, stepId, runId, stateDir, runDir, startedAt, meta, error: `Credential not found: ${channel.credential_id}` })
+      return
+    }
     const counters = await readCounters(stateDir)
     const lastRunAt = counters.last_run_at ?? ''
     let rawBody: string
@@ -297,6 +298,11 @@ async function runSourceInner({ project, workflow, stepId, stepConfig }: RunSour
 
   // ── IMAP: one card per email, deduplicated via seen-ids.json ──────────────
   if (channel.type === 'imap') {
+    const credential = await credentialService.get(channel.credential_id)
+    if (!credential) {
+      await failRun({ project, workflow, stepId, runId, stateDir, runDir, startedAt, meta, error: `Credential not found: ${channel.credential_id}` })
+      return
+    }
     const seenEntries = await readSeenIds(stateDir)
     const seenSet = new Set(seenEntries.map((e) => e.id))
     const isFirstRun = seenEntries.length === 0
@@ -391,6 +397,112 @@ async function runSourceInner({ project, workflow, stepId, stepConfig }: RunSour
       items_new: counters.items_new + cardsToCreate.length,
       last_run_at: endedAt,
     })
+    if (cardsToCreate.length === 0) {
+      await fs.rm(runDir, { recursive: true, force: true })
+      emit({ type: 'completed', project, workflow, stepId, runId, itemsFound: items.length, itemsNew: 0 })
+      return
+    }
+    await fsService.writeJsonAtomic(join(runDir, 'meta.json'), {
+      ...meta, ended_at: endedAt, elapsed_ms: elapsedMs, status: 'completed',
+      items_found: items.length, items_new: cardsToCreate.length,
+    })
+    auditDb.insert({
+      project_id: project, workflow_id: workflow, step_id: stepId, card_id: '',
+      event: 'source_run_completed', actor: 'system',
+      details_json: JSON.stringify({ run_id: runId, items_found: items.length, items_new: cardsToCreate.length, duration_ms: elapsedMs }),
+    })
+    emit({ type: 'completed', project, workflow, stepId, runId, itemsFound: items.length, itemsNew: cardsToCreate.length })
+    return
+  }
+
+  // ── File watch: one card per new file, deduplicated via file_path ─────────
+  if (channel.type === 'file_watch') {
+    const seenEntries = await readSeenIds(stateDir)
+    const seenSet = new Set(seenEntries.map((e) => e.id))
+
+    let items: Record<string, unknown>[]
+    try {
+      const { scanFiles } = await import('./file-source-channel')
+      items = (await scanFiles(channel as FileWatchChannel)) as unknown as Record<string, unknown>[]
+    } catch (err) {
+      const error = `Directory scan failed: ${err instanceof Error ? err.message : String(err)}`
+      await failRun({ project, workflow, stepId, runId, stateDir, runDir, startedAt, meta, error })
+      return
+    }
+
+    await fs.writeFile(join(runDir, 'output.json'), JSON.stringify(items.map((i) => ({ file_path: i.file_path, filename: i.filename, size_bytes: i.size_bytes })), null, 2), 'utf-8')
+
+    // file_path is always the dedup key for file_watch — not configurable.
+    // Every unseen file path is processed regardless of first-run policy.
+    const maxMemory = stepConfig.dedup?.max_memory ?? 10000
+
+    const newItems: Record<string, unknown>[] = []
+    const allIds: string[] = []
+
+    for (const item of items) {
+      const itemId = String(item['file_path'] ?? '')
+      if (!itemId) continue
+      allIds.push(itemId)
+      if (!seenSet.has(itemId)) newItems.push(item)
+    }
+
+    const cardsToCreate = newItems
+
+    for (let i = 0; i < cardsToCreate.length; i++) {
+      const item = cardsToCreate[i]
+      const itemId = String(item['file_path'] ?? '')
+      const cardId = await nextCardId(project, workflow, autoForwarded && forwardedToStepId ? forwardedToStepId : stepId, i + 1)
+
+      let cardData: object = item
+      if (stepConfig.prompt) {
+        try {
+          const projectMeta = await projectService.getProject(project)
+          const permissions = projectService.getPermissions(projectMeta)
+          const aiResult = await runAIStep({ runDir, prompt: stepConfig.prompt, prefetchedData: String(item.content ?? ''), permissions })
+          cardData = typeof aiResult.output === 'object' ? aiResult.output : { ai_output: aiResult.output }
+        } catch (err) {
+          await failRun({ project, workflow, stepId, runId, stateDir, runDir, startedAt, meta, error: `AI step failed for file ${itemId}: ${err instanceof Error ? err.message : String(err)}` })
+          return
+        }
+      }
+
+      auditDb.insert({
+        project_id: project, workflow_id: workflow, step_id: stepId, card_id: cardId,
+        event: 'source_item_new', actor: 'system',
+        details_json: JSON.stringify({ item_id: itemId, card_id: cardId, run_id: runId }),
+      })
+      const cardHistory: CardHistoryEntry[] = [{ at: now, step: stepId, event: 'created', by: 'system' }]
+      if (autoForwarded && forwardedToStepId) {
+        cardHistory.push({ at: now, step: forwardedToStepId, event: 'marked_ready', by: 'system' })
+      }
+      const card: Card = {
+        id: cardId, created_at: now, created_by: 'source', source_step: stepId,
+        data: cardData as Record<string, unknown>,
+        history: cardHistory,
+      }
+      await fsService.writeJsonAtomic(join(cardOutputDir, `${cardId}.json`), card)
+    }
+
+    const nextSeen: SeenIdsEntry[] = [
+      ...seenEntries.filter((e) => !allIds.includes(e.id)),
+      ...allIds.map((id) => ({ id, seen_at: now })),
+    ]
+    await writeSeenIdsAtomic(stateDir, pruneSeenIds(nextSeen, maxMemory))
+
+    const endedAt = new Date().toISOString()
+    const elapsedMs = Date.parse(endedAt) - Date.parse(startedAt)
+    const counters = await readCounters(stateDir)
+    await fsService.writeJsonAtomic(join(stateDir, 'counters.json'), {
+      runs_total: counters.runs_total + 1,
+      items_found: counters.items_found + items.length,
+      items_new: counters.items_new + cardsToCreate.length,
+      last_run_at: endedAt,
+    })
+    if (cardsToCreate.length === 0) {
+      await fs.rm(runDir, { recursive: true, force: true })
+      emit({ type: 'completed', project, workflow, stepId, runId, itemsFound: items.length, itemsNew: 0 })
+      return
+    }
     await fsService.writeJsonAtomic(join(runDir, 'meta.json'), {
       ...meta, ended_at: endedAt, elapsed_ms: elapsedMs, status: 'completed',
       items_found: items.length, items_new: cardsToCreate.length,
@@ -442,6 +554,7 @@ async function failRun({ project, workflow, stepId, runId, stateDir, runDir, sta
     event: 'source_run_failed', actor: 'system',
     details_json: JSON.stringify({ run_id: runId, error, duration_ms: elapsedMs }),
   })
+  void outputLog.append('source', `Run failed: ${error}`, 'error')
   emit({ type: 'failed', project, workflow, stepId, runId, error })
   notificationService.notifySourceRunFailed({ projectName: project, workflowName: workflow, error })
 }

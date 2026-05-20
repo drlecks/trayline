@@ -300,6 +300,59 @@ describe('workerRunner', () => {
     })
   })
 
+  describe('enqueueForWatcher — serial card queue', () => {
+    it('processes both cards when two arrive simultaneously, neither left in limbo', async () => {
+      const project = `queue-sim-${Date.now()}`
+      const { stepsDir } = await buildWorkflow({ name: project, trayId: '01-src', workerId: '02-worker', nextTrayId: '03-next' })
+      await seedReadyCard(stepsDir, '01-src', 'card_q_001')
+      await seedReadyCard(stepsDir, '01-src', 'card_q_002')
+
+      // Enqueue both in the same tick — simulates simultaneous chokidar 'add' events
+      workerRunner.enqueueForWatcher(project, 'wf', '02-worker', 'card_q_001')
+      workerRunner.enqueueForWatcher(project, 'wf', '02-worker', 'card_q_002')
+
+      while (workerRunner.isWatcherQueueActive(project, 'wf', '02-worker')) {
+        await new Promise(r => setImmediate(r))
+      }
+
+      // Both source cards moved out of ready/
+      expect(await pathExists(join(stepsDir, '01-src', 'cards', 'ready', 'card_q_001.json'))).toBe(false)
+      expect(await pathExists(join(stepsDir, '01-src', 'cards', 'ready', 'card_q_002.json'))).toBe(false)
+
+      // Both archived
+      expect(await pathExists(join(stepsDir, '01-src', 'cards', 'archived', 'card_q_001.json'))).toBe(true)
+      expect(await pathExists(join(stepsDir, '01-src', 'cards', 'archived', 'card_q_002.json'))).toBe(true)
+
+      // Two produced cards in next step
+      const nextPending = await fs.readdir(join(stepsDir, '03-next', 'cards', 'pending'))
+      expect(nextPending).toHaveLength(2)
+
+      // Two unique run IDs (no collision)
+      const runDirs = await fs.readdir(join(stepsDir, '02-worker', 'runs'))
+      expect(runDirs).toHaveLength(2)
+      expect(new Set(runDirs).size).toBe(2)
+    })
+
+    it('deduplicates the same card ID enqueued multiple times', async () => {
+      const project = `queue-dup-${Date.now()}`
+      const { stepsDir } = await buildWorkflow({ name: project, trayId: '01-src', workerId: '02-worker', nextTrayId: '03-next' })
+      await seedReadyCard(stepsDir, '01-src', 'card_dup_001')
+
+      // Enqueue the same card three times (e.g. chokidar re-fires)
+      workerRunner.enqueueForWatcher(project, 'wf', '02-worker', 'card_dup_001')
+      workerRunner.enqueueForWatcher(project, 'wf', '02-worker', 'card_dup_001')
+      workerRunner.enqueueForWatcher(project, 'wf', '02-worker', 'card_dup_001')
+
+      while (workerRunner.isWatcherQueueActive(project, 'wf', '02-worker')) {
+        await new Promise(r => setImmediate(r))
+      }
+
+      // Processed exactly once
+      const nextPending = await fs.readdir(join(stepsDir, '03-next', 'cards', 'pending'))
+      expect(nextPending).toHaveLength(1)
+    })
+  })
+
   it('marks orphaned running runs as interrupted', async () => {
     const project = `crash-${Date.now()}`
     const { stepsDir } = await buildWorkflow({ name: project, trayId: '01-src', workerId: '02-worker', nextTrayId: '03-next' })

@@ -222,7 +222,7 @@ Password stored in keytar as `account='password'`.
 }
 ```
 
-Source steps are **channel-based**. The runner calls the channel directly (HTTP GET or IMAP) and creates cards. Optionally, an AI prompt can shape the card data before it is written (see `prompt` field below).
+Source steps are **channel-based**. The runner calls the channel directly (HTTP GET, IMAP, or file watch) and creates cards. Optionally, an AI prompt can shape the card data before it is written (see `prompt` field below).
 
 `channel` is **required**. When `null`, the source cannot run and will fail with a configuration error.
 
@@ -249,19 +249,42 @@ Source steps are **channel-based**. The runner calls the channel directly (HTTP 
 }
 ```
 
-IMAP creates one card per email, deduplicated by `dedup.key`. `dedup` is only used for IMAP sources — omit it entirely for `http_get`.
+IMAP creates one card per email, deduplicated by `dedup.key`. `dedup` is only used for IMAP and `file_watch` sources — omit it entirely for `http_get`.
+
+**File-watch channel variant (with dedup):**
+```json
+{
+  "channel": {
+    "type": "file_watch",
+    "directory_path": "/Users/alex/Desktop/invoices",
+    "file_pattern": "*.pdf",
+    "include_subdirs": false
+  },
+  "dedup": {
+    "key": "file_path",
+    "max_memory": 10000,
+    "first_run": "skip_existing"
+  }
+}
+```
+
+`file_watch` monitors a local directory for new files. Each readable text file (≤ 10 MB) produces one card, deduplicated by its absolute `file_path` so the same file never creates two cards. Binary files and files over 10 MB are silently skipped. No credential is needed — it reads the local filesystem directly.
+
+In addition to the cron schedule, a chokidar watcher fires immediately when a new file is added to the directory, so cards appear in near-real-time without waiting for the next cron tick.
+
+**Card data shape for `file_watch`:** `{ file_path, filename, extension, content, size_bytes, modified_at, created_at }`
 
 `{{last_run_at}}` is a built-in token resolved to the ISO timestamp of the last successful run (from `state/counters.json`), or empty string on first run.
 
 | Field | Meaning |
 |---|---|
 | `kind` | Always `"source"` |
-| `channel` | Required data-source channel (`http_get` or `imap`). `null` means not yet configured. |
-| `channel.type` | `"http_get"`: fetches the URL, creates 1 card with `data.body` = full response text. `"imap"`: fetches emails, one card per email. |
+| `channel` | Required data-source channel (`http_get`, `imap`, or `file_watch`). `null` means not yet configured. |
+| `channel.type` | `"http_get"`: fetches the URL, creates 1 card with `data.body` = full response text. `"imap"`: fetches emails, one card per email. `"file_watch"`: scans a directory, one card per new file. |
 | `schedule_cron` | Standard cron expression for how often the source runs |
-| `dedup.key` | **IMAP only.** The field name in each email object used as the unique identifier. |
-| `dedup.max_memory` | **IMAP only.** Maximum number of IDs stored in `seen-ids.json`; oldest entries pruned when exceeded. |
-| `dedup.first_run` | **IMAP only.** What to do on the very first run: `skip_existing` (default), `process_all`, `process_last_n`. |
+| `dedup.key` | **IMAP / file_watch only.** The field used as the unique identifier (`message_id` for IMAP, `file_path` for file_watch). |
+| `dedup.max_memory` | **IMAP / file_watch only.** Maximum number of IDs stored in `seen-ids.json`; oldest entries pruned when exceeded. |
+| `dedup.first_run` | **IMAP / file_watch only.** What to do on the very first run: `skip_existing` (default), `process_all`, `process_last_n`. |
 | `dedup.first_run_n` | **IMAP only.** Number of most-recent emails to process when `first_run` is `"process_last_n"`. |
 | `paused` | When `true`, the cron job is not registered at launch and `source:pause` / `source:resume` toggle it |
 | `prompt` | **Optional.** If set, the AI adapter processes the raw fetched data using these instructions before `card.data` is written. For HTTP GET: `prefetchedData` = response body. For IMAP: called once per email item. If the AI returns a JSON object it becomes `card.data`; a string is stored as `{ ai_output: "..." }`. Run fails if the AI step fails. |
@@ -320,6 +343,42 @@ A Source step is always the **first** step in a workflow (`00-<slug>`). It has n
 }
 ```
 
+**File-export channel variant (no credential needed):**
+```json
+{
+  "channel": {
+    "type": "file_export",
+    "directory_path": "/Users/alex/Desktop/reports",
+    "filename_template": "report-{{card.id}}-{{card.data.date}}.txt",
+    "format": "txt",
+    "append": false,
+    "body_template": "{{card.data.summary}}"
+  }
+}
+```
+
+CSV / XLSX variant (column field map instead of body template):
+```json
+{
+  "channel": {
+    "type": "file_export",
+    "directory_path": "/Users/alex/Desktop/exports",
+    "filename_template": "results.csv",
+    "format": "csv",
+    "append": true,
+    "field_map": [
+      { "header": "Date", "token": "{{card.data.date}}" },
+      { "header": "Summary", "token": "{{card.data.summary}}" },
+      { "header": "Score", "token": "{{card.data.score}}" }
+    ]
+  }
+}
+```
+
+`file_export` writes or appends the card data to a local file — no credential required. Supported formats: `txt`, `csv`, `pdf`, `docx`, `xlsx`. Append mode is supported for `txt`, `csv`, and `xlsx`; `pdf` and `docx` always overwrite.
+
+`{{card.id}}` is supported in `filename_template` in addition to the standard `{{card.data.*}}` tokens.
+
 **Optional AI instructions:** If `"prompt"` is set, the AI adapter runs against `card.data` before the channel dispatch. If it returns a JSON object, that object replaces `card.data` for token resolution; string output is merged in as `card.data.ai_output`. The run fails if the AI step fails.
 
 ```json
@@ -328,7 +387,8 @@ A Source step is always the **first** step in a workflow (`00-<slug>`). It has n
 }
 ```
 
-**Template tokens** in `to`, `subject`, `body`, and `url_path`:
+**Template tokens** in `to`, `subject`, `body`, `url_path`, `body_template`, `filename_template`, and field map values:
+- `{{card.id}}` — the card's unique ID (useful in filenames)
 - `{{card.data.field}}` — the value of a specific field from the card's data
 - `{{card.data}}` — the full card data object as pretty-printed JSON
 - `{{card.data | json}}` — the full card data object as a compact JSON string (useful inside a JSON body)
@@ -412,13 +472,13 @@ The renderer writes `lastOpenedProject` whenever the active project changes (ope
 00-source/
 ├── step.json                  # Config (includes channel)
 ├── state/
-│   ├── seen-ids.json          # IMAP only: [{id: "...", seen_at: "ISO"}], capped at dedup.max_memory
+│   ├── seen-ids.json          # IMAP / file_watch: [{id: "...", seen_at: "ISO"}], capped at dedup.max_memory
 │   └── counters.json          # {runs_total, items_found, items_new, last_run_at}
 ├── runs/
 │   └── run_YYYY-MM-DD_NNN/
 │       ├── meta.json          # Run metadata (status, times, counts, error)
 │       ├── output.txt         # http_get: full response text
-│       └── output.json        # imap: fetched email array
+│       └── output.json        # imap / file_watch: fetched items array
 └── cards/
     ├── ready/                 # Cards created by this source run, consumed by the next step
     └── archived/              # Cards already processed downstream
@@ -428,8 +488,9 @@ The source fetches data directly via its `channel` — no AI involved. A **Worke
 
 - **`http_get`**: one run → one card. `card.data.body` holds the full response text verbatim.
 - **`imap`**: one run → one card per new email (deduplicated). `card.data` holds the email fields.
+- **`file_watch`**: one run → one card per new file (deduplicated by `file_path`). `card.data` holds `{ file_path, filename, extension, content, size_bytes, modified_at, created_at }`.
 
-#### `seen-ids.json` (IMAP only)
+#### `seen-ids.json` (IMAP and file_watch)
 
 ```json
 [

@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Send, RotateCcw, Copy } from 'lucide-react'
+import { Send, RotateCcw, Copy, Plus, Trash2, CheckCircle2, XCircle } from 'lucide-react'
 import { useProjectStore } from '@/stores/project-store'
-import type { StepMeta, OutletStepConfig, OutletRunMeta, OutletRunEvent, CredentialSummary } from '../../../shared/types'
+import type { StepMeta, OutletStepConfig, OutletRunMeta, OutletRunEvent, CredentialSummary, FileExportFormat, FileExportFieldMap } from '../../../shared/types'
 
 type Tab = 'config' | 'runs'
 
@@ -83,13 +83,15 @@ export default function OutletDetailPanel({ step }: Props) {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
-      <div className="px-6 py-4 border-b border-black/[0.06] dark:border-white/[0.06] flex items-center gap-3">
-        <div className="w-8 h-8 rounded-lg bg-teal-500 flex items-center justify-center text-white">
-          <Send size={16} strokeWidth={2} />
-        </div>
-        <div>
-          <h2 className="font-semibold text-sm">{step.name}</h2>
-          <p className="text-xs text-neutral-500 dark:text-neutral-400">Outlet · {channelType === 'smtp' ? 'SMTP email' : 'HTTP POST'}</p>
+      <div className="px-6 py-5 border-b border-black/[0.06] dark:border-white/[0.06] shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 rounded-lg bg-teal-500 flex items-center justify-center text-white">
+            <Send size={20} strokeWidth={2} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h1 className="text-lg font-semibold tracking-tight truncate">{step.name}</h1>
+            <p className="text-[13px] text-neutral-500 dark:text-neutral-400 truncate">Outlet · {channelType === 'smtp' ? 'SMTP email' : channelType === 'http_post' ? 'HTTP POST' : 'File export'}</p>
+          </div>
         </div>
       </div>
 
@@ -113,19 +115,29 @@ export default function OutletDetailPanel({ step }: Props) {
             <div>
               <label className="block text-xs font-medium mb-1.5">Channel type</label>
               <div className="flex gap-2 flex-wrap">
-                {(['smtp', 'http_post'] as const).map((t) => (
+                {([
+                  { type: 'smtp', label: 'SMTP email' },
+                  { type: 'http_post', label: 'HTTP POST' },
+                  { type: 'file_export', label: 'File export' },
+                ] as const).map(({ type: t, label }) => (
                   <button
                     key={t}
-                    onClick={() => saveChannel({ type: t, credential_id: '' })}
+                    onClick={() => {
+                      if (t === 'file_export') {
+                        saveChannel({ type: t, directory_path: '', filename_template: '{{card.id}}.txt', format: 'txt', append: false, body_template: '{{card.data}}' })
+                      } else {
+                        saveChannel({ type: t, credential_id: '' })
+                      }
+                    }}
                     className={`px-3 py-1.5 text-xs rounded-md border transition-colors ${channelType === t ? 'border-teal-400 bg-teal-50 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300' : 'border-neutral-200 dark:border-neutral-700 text-neutral-500 hover:border-neutral-300'}`}
                   >
-                    {t === 'smtp' ? 'SMTP email' : 'HTTP POST'}
+                    {label}
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Credential (smtp / http_post only) */}
+            {/* Credential (smtp / http_post only — file_export uses local filesystem) */}
             {(channelType === 'smtp' || channelType === 'http_post') && (
               <div>
                 <label className="block text-xs font-medium mb-1.5">Credential</label>
@@ -186,12 +198,18 @@ export default function OutletDetailPanel({ step }: Props) {
               </>
             )}
 
-            <div className="text-xs text-neutral-400 bg-neutral-50 dark:bg-neutral-900 rounded-md p-3 space-y-1">
-              <p className="font-medium text-neutral-500">Available tokens</p>
-              <p><code className="font-mono">{'{{card.data.field}}'}</code> — specific field value</p>
-              <p><code className="font-mono">{'{{card.data}}'}</code> — full card as pretty JSON</p>
-              <p><code className="font-mono">{'{{card.data | json}}'}</code> — full card as compact JSON string</p>
-            </div>
+            {channelType === 'file_export' && (
+              <FileExportConfig config={config} saveChannel={saveChannel} />
+            )}
+
+            {channelType !== 'file_export' && (
+              <div className="text-xs text-neutral-400 bg-neutral-50 dark:bg-neutral-900 rounded-md p-3 space-y-1">
+                <p className="font-medium text-neutral-500">Available tokens</p>
+                <p><code className="font-mono">{'{{card.data.field}}'}</code> — specific field value</p>
+                <p><code className="font-mono">{'{{card.data}}'}</code> — full card as pretty JSON</p>
+                <p><code className="font-mono">{'{{card.data | json}}'}</code> — full card as compact JSON string</p>
+              </div>
+            )}
 
             <div>
               <label className="block text-xs font-medium mb-1.5">Instructions (optional)</label>
@@ -264,6 +282,166 @@ export default function OutletDetailPanel({ step }: Props) {
             )}
           </div>
         )}
+      </div>
+    </div>
+  )
+}
+
+const APPEND_FORMATS: FileExportFormat[] = ['txt', 'csv', 'xlsx']
+const BODY_FORMATS: FileExportFormat[] = ['txt', 'pdf', 'docx']
+const FIELD_FORMATS: FileExportFormat[] = ['csv', 'xlsx']
+
+function FileExportConfig({ config, saveChannel }: {
+  config: OutletStepConfig
+  saveChannel: (patch: Record<string, unknown>) => void
+}) {
+  const ch = config.channel as { type: 'file_export'; directory_path?: string; filename_template?: string; format?: FileExportFormat; append?: boolean; body_template?: string; field_map?: FileExportFieldMap[] }
+  const format: FileExportFormat = ch.format ?? 'txt'
+  const fieldMap: FileExportFieldMap[] = ch.field_map ?? []
+  const [dirStatus, setDirStatus] = useState<'ok' | 'missing' | null>(null)
+
+  useEffect(() => {
+    const path = ch.directory_path ?? ''
+    if (!path.trim()) return
+    void window.trayline.fs.dirExists(path.trim()).then((exists) => setDirStatus(exists ? 'ok' : 'missing'))
+  }, [ch.directory_path])
+
+  async function checkDir(path: string) {
+    if (!path.trim()) { setDirStatus(null); return }
+    const exists = await window.trayline.fs.dirExists(path.trim())
+    setDirStatus(exists ? 'ok' : 'missing')
+  }
+
+  function setFieldMap(next: FileExportFieldMap[]) {
+    saveChannel({ field_map: next })
+  }
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <label className="block text-xs font-medium mb-1.5">Output directory</label>
+        <div className="relative flex items-center">
+          <input
+            className="w-full text-sm font-mono border border-neutral-200 dark:border-neutral-700 rounded-md px-3 py-2 pr-8 bg-white dark:bg-neutral-900 focus:outline-none focus:ring-1 focus:ring-teal-500"
+            defaultValue={ch.directory_path ?? ''}
+            onBlur={(e) => { saveChannel({ directory_path: e.target.value }); void checkDir(e.target.value) }}
+            placeholder="/Users/you/Documents/output"
+          />
+          {dirStatus === 'ok' && (
+            <CheckCircle2 size={14} className="absolute right-2.5 text-emerald-500 pointer-events-none" />
+          )}
+          {dirStatus === 'missing' && (
+            <XCircle size={14} className="absolute right-2.5 text-red-500 pointer-events-none" />
+          )}
+        </div>
+        <p className="text-xs text-neutral-400 mt-1">Absolute path where files will be written. Created automatically if it doesn't exist.</p>
+      </div>
+
+      <div>
+        <label className="block text-xs font-medium mb-1.5">Filename</label>
+        <input
+          className="w-full text-sm font-mono border border-neutral-200 dark:border-neutral-700 rounded-md px-3 py-2 bg-white dark:bg-neutral-900 focus:outline-none focus:ring-1 focus:ring-teal-500"
+          defaultValue={ch.filename_template ?? '{{card.id}}.txt'}
+          onBlur={(e) => saveChannel({ filename_template: e.target.value })}
+          placeholder="{{card.id}}.pdf"
+        />
+        <p className="text-xs text-neutral-400 mt-1">Supports <code className="font-mono">{'{{card.id}}'}</code> and <code className="font-mono">{'{{card.data.field}}'}</code>. Use a fixed name with append mode to build up a single file.</p>
+      </div>
+
+      <div className="flex gap-4">
+        <div className="flex-1">
+          <label className="block text-xs font-medium mb-1.5">Format</label>
+          <select
+            className="w-full text-sm border border-neutral-200 dark:border-neutral-700 rounded-md px-3 py-2 bg-white dark:bg-neutral-900 focus:outline-none focus:ring-1 focus:ring-teal-500"
+            value={format}
+            onChange={(e) => saveChannel({ format: e.target.value as FileExportFormat })}
+          >
+            <option value="txt">Plain text (.txt)</option>
+            <option value="csv">CSV (.csv)</option>
+            <option value="pdf">PDF (.pdf)</option>
+            <option value="docx">Word document (.docx)</option>
+            <option value="xlsx">Excel spreadsheet (.xlsx)</option>
+          </select>
+        </div>
+
+        {APPEND_FORMATS.includes(format) && (
+          <div className="flex flex-col justify-end pb-1">
+            <label className="flex items-center gap-2 text-xs cursor-pointer">
+              <input
+                type="checkbox"
+                checked={ch.append ?? false}
+                onChange={(e) => saveChannel({ append: e.target.checked })}
+                className="rounded"
+              />
+              Append to existing file
+            </label>
+          </div>
+        )}
+      </div>
+
+      {BODY_FORMATS.includes(format) && (
+        <div>
+          <label className="block text-xs font-medium mb-1.5">Content template</label>
+          <textarea
+            className="w-full text-sm font-mono border border-neutral-200 dark:border-neutral-700 rounded-md px-3 py-2 bg-white dark:bg-neutral-900 focus:outline-none focus:ring-1 focus:ring-teal-500 resize-y min-h-[80px]"
+            defaultValue={ch.body_template ?? '{{card.data}}'}
+            onBlur={(e) => saveChannel({ body_template: e.target.value })}
+            placeholder="{{card.data}}"
+          />
+          <p className="text-xs text-neutral-400 mt-1">The text written to the file. Use <code className="font-mono">{'{{card.data.field}}'}</code> or <code className="font-mono">{'{{card.data}}'}</code> for the full JSON.</p>
+        </div>
+      )}
+
+      {FIELD_FORMATS.includes(format) && (
+        <div>
+          <label className="block text-xs font-medium mb-1.5">Columns</label>
+          <div className="space-y-2">
+            {fieldMap.map((f, i) => (
+              <div key={i} className="flex gap-2 items-center">
+                <input
+                  className="flex-1 text-xs border border-neutral-200 dark:border-neutral-700 rounded px-2 py-1.5 bg-white dark:bg-neutral-900 focus:outline-none focus:ring-1 focus:ring-teal-500"
+                  value={f.header}
+                  placeholder="Column header"
+                  onChange={(e) => {
+                    const next = [...fieldMap]
+                    next[i] = { ...f, header: e.target.value }
+                    setFieldMap(next)
+                  }}
+                />
+                <input
+                  className="flex-1 text-xs font-mono border border-neutral-200 dark:border-neutral-700 rounded px-2 py-1.5 bg-white dark:bg-neutral-900 focus:outline-none focus:ring-1 focus:ring-teal-500"
+                  value={f.value}
+                  placeholder="{{card.data.field}}"
+                  onChange={(e) => {
+                    const next = [...fieldMap]
+                    next[i] = { ...f, value: e.target.value }
+                    setFieldMap(next)
+                  }}
+                />
+                <button
+                  onClick={() => setFieldMap(fieldMap.filter((_, j) => j !== i))}
+                  className="p-1 text-neutral-400 hover:text-red-500 transition-colors"
+                >
+                  <Trash2 size={13} strokeWidth={2} />
+                </button>
+              </div>
+            ))}
+            <button
+              onClick={() => setFieldMap([...fieldMap, { header: '', value: '' }])}
+              className="flex items-center gap-1.5 text-xs text-teal-600 dark:text-teal-400 hover:underline"
+            >
+              <Plus size={12} strokeWidth={2} /> Add column
+            </button>
+          </div>
+          <p className="text-xs text-neutral-400 mt-2">Each column maps a header name to a card data field. Rows are appended in order.</p>
+        </div>
+      )}
+
+      <div className="text-xs text-neutral-400 bg-neutral-50 dark:bg-neutral-900 rounded-md p-3 space-y-1">
+        <p className="font-medium text-neutral-500">Available tokens</p>
+        <p><code className="font-mono">{'{{card.id}}'}</code> — unique card ID (useful in filenames)</p>
+        <p><code className="font-mono">{'{{card.data.field}}'}</code> — specific field value</p>
+        <p><code className="font-mono">{'{{card.data}}'}</code> — full card as pretty JSON</p>
       </div>
     </div>
   )

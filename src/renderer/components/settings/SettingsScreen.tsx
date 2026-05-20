@@ -255,6 +255,20 @@ export default function SettingsScreen() {
         </Section>
       )}
 
+      {/* Startup */}
+      <Section title="Startup" subtitle="How Trayline behaves when you log in.">
+        <label className="flex items-center gap-3 cursor-pointer">
+          <Toggle
+            checked={settings.launchAtLogin ?? true}
+            onChange={async () => {
+              const next = await window.trayline.settings.set('launchAtLogin', !(settings.launchAtLogin ?? true))
+              setSettings(next)
+            }}
+          />
+          <span className="text-xs">Launch Trayline at system startup</span>
+        </label>
+      </Section>
+
       {/* AI Terminal */}
       <Section title="AI Terminal" subtitle="Which CLI agent runs your workers, plus the model and effort it should use.">
         <div className="flex flex-col gap-2 mb-4">
