@@ -198,7 +198,12 @@ app.whenReady().then(async () => {
     setOutletEventBroadcast(() => BrowserWindow.getAllWindows())
 
     bootstrapInfo = { dataDir: Paths.root, appVersion: app.getVersion() }
-    registerIpcHandlers(ipcMain, () => bootstrapInfo, () => void refreshTrayState())
+    registerIpcHandlers(
+      ipcMain,
+      () => bootstrapInfo,
+      () => void refreshTrayState(),
+      (enabled) => platformAdapter.setLaunchAtLogin(enabled),
+    )
     stage('registerIpcHandlers done')
 
     const win = createWindow()
@@ -221,6 +226,10 @@ app.whenReady().then(async () => {
         app.quit()
       },
     })
+
+    // Apply the persisted launch-at-login preference on every startup so the
+    // OS registration stays in sync if it was externally modified or cleared.
+    platformAdapter.setLaunchAtLogin(settingsStore.get('launchAtLogin'))
 
     await orchestrator.mountAll()
     stage('orchestrator.mountAll done')

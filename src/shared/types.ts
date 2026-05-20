@@ -34,6 +34,14 @@ export interface Settings {
    * Help menu to re-trigger.
    */
   onboardingComplete: boolean
+  /**
+   * When true, Trayline registers itself as a login item so it launches
+   * automatically at OS startup. Managed via app.setLoginItemSettings() —
+   * the entry is visible in Windows Task Manager's Startup tab, macOS
+   * System Settings → Login Items, and the XDG autostart directory on Linux.
+   * Default: true.
+   */
+  launchAtLogin: boolean
 }
 
 // ── Audit log ─────────────────────────────────────────────────────────────────
