@@ -1,6 +1,6 @@
 # Phase N11 — Adapter Simplification, Connected AI, & Project UX
 
-**Branch:** `phase/phase-n11`  
+**Branch:** `phase/phase-n11-connected-ai`  
 **Depends on:** develop (post-N10)
 
 ---
