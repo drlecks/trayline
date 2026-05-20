@@ -11,6 +11,7 @@ import { credentialService } from './credential-service'
 import { auditDb } from './audit-db'
 import { resolveTokens } from '../ai-terminals/prompt-utils'
 import { runAIStep } from './ai-step-helper'
+import { outputLog } from './output-log'
 import { IPC } from '../../shared/ipc-channels'
 import type { OutletStepConfig, OutletRunMeta, OutletRunEvent, HttpCredential, SmtpCredential } from '../../shared/types'
 import type { Card } from '../../shared/card'
@@ -278,6 +279,7 @@ async function completeWithError(
     event: 'outlet_run_failed', actor: 'system',
     details_json: JSON.stringify({ run_id: runId, error }),
   })
+  void outputLog.append('outlet', `Run failed: ${error}`, 'error')
   emitTyped(IPC.outlet.onFailed, { type: 'failed', project, workflow, stepId, runId, cardId, error })
 
   // Move card to 99-errors/pending so retryFromErrors and live-stats can see it

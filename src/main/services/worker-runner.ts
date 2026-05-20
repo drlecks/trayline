@@ -22,7 +22,7 @@ import { adapterRegistry } from '../ai-terminals/registry'
 import { adapterReadinessService } from './adapter-readiness-service'
 import { detectPermissionPrompt, permissionPromptResponse } from '../ai-terminals/claude-code'
 import { ANSI_RE } from '../ai-terminals/prompt-utils'
-import { aiOutputLog } from './ai-output-log'
+import { outputLog } from './output-log'
 import { IPC } from '../../shared/ipc-channels'
 import type { AISession } from '../ai-terminals/adapter'
 import type { Card, CardHistoryEntry } from '../../shared/card'
@@ -403,7 +403,7 @@ async function runInner(input: TriggerRunInput): Promise<TriggerRunResult> {
           const clean = chunk.replace(ANSI_RE, '')
           if (clean.trim()) {
             console.log('[worker]', clean.trimEnd())
-            void aiOutputLog.append('worker', clean.trimEnd())
+            void outputLog.append('worker', clean.trimEnd())
           }
           permissionBuffer += chunk
           if (permissionBuffer.length > 4096) permissionBuffer = permissionBuffer.slice(-4096)
@@ -527,7 +527,7 @@ async function runInner(input: TriggerRunInput): Promise<TriggerRunResult> {
         run_id: runId, exit_code: exitCode, error: runError, elapsed_ms: elapsedMs,
       }),
     })
-    void aiOutputLog.append('worker', `Run failed: ${runError ?? `exit code ${exitCode}`}`, 'error')
+    void outputLog.append('worker', `Run failed: ${runError ?? `exit code ${exitCode}`}`, 'error')
   }
 
   // 8. Move source card out of prev/ready and write produced card
@@ -743,7 +743,7 @@ async function runBatchInner(input: TriggerBatchRunInput): Promise<TriggerRunRes
           const clean = chunk.replace(ANSI_RE, '')
           if (clean.trim()) {
             console.log('[worker-batch]', clean.trimEnd())
-            void aiOutputLog.append('worker-batch', clean.trimEnd())
+            void outputLog.append('worker-batch', clean.trimEnd())
           }
           permissionBufferBatch += chunk
           if (permissionBufferBatch.length > 4096) permissionBufferBatch = permissionBufferBatch.slice(-4096)
@@ -824,7 +824,7 @@ async function runBatchInner(input: TriggerBatchRunInput): Promise<TriggerRunRes
       event: 'run_failed', actor: 'system',
       details_json: JSON.stringify({ run_id: runId, exit_code: exitCode, batch: true, card_count: sourceCards.length, error: runError, elapsed_ms: elapsedMs }),
     })
-    void aiOutputLog.append('worker-batch', `Batch run failed: ${runError ?? `exit code ${exitCode}`}`, 'error')
+    void outputLog.append('worker-batch', `Batch run failed: ${runError ?? `exit code ${exitCode}`}`, 'error')
   }
 
   if (succeeded && nextStepId && plannedNextCardId) {

@@ -17,7 +17,7 @@ import { queueService } from '../services/queue-service'
 import { notificationService } from '../services/notification-service'
 import { credentialService } from '../services/credential-service'
 import { outletRunner } from '../services/outlet-runner'
-import { aiOutputLog } from '../services/ai-output-log'
+import { outputLog } from '../services/output-log'
 import { join } from 'path'
 import os from 'os'
 import fs from 'fs/promises'
@@ -593,9 +593,9 @@ export function registerIpcHandlers(
     }
   })
 
-  // ── AI output log ─────────────────────────────────────────────────────────
-  ipcMain.handle(IPC.aiLog.getLines, () => aiOutputLog.getLines())
-  ipcMain.handle(IPC.aiLog.clear,    () => aiOutputLog.clear())
+  // ── Output log ────────────────────────────────────────────────────────────
+  ipcMain.handle(IPC.aiLog.getLines, () => outputLog.getLines())
+  ipcMain.handle(IPC.aiLog.clear,    () => outputLog.clear())
 
   // ── FS utilities ──────────────────────────────────────────────────────────
   ipcMain.handle(IPC.fs.dirExists, async (_: unknown, dirPath: string): Promise<boolean> => {
