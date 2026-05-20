@@ -74,6 +74,29 @@ Source steps use `fetchHttp` / `fetchEmails` to pre-fetch data before spawning t
 
 ---
 
+## PlatformAdapter Layer
+
+All platform-specific OS integration is isolated in `src/main/platform/`. `index.ts` calls only the `PlatformAdapter` interface — no `process.platform` switches outside this folder.
+
+```
+src/main/platform/
+├── adapter.ts      # PlatformAdapter interface, TrayState type, PlatformCallbacks type
+├── registry.ts     # getPlatformAdapter() — switches on process.platform, returns the right impl
+├── win32.ts        # Windows: notification-area tray, left-click = show window
+├── darwin.ts       # macOS: menu-bar tray, left-click = context menu (platform norm), dock-click = show window
+└── linux.ts        # Linux: DE tray, static context menu (popUpContextMenu() is unreliable across DEs)
+```
+
+Key behaviours:
+- **Close → hide.** The window's close button hides the window instead of quitting. `isQuitting` flag in `index.ts` distinguishes a real Quit (from the tray menu) from a close-button press.
+- **Single-instance enforcement.** `app.requestSingleInstanceLock()` is called before `app.whenReady()`. A duplicate instance quits immediately; the `second-instance` event fires `surfaceWindow()` on the surviving instance.
+- **Tray icon.** Created via Electron's built-in `Tray` API — no extra npm dependency. Icon path shared via `src/main/util/app-icon.ts`.
+- **Context menu.** Resume All / Stop All / Quit. Resume All and Stop All enabled/disabled state is kept in sync with the orchestrator via `updateTrayState(state: TrayState)`.
+
+**Linux caveat:** On GNOME without the AppIndicator Shell Extension the tray icon may not appear — this is a known upstream Electron / GNOME limitation. The window can still be re-opened by launching the app again (single-instance catches it and surfaces the window).
+
+---
+
 ## AI Terminal Adapter Layer
 
 Workers don't know they're talking to Claude Code specifically. They talk to an **AI Terminal Adapter** — a thin interface that wraps any CLI-based AI agent.

@@ -13,8 +13,26 @@ import { setupAutoUpdater } from './services/auto-update-service'
 import { registerIpcHandlers } from './ipc/handlers'
 import { notificationService } from './services/notification-service'
 import { dirnameFromMeta } from './util/paths'
+import { resolveAppIcon } from './util/app-icon'
+import { getPlatformAdapter } from './platform/registry'
+import type { TrayState } from './platform/adapter'
 
 const __dirname = dirnameFromMeta(import.meta.url)
+
+// ── N12-B: Single-instance lock ───────────────────────────────────────────────
+// Must be called before app.whenReady(). If another instance is already running,
+// quit this one and let the existing instance surface its window.
+const platformAdapter = getPlatformAdapter()
+const gotLock = app.requestSingleInstanceLock()
+if (!gotLock) {
+  app.quit()
+}
+app.on('second-instance', () => platformAdapter.surfaceWindow())
+
+// ── N12-C1: Close-to-tray flag ────────────────────────────────────────────────
+// When true the before-quit / close path does a real exit; when false, close
+// hides the window instead of destroying it.
+let isQuitting = false
 
 // ── Crash & startup logging ──────────────────────────────────────────────────
 // In packaged builds there's no terminal, so any failure during bootstrap
@@ -69,12 +87,17 @@ interface BootstrapInfo {
 
 let bootstrapInfo: BootstrapInfo
 
-function resolveAppIcon(): string {
-  // Packaged: icon-fill-128.png is copied via extraResources to process.resourcesPath.
-  // Dev: read straight from the project's resources/ folder (cwd = project root under `vite`).
-  const packaged = join(process.resourcesPath, 'icon-fill-128.png')
-  if (app.isPackaged) return packaged
-  return join(process.cwd(), 'resources', 'icon-fill-128.png')
+// ── N12-E2/E3: Tray state helpers ─────────────────────────────────────────────
+
+async function getTrayState(): Promise<TrayState> {
+  const mounted = orchestrator.getMountedCount()
+  const total = await orchestrator.getTotalActiveCount()
+  return { allRunning: mounted >= total && total > 0, allStopped: mounted === 0 }
+}
+
+async function refreshTrayState(): Promise<void> {
+  const state = await getTrayState()
+  platformAdapter.updateTrayState(state)
 }
 
 function createWindow() {
@@ -97,6 +120,14 @@ function createWindow() {
   win.once('ready-to-show', () => {
     stage('window ready-to-show — calling show()')
     win.show()
+  })
+
+  // N12-C2: Intercept close button — hide instead of destroy when not quitting.
+  win.on('close', (e) => {
+    if (!isQuitting) {
+      e.preventDefault()
+      platformAdapter.hideWindow()
+    }
   })
 
   // Surface renderer load failures (CSP blocks, missing files, etc.) instead
@@ -167,15 +198,44 @@ app.whenReady().then(async () => {
     setOutletEventBroadcast(() => BrowserWindow.getAllWindows())
 
     bootstrapInfo = { dataDir: Paths.root, appVersion: app.getVersion() }
-    registerIpcHandlers(ipcMain, () => bootstrapInfo)
+    registerIpcHandlers(
+      ipcMain,
+      () => bootstrapInfo,
+      () => void refreshTrayState(),
+      (enabled) => platformAdapter.setLaunchAtLogin(enabled),
+    )
     stage('registerIpcHandlers done')
 
     const win = createWindow()
     notificationService.setMainWindow(win)
     stage('createWindow returned')
 
+    // N12-G2: Wire up the platform adapter after the window exists.
+    platformAdapter.setup(win, {
+      onResumeAll: async () => {
+        await orchestrator.mountAll()
+        void refreshTrayState()
+      },
+      onStopAll: async () => {
+        await orchestrator.unmountAll()
+        void refreshTrayState()
+      },
+      // N12-C5: Real quit sets the flag so the close handler lets the window destroy.
+      onQuit: () => {
+        isQuitting = true
+        app.quit()
+      },
+    })
+
+    // Apply the persisted launch-at-login preference on every startup so the
+    // OS registration stays in sync if it was externally modified or cleared.
+    platformAdapter.setLaunchAtLogin(settingsStore.get('launchAtLogin'))
+
     await orchestrator.mountAll()
     stage('orchestrator.mountAll done')
+
+    // N12-G3: Sync tray state after initial mount.
+    void refreshTrayState()
 
     void notificationService.refreshBadgeCount()
     stage('notificationService.refreshBadgeCount called')
@@ -186,10 +246,6 @@ app.whenReady().then(async () => {
     if (theme === 'dark') nativeTheme.themeSource = 'dark'
     else if (theme === 'light') nativeTheme.themeSource = 'light'
     else nativeTheme.themeSource = 'system'
-
-    app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0) createWindow()
-    })
   } catch (err) {
     logCrash('bootstrap', err)
     dialog.showErrorBox(
@@ -200,10 +256,14 @@ app.whenReady().then(async () => {
   }
 })
 
+// N12-C3: No-op — hiding the window must not trigger a quit.
+// The real quit path is the "Quit" tray menu item (onQuit callback above).
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit()
+  /* intentionally empty — close hides to tray, not quits */
 })
 
 app.on('before-quit', () => {
+  // N12-G4: Tear down the tray icon before the process exits.
+  platformAdapter.destroy()
   void orchestrator.unmountAll()
 })

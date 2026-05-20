@@ -70,6 +70,7 @@ export async function runAIStep(opts: {
   }
 
   if (result.exitCode !== 0) {
+    void aiOutputLog.append('ai-step', `Step failed with exit code ${result.exitCode}`, 'error')
     const tail = result.terminalLog
       ? '\n\nAI output:\n' + result.terminalLog.replace(ANSI_RE, '').trimEnd().slice(-600)
       : ''

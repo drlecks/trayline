@@ -82,6 +82,15 @@ async function unmountAll(): Promise<void> {
   }
 }
 
+function getMountedCount(): number {
+  return mounted.size
+}
+
+async function getTotalActiveCount(): Promise<number> {
+  const projects = await projectService.listProjects()
+  return projects.filter((p) => p.status === 'active').length
+}
+
 export const orchestrator = {
   mountProject,
   unmountProject,
@@ -90,4 +99,6 @@ export const orchestrator = {
   isMounted,
   mountAll,
   unmountAll,
+  getMountedCount,
+  getTotalActiveCount,
 }

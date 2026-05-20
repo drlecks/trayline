@@ -14,6 +14,7 @@ const defaults: Settings = {
   notificationSettings: { enabled: true, disabledProjects: [] },
   lastOpenedProject: null,
   onboardingComplete: false,
+  launchAtLogin: true,
 }
 
 // Settings live alongside the rest of Trayline's data under
