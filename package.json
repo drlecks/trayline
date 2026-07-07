@@ -91,6 +91,7 @@
   "build": {
     "appId": "com.trayline.app",
     "productName": "Trayline",
+    "npmRebuild": false,
     "directories": {
       "output": "release"
     },
