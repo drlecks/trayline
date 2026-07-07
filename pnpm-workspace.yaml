@@ -1,0 +1,14 @@
+allowBuilds:
+  better-sqlite3: true
+  electron: true
+  esbuild: true
+  keytar: true
+  node-pty: true
+
+minimumReleaseAgeExclude:
+  - '@radix-ui/primitive@1.1.5'
+  - '@radix-ui/react-context@1.2.0'
+  - '@radix-ui/react-dialog@1.1.19'
+  - '@radix-ui/react-dismissable-layer@1.1.15'
+  - '@radix-ui/react-focus-scope@1.1.12'
+  - '@radix-ui/react-presence@1.1.7'

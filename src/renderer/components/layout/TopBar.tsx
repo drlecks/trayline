@@ -41,8 +41,8 @@ export default function TopBar({ onOpenAIConsole }: Props) {
       bg-[var(--bg)]
       app-drag
     ">
-      {/* Logo + project switcher */}
-      <div className="flex items-center gap-3 px-4">
+      {/* Logo + project switcher — extra left padding clears macOS traffic lights */}
+      <div className={`flex items-center gap-3 px-4 ${window.trayline?.platform === 'darwin' ? 'pl-[72px]' : ''}`}>
         <button
           onClick={() => setActive(null)}
           className="flex items-center gap-2 no-drag rounded-md hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors duration-150 px-1 -mx-1"
