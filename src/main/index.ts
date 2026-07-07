@@ -262,8 +262,12 @@ app.on('window-all-closed', () => {
   /* intentionally empty — close hides to tray, not quits */
 })
 
-app.on('before-quit', () => {
-  // N12-G4: Tear down the tray icon before the process exits.
+let teardownDone = false
+app.on('before-quit', (e) => {
+  if (teardownDone) return
+  e.preventDefault()
+  teardownDone = true
+  // N12-G4: Tear down the tray icon and wait for workers to stop before exiting.
   platformAdapter.destroy()
-  void orchestrator.unmountAll()
+  orchestrator.unmountAll().finally(() => app.quit())
 })
