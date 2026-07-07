@@ -110,6 +110,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Rebuild native modules for Electron
+        run: pnpm run rebuild:electron
+
       # Patch version to 1.0.<run_number> so each release is monotonic and
       # uniquely tagged on GitHub. The package.json floor stays at 1.0.0; we
       # only bump it manually for minor/major.
