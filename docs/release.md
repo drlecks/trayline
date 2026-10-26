@@ -159,3 +159,19 @@ The workflow uses `secrets.GITHUB_TOKEN` to create the GitHub Release. Make sure
 - **Mac DMG opens with "damaged" error.** That's Gatekeeper on an unsigned build. Either sign + notarize, or right-click → Open as a temporary workaround.
 - **Auto-updater stuck at 0%.** Look in `~/Documents/Trayline/app-data/startup.log` for `auto-update:` lines. Most common cause is a 404 on `latest.yml` — usually means the release isn't published yet.
 - **`better-sqlite3` ABI mismatch.** The native module needs to be rebuilt against Electron's Node ABI; `electron-builder install-app-deps` (already wired as `postinstall`) handles that. If it ever drifts, run `npm run rebuild:electron` manually.
+
+## Supply-chain hardening
+
+`release.yml` pins every action to a commit SHA (the tag is kept in a trailing comment; bump both together), runs with a read-only `GITHUB_TOKEN` except in the two jobs that publish (`create-release`, `build`), checks out without persisting credentials, and passes secrets and step outputs to scripts through `env:` rather than `${{ }}` expansion inside `run:`.
+
+Pull requests are scanned by Centurion Cloud Security (secrets, workflow security, vulnerable dependencies). Verified non-applicable advisories are suppressed, with reasons and an expiry date, in `.centurion-cloud.yml`. That file is read from the base branch, so edits take effect after merge.
+
+Known dependency advisories that need a major upgrade, tracked for a follow-up:
+
+| Package | Why it matters | Fix |
+|---|---|---|
+| `electron` 31 (EOL) | Chromium/Electron runtime advisories ship inside the app | Electron ≥ 43.7.3 |
+| `electron-builder` 24 (`app-builder-lib`, `builder-util-runtime` 9.2.4, `tar` 6) | AppImage search-path advisory affects the shipped Linux build; the rest are build-time | electron-builder ≥ 26.15 |
+| `vite` 5, `vitest` 2 (`esbuild`, `tinypool`, `@vitest/mocker`) | Dev-server / test-runner only, not shipped | vite ≥ 6.4.3, vitest ≥ 3.2.6 |
+| `zod` 3 | Memory exhaustion on oversized collections (e.g. a crafted import) | zod ≥ 4.6.6 |
+| `postcss-selector-parser` 6 (via Tailwind 3) | Build-time CSS parsing only | Tailwind 4 |

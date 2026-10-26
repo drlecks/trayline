@@ -28,7 +28,7 @@
 - **node-pty** — real PTY for spawning `claude` and other CLI agents
 - **chokidar** — file system watcher (detects new cards in trays)
 - **better-sqlite3** — local indexed cache for run history and audit log
-- **archiver / adm-zip** — zip-based project import/export (write / read)
+- **archiver / adm-zip** — zip-based project import/export (write / read). adm-zip must stay ≥ 0.6.1: earlier versions follow symlinks, keep SUID bits and allow decompression bombs when extracting the untrusted zips users import. The project name read from an imported `project.json` must be a single folder name (no `/`, `\`, `.`, `..`), otherwise import is rejected
 - **node-cron** — scheduler for workers that poll on an interval
 - **fast-glob** — folder scanning
 - **keytar** — OS keychain access (Keychain on macOS, Credential Manager on Windows, libsecret on Linux); used by the Credentials store to hold passwords for HTTP, IMAP, and SMTP credentials

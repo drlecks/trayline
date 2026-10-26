@@ -18,21 +18,27 @@ concurrency:
   group: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'release' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Read-only by default; only the jobs that publish a release get write access.
+permissions:
+  contents: read
+
 jobs:
   test:
     name: Typecheck + Tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
         with:
           version: 11.5.1
 
       - name: Setup Node
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: '22'
           cache: 'pnpm'
@@ -51,25 +57,25 @@ jobs:
     needs: test
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     outputs:
       release_version: ${{ steps.version.outputs.version }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
 
       - name: Compute version
         id: version
         run: echo "version=1.0.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
 
       - name: Create release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v1.0.${{ github.run_number }}
-          name: v1.0.${{ github.run_number }}
-          draft: false
-          prerelease: false
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: v${{ steps.version.outputs.version }}
+        run: gh release create "$TAG" --title "$TAG" --target "$GITHUB_SHA" --repo "$GITHUB_REPOSITORY"
 
   build:
     name: Build (${{ matrix.os }})
@@ -80,23 +86,28 @@ jobs:
       matrix:
         os: [windows-latest, macos-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
+    # electron-builder uploads the installers to the release (never on PRs).
+    permissions:
+      contents: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
         with:
           version: 11.5.1
 
       - name: Setup Node
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: '22'
           cache: 'pnpm'
 
       - name: Cache Electron binaries
-        uses: actions/cache@v5
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
           path: |
             ~/.cache/electron
@@ -132,8 +143,11 @@ jobs:
         id: win_signing
         if: matrix.os == 'windows-latest'
         shell: bash
+        env:
+          HAS_CSC_LINK: ${{ secrets.WIN_CSC_LINK != '' }}
+          HAS_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD != '' }}
         run: |
-          if [ -n "${{ secrets.WIN_CSC_LINK }}" ] && [ -n "${{ secrets.WIN_CSC_KEY_PASSWORD }}" ]; then
+          if [ "$HAS_CSC_LINK" = "true" ] && [ "$HAS_CSC_KEY_PASSWORD" = "true" ]; then
             echo "::notice title=Windows signing::Authenticode certificate detected — signing enabled"
             echo "signing=true" >> "$GITHUB_OUTPUT"
           else
@@ -145,15 +159,21 @@ jobs:
         id: mac_signing
         if: matrix.os == 'macos-latest'
         shell: bash
+        env:
+          HAS_CSC_LINK: ${{ secrets.CSC_LINK != '' }}
+          HAS_CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD != '' }}
+          HAS_APPLE_ID: ${{ secrets.APPLE_ID != '' }}
+          HAS_APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD != '' }}
+          HAS_APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID != '' }}
         run: |
-          if [ -n "${{ secrets.CSC_LINK }}" ] && [ -n "${{ secrets.CSC_KEY_PASSWORD }}" ]; then
+          if [ "$HAS_CSC_LINK" = "true" ] && [ "$HAS_CSC_KEY_PASSWORD" = "true" ]; then
             echo "::notice title=macOS signing::Developer ID certificate detected — signing enabled"
             echo "signing=true" >> "$GITHUB_OUTPUT"
           else
             echo "::warning title=macOS signing skipped::No CSC_LINK/CSC_KEY_PASSWORD secrets — producing UNSIGNED macOS build (Gatekeeper will block end users)"
             echo "signing=false" >> "$GITHUB_OUTPUT"
           fi
-          if [ -n "${{ secrets.APPLE_ID }}" ] && [ -n "${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}" ] && [ -n "${{ secrets.APPLE_TEAM_ID }}" ]; then
+          if [ "$HAS_APPLE_ID" = "true" ] && [ "$HAS_APPLE_APP_SPECIFIC_PASSWORD" = "true" ] && [ "$HAS_APPLE_TEAM_ID" = "true" ]; then
             echo "::notice title=macOS notarization::Apple ID + team detected — notarization enabled"
             echo "notarize=true" >> "$GITHUB_OUTPUT"
           else
@@ -167,58 +187,72 @@ jobs:
       # step `env:` block) because passing an empty CSC_LINK to electron-
       # builder makes it try to resolve the empty string as a file path and
       # crash. Setting the var only when signing is actually enabled keeps
-      # the unsigned path clean.
+      # the unsigned path clean. Secrets arrive under SECRET_* names and are
+      # never expanded into the script text itself.
       - name: Build (Windows)
         if: matrix.os == 'windows-latest'
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SIGNING: ${{ steps.win_signing.outputs.signing }}
+          PUBLISH: ${{ github.event_name == 'pull_request' && 'never' || 'always' }}
+          SECRET_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          SECRET_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
         run: |
-          if ('${{ steps.win_signing.outputs.signing }}' -eq 'true') {
-            $env:CSC_LINK = '${{ secrets.WIN_CSC_LINK }}'
-            $env:CSC_KEY_PASSWORD = '${{ secrets.WIN_CSC_KEY_PASSWORD }}'
+          if ($env:SIGNING -eq 'true') {
+            $env:CSC_LINK = $env:SECRET_CSC_LINK
+            $env:CSC_KEY_PASSWORD = $env:SECRET_CSC_KEY_PASSWORD
             $env:CSC_IDENTITY_AUTO_DISCOVERY = 'true'
           } else {
             $env:CSC_IDENTITY_AUTO_DISCOVERY = 'false'
           }
           pnpm run build
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          pnpm exec electron-builder --win --publish ${{ github.event_name == 'pull_request' && 'never' || 'always' }}
+          pnpm exec electron-builder --win --publish $env:PUBLISH
 
       - name: Build (macOS)
         if: matrix.os == 'macos-latest'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SIGNING: ${{ steps.mac_signing.outputs.signing }}
+          NOTARIZE: ${{ steps.mac_signing.outputs.notarize }}
+          PUBLISH: ${{ github.event_name == 'pull_request' && 'never' || 'always' }}
+          SECRET_CSC_LINK: ${{ secrets.CSC_LINK }}
+          SECRET_CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          SECRET_APPLE_ID: ${{ secrets.APPLE_ID }}
+          SECRET_APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          SECRET_APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          if [ "${{ steps.mac_signing.outputs.signing }}" = "true" ]; then
-            export CSC_LINK="${{ secrets.CSC_LINK }}"
-            export CSC_KEY_PASSWORD="${{ secrets.CSC_KEY_PASSWORD }}"
+          if [ "$SIGNING" = "true" ]; then
+            export CSC_LINK="$SECRET_CSC_LINK"
+            export CSC_KEY_PASSWORD="$SECRET_CSC_KEY_PASSWORD"
             export CSC_IDENTITY_AUTO_DISCOVERY=true
           else
             export CSC_IDENTITY_AUTO_DISCOVERY=false
           fi
-          if [ "${{ steps.mac_signing.outputs.notarize }}" = "true" ]; then
-            export APPLE_ID="${{ secrets.APPLE_ID }}"
-            export APPLE_APP_SPECIFIC_PASSWORD="${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}"
-            export APPLE_TEAM_ID="${{ secrets.APPLE_TEAM_ID }}"
+          if [ "$NOTARIZE" = "true" ]; then
+            export APPLE_ID="$SECRET_APPLE_ID"
+            export APPLE_APP_SPECIFIC_PASSWORD="$SECRET_APPLE_APP_SPECIFIC_PASSWORD"
+            export APPLE_TEAM_ID="$SECRET_APPLE_TEAM_ID"
           fi
           pnpm run build
-          if [ "${{ steps.mac_signing.outputs.notarize }}" = "true" ]; then
-            pnpm exec electron-builder --mac --publish ${{ github.event_name == 'pull_request' && 'never' || 'always' }} --config.mac.notarize=true
+          if [ "$NOTARIZE" = "true" ]; then
+            pnpm exec electron-builder --mac --publish "$PUBLISH" --config.mac.notarize=true
           else
-            pnpm exec electron-builder --mac --publish ${{ github.event_name == 'pull_request' && 'never' || 'always' }}
+            pnpm exec electron-builder --mac --publish "$PUBLISH"
           fi
 
       - name: Build (Linux)
         if: matrix.os == 'ubuntu-latest'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: pnpm run build && pnpm exec electron-builder --linux --publish ${{ github.event_name == 'pull_request' && 'never' || 'always' }}
+          PUBLISH: ${{ github.event_name == 'pull_request' && 'never' || 'always' }}
+        run: pnpm run build && pnpm exec electron-builder --linux --publish "$PUBLISH"
 
       # ── Always upload installer artifacts even on failure (debug aid) ──────
       - name: Upload installer artifacts
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: trayline-${{ runner.os }}-v${{ env.RELEASE_VERSION }}
           path: |

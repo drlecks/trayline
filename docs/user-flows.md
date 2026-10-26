@@ -126,7 +126,7 @@ Clicking an example fills the textbox so the user can edit before submitting.
 ## 6.9 Importing / Exporting a Project
 
 - **Export**: project menu → **Export as zip**. Bundles the project folder. Includes a `manifest.json` with version and timestamp. **Export without runs** option available.
-- **Import**: file menu → **Import project**. Opens zip, extracts to `projects/`. If the project contains suspicious content, a security review dialog is shown before committing.
+- **Import**: file menu → **Import project**. Opens zip, extracts to `projects/`. If the project contains suspicious content, a security review dialog is shown before committing. A zip whose `project.json` name is not a plain folder name (e.g. `../x`) is rejected as an invalid export.
 
 ---
 
