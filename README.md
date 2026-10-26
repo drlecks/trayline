@@ -94,14 +94,20 @@ Trayline wraps CLI AI agents (Claude Code by default) through an **AI Terminal A
 Trayline has not yet shipped a user-facing release. If you want to run it locally from source:
 
 **Prerequisites**
-- Node.js 20 or later
+- Node.js 20, 22 or 24 (LTS lines; `.nvmrc` pins 22, the version CI uses). Node 26 is rejected at install: Electron 31's installer can't extract its binary there.
+- [pnpm](https://pnpm.io) 11 (`npm i -g pnpm@11`, or `corepack enable`)
 - A working installation of [Claude Code](https://claude.ai/code) (or another supported CLI agent) on your `PATH`
+- **Linux only:** a C/C++ toolchain and libsecret headers to build the native modules (`better-sqlite3`, `keytar`, `node-pty`). On Debian/Ubuntu:
+  ```bash
+  sudo apt install build-essential python3 pkg-config libsecret-1-dev
+  ```
+  Storing credentials needs a running Secret Service (GNOME Keyring or KWallet), which every mainstream desktop provides.
 
 ```bash
 git clone https://github.com/drlecks/trayline.git
 cd trayline
-npm install
-npm run dev
+pnpm install
+pnpm dev
 ```
 
 The app will open. On first launch it creates `~/Documents/Trayline/` and seeds the system skills. Everything else is self-contained.
@@ -109,16 +115,16 @@ The app will open. On first launch it creates `~/Documents/Trayline/` and seeds 
 **Build for your platform**
 
 ```bash
-npm run build          # compile TypeScript + Vite
-npm run dist:mac       # macOS (universal binary)
-npm run dist:win       # Windows (NSIS installer)
-npm run dist:linux     # Linux (AppImage)
+pnpm build             # compile TypeScript + Vite
+pnpm dist:mac          # macOS (universal binary)
+pnpm dist:win          # Windows (NSIS installer)
+pnpm dist:linux        # Linux (AppImage)
 ```
 
 **Run tests**
 
 ```bash
-npm test               # unit tests (mock AI adapter, no real CLI required)
+pnpm test              # unit tests (mock AI adapter, no real CLI required)
 ```
 
 ---

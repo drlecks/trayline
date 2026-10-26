@@ -78,7 +78,7 @@ export interface PlatformCallbacks {
 
 **macOS extra:** `app.on('activate')` (dock icon click) must also call `surfaceWindow()`.
 
-**Linux caveat:** On GNOME without the AppIndicator Shell Extension, the tray icon may not appear. This is a known upstream limitation. The window can still be re-opened by launching the app again (single-instance catches it and surfaces the window).
+**Linux caveat:** On GNOME without the AppIndicator Shell Extension, the tray icon may not appear. This is a known upstream limitation. To keep the app reachable, close minimizes instead of hiding on Linux and Ctrl+Q quits; launching the app again also surfaces the window (single-instance catches it).
 
 ---
 

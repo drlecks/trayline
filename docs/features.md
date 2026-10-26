@@ -626,6 +626,10 @@ Pressing the window's **×** close button hides the window instead of destroying
 
 To truly quit, the user must choose **Quit** from the tray context menu.
 
+**Linux:** the close button *minimizes* the window instead of hiding it, and **Ctrl+Q** quits. Stock GNOME shows no tray icon without the AppIndicator extension (and Electron can't detect whether a tray host exists), so a hidden window would leave the app running with no way to reach or quit it. A minimized window stays in the taskbar/dock on every desktop, and Ctrl+Q is the Quit path that doesn't depend on the tray.
+
+**Launch at login on Linux** is an XDG autostart entry (`~/.config/autostart/trayline.desktop`, honouring `$XDG_CONFIG_HOME`) pointing at the `.AppImage` file — Electron's `app.setLoginItemSettings()` is a no-op on Linux. Only packaged builds write it.
+
 ### System tray icon
 
 A tray icon is present whenever the app is running:

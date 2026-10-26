@@ -5,7 +5,7 @@
 ## Shell & Runtime
 
 - **Electron** — desktop wrapper; native file system, subprocess, OS notifications
-- **Node.js 20+** — main process
+- **Node.js 20 / 22 / 24** — main process (enforced by `engines` + `engineStrict`; Electron 31's installer can't extract on Node 26)
 - **TypeScript** — across both processes (main + renderer)
 - **Vite** — renderer build tool
 
@@ -100,7 +100,11 @@ Key behaviours:
 - **Tray icon.** Created via Electron's built-in `Tray` API — no extra npm dependency. Icon path shared via `src/main/util/app-icon.ts`.
 - **Context menu.** Resume All / Stop All / Quit. Resume All and Stop All enabled/disabled state is kept in sync with the orchestrator via `updateTrayState(state: TrayState)`.
 
-**Linux caveat:** On GNOME without the AppIndicator Shell Extension the tray icon may not appear — this is a known upstream Electron / GNOME limitation. The window can still be re-opened by launching the app again (single-instance catches it and surfaces the window).
+**Linux caveat:** On GNOME without the AppIndicator Shell Extension the tray icon may not appear — this is a known upstream Electron / GNOME limitation. So on Linux, close *minimizes* instead of hiding (the window stays reachable from the taskbar/dock) and **Ctrl+Q** quits without the tray menu. Launching the app again also surfaces the window (single-instance).
+
+**Linux launch at login:** `app.setLoginItemSettings()` is a no-op on Linux, so `linux.ts` writes an XDG autostart entry via `linux-autostart.ts` (`$XDG_CONFIG_HOME/autostart/trayline.desktop`, `Exec` = the `$APPIMAGE` path). Packaged builds only.
+
+**Packaging with pnpm:** `pnpm-workspace.yaml` sets `nodeLinker: hoisted`. electron-builder 24 doesn't follow pnpm's symlinked `node_modules` when packing `app.asar`, so with the default linker transitive dependencies (e.g. `electron-store` → `conf`) were missing and packaged builds crashed on launch.
 
 ---
 

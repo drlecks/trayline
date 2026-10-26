@@ -1,3 +1,12 @@
+# Fail install on unsupported Node versions instead of leaving a broken
+# Electron download behind (Electron 31's installer can't extract on Node 26).
+engineStrict: true
+
+# electron-builder 24 doesn't follow pnpm's symlinked node_modules when it
+# packs app.asar, so transitive deps (e.g. electron-store -> conf) were left out
+# and packaged builds crashed on launch. A flat, npm-style layout fixes that.
+nodeLinker: hoisted
+
 allowBuilds:
   better-sqlite3: true
   electron: true
