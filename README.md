@@ -94,7 +94,7 @@ Trayline wraps CLI AI agents (Claude Code by default) through an **AI Terminal A
 Trayline has not yet shipped a user-facing release. If you want to run it locally from source:
 
 **Prerequisites**
-- Node.js 20, 22 or 24 (LTS lines; `.nvmrc` pins 22, the version CI uses). Node 26 is rejected at install: Electron 31's installer can't extract its binary there.
+- Node.js 22.12+, 24 or 26 (`.nvmrc` pins 22, the version CI uses). Electron and `@electron/rebuild` need 22.12 or newer.
 - [pnpm](https://pnpm.io) 11 (`npm i -g pnpm@11`, or `corepack enable`)
 - A working installation of [Claude Code](https://claude.ai/code) (or another supported CLI agent) on your `PATH`
 - **Linux only:** a C/C++ toolchain and libsecret headers to build the native modules (`better-sqlite3`, `keytar`, `node-pty`). On Debian/Ubuntu:

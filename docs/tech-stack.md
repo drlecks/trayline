@@ -5,7 +5,7 @@
 ## Shell & Runtime
 
 - **Electron** — desktop wrapper; native file system, subprocess, OS notifications
-- **Node.js 20 / 22 / 24** — main process (enforced by `engines` + `engineStrict`; Electron 31's installer can't extract on Node 26)
+- **Node.js 22.12+ / 24 / 26** — main process (enforced by `engines` + `engineStrict`; Electron and `@electron/rebuild` need 22.12+)
 - **TypeScript** — across both processes (main + renderer)
 - **Vite** — renderer build tool
 
@@ -104,7 +104,7 @@ Key behaviours:
 
 **Linux launch at login:** `app.setLoginItemSettings()` is a no-op on Linux, so `linux.ts` writes an XDG autostart entry via `linux-autostart.ts` (`$XDG_CONFIG_HOME/autostart/trayline.desktop`, `Exec` = the `$APPIMAGE` path). Packaged builds only.
 
-**Packaging with pnpm:** `pnpm-workspace.yaml` sets `nodeLinker: hoisted`. electron-builder 24 doesn't follow pnpm's symlinked `node_modules` when packing `app.asar`, so with the default linker transitive dependencies (e.g. `electron-store` → `conf`) were missing and packaged builds crashed on launch.
+**Packaging with pnpm:** `pnpm-workspace.yaml` sets `nodeLinker: hoisted`. electron-builder (seen with v24) doesn't follow pnpm's symlinked `node_modules` when packing `app.asar`, so with the default linker transitive dependencies (e.g. `electron-store` → `conf`) were missing and packaged builds crashed on launch.
 
 ---
 

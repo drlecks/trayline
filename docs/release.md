@@ -99,7 +99,7 @@ When all three are set, the workflow passes `--config.mac.notarize=true` to elec
 
 Linux AppImages are unsigned by convention. No secrets required.
 
-The AppImage only contains every runtime dependency because `pnpm-workspace.yaml` sets `nodeLinker: hoisted` — with pnpm's default symlinked layout electron-builder 24 drops transitive deps (e.g. `conf`) and the packaged app crashes on launch. This applies to the DMG and NSIS builds too.
+The AppImage only contains every runtime dependency because `pnpm-workspace.yaml` sets `nodeLinker: hoisted` — with pnpm's default symlinked layout electron-builder (seen with v24) drops transitive deps (e.g. `conf`) and the packaged app crashes on launch. This applies to the DMG and NSIS builds too.
 
 ---
 
