@@ -41,7 +41,7 @@ Each phase in `docs/implementation/` has its own file with detailed tasks and ac
 
 ## Tech Stack (Quick Reference)
 
-- **Electron** + **Node.js 20+** + **TypeScript** (main process)
+- **Electron** + **Node.js 22.12+** + **TypeScript** (main process)
 - **React 18** + **Vite** + **Tailwind CSS** + **shadcn/ui** (renderer)
 - **node-pty** — spawning AI CLI agents | **chokidar** — file watching | **better-sqlite3** — audit log
 - **keytar** — OS keychain for MCP credentials | **node-cron** — scheduler | **xterm.js** — terminal
