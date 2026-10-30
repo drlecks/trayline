@@ -122,15 +122,16 @@ jobs:
             ~\AppData\Local\electron-builder\Cache
           key: electron-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
-      # 22.04's default gcc 11 can't compile Electron 44's V8 headers (native
-      # modules need gcc >= 12.2); gcc 12 is in jammy's own repos.
-      - name: Use gcc 12 (Linux)
+      # 22.04's gcc 11 and gcc 12 both reject Electron 44's V8 headers
+      # ([[deprecated]] followed by __attribute__ on a class head); gcc 13+
+      # isn't in jammy. clang 15 is, and it's what Electron itself builds with.
+      - name: Use clang 15 (Linux)
         if: matrix.os == 'ubuntu-22.04'
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y -q gcc-12 g++-12
-          echo "CC=gcc-12" >> "$GITHUB_ENV"
-          echo "CXX=g++-12" >> "$GITHUB_ENV"
+          sudo apt-get install -y -q clang-15
+          echo "CC=clang-15" >> "$GITHUB_ENV"
+          echo "CXX=clang++-15" >> "$GITHUB_ENV"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
