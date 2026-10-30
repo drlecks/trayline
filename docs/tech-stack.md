@@ -5,7 +5,7 @@
 ## Shell & Runtime
 
 - **Electron** — desktop wrapper; native file system, subprocess, OS notifications
-- **Node.js 20+** — main process
+- **Node.js 22.12+ / 24 / 26** — main process (enforced by `engines` + `engineStrict`; Electron and `@electron/rebuild` need 22.12+)
 - **TypeScript** — across both processes (main + renderer)
 - **Vite** — renderer build tool
 
@@ -28,7 +28,7 @@
 - **node-pty** — real PTY for spawning `claude` and other CLI agents
 - **chokidar** — file system watcher (detects new cards in trays)
 - **better-sqlite3** — local indexed cache for run history and audit log
-- **archiver / adm-zip** — zip-based project import/export (write / read)
+- **archiver / adm-zip** — zip-based project import/export (write / read). adm-zip must stay ≥ 0.6.1: earlier versions follow symlinks, keep SUID bits and allow decompression bombs when extracting the untrusted zips users import. The project name read from an imported `project.json` must be a single folder name (no `/`, `\`, `.`, `..`), otherwise import is rejected
 - **node-cron** — scheduler for workers that poll on an interval
 - **fast-glob** — folder scanning
 - **keytar** — OS keychain access (Keychain on macOS, Credential Manager on Windows, libsecret on Linux); used by the Credentials store to hold passwords for HTTP, IMAP, and SMTP credentials
@@ -100,7 +100,11 @@ Key behaviours:
 - **Tray icon.** Created via Electron's built-in `Tray` API — no extra npm dependency. Icon path shared via `src/main/util/app-icon.ts`.
 - **Context menu.** Resume All / Stop All / Quit. Resume All and Stop All enabled/disabled state is kept in sync with the orchestrator via `updateTrayState(state: TrayState)`.
 
-**Linux caveat:** On GNOME without the AppIndicator Shell Extension the tray icon may not appear — this is a known upstream Electron / GNOME limitation. The window can still be re-opened by launching the app again (single-instance catches it and surfaces the window).
+**Linux caveat:** On GNOME without the AppIndicator Shell Extension the tray icon may not appear — this is a known upstream Electron / GNOME limitation. So on Linux, close *minimizes* instead of hiding (the window stays reachable from the taskbar/dock) and **Ctrl+Q** quits without the tray menu. Launching the app again also surfaces the window (single-instance).
+
+**Linux launch at login:** `app.setLoginItemSettings()` is a no-op on Linux, so `linux.ts` writes an XDG autostart entry via `linux-autostart.ts` (`$XDG_CONFIG_HOME/autostart/trayline.desktop`, `Exec` = the `$APPIMAGE` path). Packaged builds only.
+
+**Packaging with pnpm:** `pnpm-workspace.yaml` sets `nodeLinker: hoisted`. electron-builder (seen with v24) doesn't follow pnpm's symlinked `node_modules` when packing `app.asar`, so with the default linker transitive dependencies (e.g. `electron-store` → `conf`) were missing and packaged builds crashed on launch.
 
 ---
 

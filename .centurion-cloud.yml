@@ -1,0 +1,16 @@
+# Centurion Cloud Security settings — https://cloud.trycenturion.com/docs/configuration
+# Read from the base branch: changes here apply to pull requests opened after merge.
+version: 1
+
+# Only advisories verified not to apply to Trayline. Everything else stays visible
+# until it is fixed (see docs/release.md for the remaining dependency upgrades).
+suppressions:
+  - rule: GHSA-w5hq-g745-h8pq
+    reason: uuid@8 via exceljs only calls v4() without a buffer; the advisory needs v3/v5/v6 with buf.
+    expires: 2027-04-30
+  - rule: GHSA-7pqw-9j4j-h8q3
+    reason: extract-zip only unpacks Electron's checksum-verified release zip at install time; not shipped.
+    expires: 2027-04-30
+  - rule: GHSA-jmr9-qjv8-65gv
+    reason: extract-zip only unpacks Electron's checksum-verified release zip at install time; not shipped.
+    expires: 2027-04-30

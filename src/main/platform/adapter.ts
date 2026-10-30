@@ -39,7 +39,7 @@ export interface PlatformAdapter {
    * Register or unregister the app as an OS login item so it launches at
    * startup. Uses Electron's app.setLoginItemSettings() — the entry appears
    * in Windows Task Manager's Startup tab, macOS Login Items, and Linux XDG
-   * autostart. openAsHidden is set so the app starts in the background.
+   * autostart.
    */
   setLaunchAtLogin(enabled: boolean): void
 }
