@@ -84,7 +84,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
+        # Linux builds on the oldest supported Ubuntu: node-pty is compiled from
+        # source, so the AppImage needs at least the build host's glibc.
+        # ubuntu-latest (glibc 2.42) produced an AppImage that crashed on
+        # Debian 13 / Ubuntu 24.04; 22.04 (glibc 2.35) runs on both.
+        os: [windows-latest, macos-latest, ubuntu-22.04]
     runs-on: ${{ matrix.os }}
     # electron-builder uploads the installers to the release (never on PRs).
     permissions:
@@ -243,7 +247,7 @@ jobs:
           fi
 
       - name: Build (Linux)
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-22.04'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PUBLISH: ${{ github.event_name == 'pull_request' && 'never' || 'always' }}

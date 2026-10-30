@@ -18,7 +18,7 @@ This doc describes the CI release pipeline, versioning, signing, and notarizatio
 ```
 test (ubuntu)          ← npm ci, typecheck, vitest
   │
-  └── build (matrix)   ← windows-latest, macos-latest, ubuntu-latest
+  └── build (matrix)   ← windows-latest, macos-latest, ubuntu-22.04 (oldest glibc → AppImage runs on more distros)
         │
         └── publish    ← electron-builder --publish always → GitHub Releases
 ```
