@@ -7,7 +7,7 @@ import { CopyButton } from '@/components/ui/copy-button'
 import SchedulePicker from '@/components/shared/SchedulePicker'
 import { useProjectStore } from '@/stores/project-store'
 import { useProviderGuard } from '@/stores/provider-guard-store'
-import type { StepMeta, SourceState, SourceRunMeta, SourceRunEvent, SourceStepConfig, CredentialSummary, FileWatchChannel } from '../../../shared/types'
+import type { StepMeta, SourceState, SourceRunMeta, SourceRunEvent, SourceStepConfig, CredentialSummary, FileWatchChannel, AiPromptChannel } from '../../../shared/types'
 
 type Tab = 'config' | 'runs'
 
@@ -124,7 +124,7 @@ export default function SourceDetailPanel({ step }: SourceDetailPanelProps) {
           <div className="mt-3 flex gap-6 text-[12px] text-neutral-500 dark:text-neutral-400">
             <span><strong className="text-neutral-700 dark:text-neutral-300">{sourceState.counters.runs_total}</strong> runs</span>
             <span><strong className="text-neutral-700 dark:text-neutral-300">{sourceState.counters.items_new}</strong> cards created</span>
-            {(['imap', 'file_watch'] as const).includes((step.raw as { channel?: { type?: string } }).channel?.type as 'imap' | 'file_watch') && (
+            {(['imap', 'file_watch', 'ai_prompt'] as const).includes((step.raw as { channel?: { type?: string } }).channel?.type as 'imap' | 'file_watch' | 'ai_prompt') && (
               <span><strong className="text-neutral-700 dark:text-neutral-300">{sourceState.seenCount}</strong> seen</span>
             )}
             {sourceState.nextRunAt && !sourceState.paused && (
@@ -356,6 +356,7 @@ function SourceConfigTab({
               { type: 'http_get', label: 'HTTP GET' },
               { type: 'imap', label: 'IMAP inbox' },
               { type: 'file_watch', label: 'File watch' },
+              { type: 'ai_prompt', label: 'AI prompt' },
             ] as const).map(({ type: t, label }) => (
               <button
                 key={t}
@@ -366,6 +367,12 @@ function SourceConfigTab({
                     void save({ channel: { type: 'imap', credential_id: '', folder: 'INBOX', unseen_only: true, max_messages: 50 } })
                   } else if (t === 'file_watch') {
                     void save({ channel: { type: 'file_watch', directory_path: '', file_pattern: '*', include_subdirs: false } })
+                  } else if (t === 'ai_prompt') {
+                    void save({
+                      channel: { type: 'ai_prompt', prompt: '', timeout_seconds: 300 },
+                      dedup: { key: 'id', max_memory: 10000, first_run: 'process_all' },
+                      ...(config.schedule_cron === '0 * * * *' || !config.schedule_cron ? { schedule_cron: '0 9 * * *' } : {}),
+                    })
                   }
                 }}
                 className={`px-3 py-1.5 text-xs rounded-md border transition-colors ${channelType === t ? 'border-teal-400 bg-teal-50 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300' : 'border-neutral-200 dark:border-neutral-700 text-neutral-500 hover:border-neutral-300'}`}
@@ -534,6 +541,42 @@ function SourceConfigTab({
             </p>
           </>
         )}
+
+        {config.channel?.type === 'ai_prompt' && (
+          <>
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs">What should the AI find?</Label>
+              <textarea
+                defaultValue={(config.channel as AiPromptChannel).prompt ?? ''}
+                onBlur={(e) => {
+                  const v = e.target.value
+                  if (v !== (config.channel as AiPromptChannel).prompt) void save({ channel: { ...config.channel, prompt: v } })
+                }}
+                rows={5}
+                className="w-full text-sm rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-neutral-300 dark:focus:ring-neutral-700 resize-none font-normal"
+                placeholder="e.g. Find new public tenders for office cleaning in Madrid published since the previous run. For each, give id (the tender reference), title, buyer, deadline and url."
+              />
+              <p className="text-xs text-neutral-500">
+                On every scheduled run the AI answers this prompt with a list. Each item in the list becomes one card in the next step. If the AI needs to browse the web, allow network access in the project&apos;s permissions.
+              </p>
+            </div>
+            <div className="flex flex-col gap-1.5 w-40">
+              <Label className="text-xs">Time limit (seconds)</Label>
+              <Input
+                type="number"
+                defaultValue={(config.channel as AiPromptChannel).timeout_seconds ?? 300}
+                onBlur={(e) => {
+                  const n = parseInt(e.target.value, 10)
+                  if (!isNaN(n) && n > 0) void save({ channel: { ...config.channel, timeout_seconds: n } })
+                }}
+                className="h-8 text-sm"
+              />
+            </div>
+            <p className="text-xs text-neutral-500">
+              Every run uses AI credits, so pick a schedule that matches how often new results actually appear.
+            </p>
+          </>
+        )}
       </div>
 
       <div className="flex flex-col gap-1.5">
@@ -560,7 +603,7 @@ function SourceConfigTab({
         onChange={(cron) => void save({ schedule_cron: cron })}
       />
 
-      {(channelType === 'imap' || channelType === 'file_watch') && (
+      {(channelType === 'imap' || channelType === 'file_watch' || channelType === 'ai_prompt') && (
         <div className="flex flex-col gap-3 rounded-md border border-neutral-200 dark:border-neutral-800 p-4">
           <div className="text-[11px] uppercase tracking-wider text-neutral-400">Deduplication</div>
 
@@ -570,35 +613,39 @@ function SourceConfigTab({
             </p>
           )}
 
-          {channelType === 'imap' && (
+          {(channelType === 'imap' || channelType === 'ai_prompt') && (
             <>
               <div className="flex flex-col gap-1.5">
                 <Label className="text-xs">Dedup key</Label>
                 <Input
-                  defaultValue={config.dedup?.key ?? 'message_id'}
+                  defaultValue={config.dedup?.key ?? (channelType === 'ai_prompt' ? 'id' : 'message_id')}
                   onBlur={(e) => { void save({ dedup: { ...config.dedup, key: e.target.value } }) }}
                   className="h-8 text-sm font-mono"
-                  placeholder="message_id"
+                  placeholder={channelType === 'ai_prompt' ? 'id' : 'message_id'}
                 />
-                <p className="text-xs text-neutral-500">JSON field used to identify unique emails</p>
+                <p className="text-xs text-neutral-500">
+                  {channelType === 'ai_prompt'
+                    ? 'Field the AI is asked to fill with a unique value per item. Items without it are matched by their full content.'
+                    : 'JSON field used to identify unique emails'}
+                </p>
               </div>
 
               <div className="flex flex-col gap-1.5">
                 <Label className="text-xs">First run policy</Label>
                 <select
-                  value={config.dedup?.first_run ?? 'skip_existing'}
+                  value={config.dedup?.first_run ?? (channelType === 'ai_prompt' ? 'process_all' : 'skip_existing')}
                   onChange={(e) => void save({ dedup: { ...config.dedup, first_run: e.target.value } })}
                   className="h-8 w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-2 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-300 dark:focus:ring-neutral-700"
                 >
                   <option value="skip_existing">Skip existing (no cards on first run)</option>
                   <option value="process_all">Process all (create cards for everything)</option>
-                  <option value="process_last_n">Process last N emails</option>
+                  <option value="process_last_n">Process last N {channelType === 'ai_prompt' ? 'items' : 'emails'}</option>
                 </select>
               </div>
 
               {config.dedup?.first_run === 'process_last_n' && (
                 <div className="flex flex-col gap-1.5">
-                  <Label className="text-xs">N (last N emails on first run)</Label>
+                  <Label className="text-xs">N (last N {channelType === 'ai_prompt' ? 'items' : 'emails'} on first run)</Label>
                   <Input
                     type="number"
                     defaultValue={config.dedup?.first_run_n ?? 10}
@@ -624,14 +671,16 @@ function SourceConfigTab({
               }}
               className="h-8 text-sm"
             />
-            <p className="text-xs text-neutral-500">Maximum number of {channelType === 'file_watch' ? 'file paths' : 'message IDs'} to remember</p>
+            <p className="text-xs text-neutral-500">Maximum number of {channelType === 'file_watch' ? 'file paths' : channelType === 'ai_prompt' ? 'item IDs' : 'message IDs'} to remember</p>
           </div>
 
           <div className="flex items-center justify-between pt-1">
             <p className="text-xs text-neutral-500">
               {channelType === 'file_watch'
                 ? 'Reset seen paths so the next run reprocesses all existing files.'
-                : 'Reset seen-IDs so the next run processes all emails as new.'}
+                : channelType === 'ai_prompt'
+                  ? 'Reset seen-IDs so items the AI already delivered can become cards again.'
+                  : 'Reset seen-IDs so the next run processes all emails as new.'}
             </p>
             <Button
               size="sm"
@@ -655,6 +704,7 @@ function SourceConfigTab({
         </div>
       )}
 
+      {channelType !== 'ai_prompt' && (
       <div className="flex flex-col gap-1.5">
         <Label className="text-xs">Instructions (optional)</Label>
         <textarea
@@ -669,6 +719,7 @@ function SourceConfigTab({
         />
         <p className="text-xs text-neutral-500">If set, the AI will parse the raw fetched data using these instructions before creating the card.</p>
       </div>
+      )}
 
       <div className="flex items-center justify-between pt-2">
         <Button size="sm" variant="ghost" onClick={handleDelete} disabled={saving} className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/40">
