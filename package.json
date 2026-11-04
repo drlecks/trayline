@@ -57,7 +57,7 @@
     "fast-glob": "3.3.3",
     "imapflow": "2.5.5",
     "keytar": "7.9.0",
-    "lucide-react": "0.469.0",
+    "lucide-react": "1.66.0",
     "node-cron": "4.6.0",
     "node-pty": "1.1.0",
     "nodemailer": "10.1.7",
