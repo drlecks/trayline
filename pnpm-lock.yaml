@@ -102,8 +102,8 @@ importers:
         specifier: 3.3.3
         version: 3.3.3
       imapflow:
-        specifier: 2.5.5
-        version: 2.5.5
+        specifier: 2.10.0
+        version: 2.10.0
       keytar:
         specifier: 7.9.0
         version: 7.9.0
@@ -1202,8 +1202,9 @@ packages:
   '@xterm/xterm@5.5.0':
     resolution: {integrity: sha512-hqJHYaQb5OptNunnyAnkHyM8aCjZ1MEIDTQu1iIbbTD/xops91NB5yq1ZK/dC2JDbVWtF23zUtl9JE2NqwT87A==}
 
-  '@zone-eu/mailsplit@5.4.26':
-    resolution: {integrity: sha512-yY8wRjvC5WVbjf4b+3Gms2J/XXS6kFpf9D+rl41s1/VAkk6DNN6hprEqVMQxgZJvsNRxxPdUY9J9bpI4Af7BoA==}
+  '@zone-eu/mailsplit@5.4.29':
+    resolution: {integrity: sha512-CCUNycmUjrV5M0wNf23waWAt9eOHczhjLbUQS7k0FNJvR0py9VSqHFt+tSl/D0+XI73VLG0U+PwYtq9R0zsm9Q==}
+    engines: {node: '>=20.0.0'}
 
   abbrev@4.0.0:
     resolution: {integrity: sha512-a1wflyaL0tHtJSmLSOVybYhy22vRih4eduhhrkcjgrWGnRfrZtovJ2FRjxuTtkkj47O/baf0R86QU5OuYpz8fA==}
@@ -2161,8 +2162,8 @@ packages:
     resolution: {integrity: sha512-hsBTNUqQTDwkWtcdYI2i06Y/nUBEsNEDJKjWdigLvegy8kDuJAS8uRlpkkcQpyEXL0Z/pjDy5HBmMjRCJ2gq+g==}
     engines: {node: '>= 4'}
 
-  imapflow@2.5.5:
-    resolution: {integrity: sha512-ijD1dJNoUbjbLk0UkexCh4wgieWnOBiRDfNTrrmI77dT1Q7b4oOKXAS9LGf8Pyb04utM4dK452dKug/ZbJCdIw==}
+  imapflow@2.10.0:
+    resolution: {integrity: sha512-J4YH1eHwemE00xaCT2vn30s+81iJi+C4OHQEoO6/hptA/z75nGdP1isU3oDfMaiheHD240LIhMMJcMMCJ5RDYA==}
     engines: {node: '>=20.0.0'}
 
   immediate@3.0.6:
@@ -2328,8 +2329,8 @@ packages:
     resolution: {integrity: sha512-Nyh3H90B3gRtrcxIe56Ayy7635J0jmh6AbxbQgQae8wrSPQMH5wFqJChiMTB13yKG512L3YspbA5DzumhFTITA==}
     engines: {node: '>=20.0.0'}
 
-  libmime@5.5.1:
-    resolution: {integrity: sha512-VdthsjEKxO6r0lLEysXkJSYy8A3MoMUF2jc+YCEdHsg5ywBZjxdnj01XSWhocpGToZnniq+aKMkCGdtW3R8HOg==}
+  libmime@5.6.3:
+    resolution: {integrity: sha512-cuTUW/Jybvh5O4/U9p61gyutHOjDtZyGQYuY99+bfnaFwqcDf2Nb+R6hMHY6DDen2H9wLKQSMpofWUgn2TI5JQ==}
     engines: {node: '>=20.0.0'}
 
   libqp@3.0.1:
@@ -2810,8 +2811,8 @@ packages:
   process-nextick-args@2.0.1:
     resolution: {integrity: sha512-3ouUOpQhtgrbOa17J7+uxOTpITYWaGP7/AhoR3+A+/1e9skrzelGi/dXzEYyvbxubEF6Wn2ypscTKiKJFFn1ag==}
 
-  process-warning@5.0.0:
-    resolution: {integrity: sha512-a39t9ApHNx2L4+HBnQKqxxHNs1r7KF+Intd8Q/g1bUh6q0WIp9voPXJ/x0j+ZL45KF1pJd9+q2jLIRMfvEshkA==}
+  process-warning@5.1.1:
+    resolution: {integrity: sha512-oCkNVj4OKnKEcocVBcDfiIugN1/cE6rgfT3nCtzeqZPA8+rIxMaQ0xXzIkGP8Gj2qUaP1UR7uhJ1VD8lUCpzCg==}
 
   process@0.11.10:
     resolution: {integrity: sha512-cdGef/drWFoydD1JsMzuFf8100nZl+GT+yacc2bEced5f9Rjk4z+WtFUTBu9PhOi9j/jfmBPu0mMEY4wIdAF8A==}
@@ -4461,10 +4462,10 @@ snapshots:
 
   '@xterm/xterm@5.5.0': {}
 
-  '@zone-eu/mailsplit@5.4.26':
+  '@zone-eu/mailsplit@5.4.29':
     dependencies:
       libbase64: 1.4.1
-      libmime: 5.5.1
+      libmime: 5.6.3
       libqp: 3.0.1
 
   abbrev@4.0.0: {}
@@ -5615,13 +5616,13 @@ snapshots:
 
   ignore@5.3.2: {}
 
-  imapflow@2.5.5:
+  imapflow@2.10.0:
     dependencies:
-      '@zone-eu/mailsplit': 5.4.26
+      '@zone-eu/mailsplit': 5.4.29
       encoding-japanese: 2.4.0
       iconv-lite: 0.7.3
       libbase64: 1.4.1
-      libmime: 5.5.1
+      libmime: 5.6.3
       libqp: 3.0.1
       pino: 10.3.1
       socks: 2.8.10
@@ -5760,7 +5761,7 @@ snapshots:
 
   libbase64@1.4.1: {}
 
-  libmime@5.5.1:
+  libmime@5.6.3:
     dependencies:
       encoding-japanese: 2.4.0
       iconv-lite: 0.7.3
@@ -6083,7 +6084,7 @@ snapshots:
       on-exit-leak-free: 2.1.2
       pino-abstract-transport: 3.0.0
       pino-std-serializers: 7.1.0
-      process-warning: 5.0.0
+      process-warning: 5.1.1
       quick-format-unescaped: 4.0.4
       real-require: 0.2.0
       safe-stable-stringify: 2.5.0
@@ -6184,7 +6185,7 @@ snapshots:
 
   process-nextick-args@2.0.1: {}
 
-  process-warning@5.0.0: {}
+  process-warning@5.1.1: {}
 
   process@0.11.10: {}
 
