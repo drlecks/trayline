@@ -16,7 +16,7 @@ This doc describes the CI release pipeline, versioning, signing, and notarizatio
 ## Pipeline shape
 
 ```
-test (ubuntu)          ← npm ci, typecheck, vitest
+test (ubuntu)          ← pnpm install --frozen-lockfile, typecheck, vitest
   │
   └── build (matrix)   ← windows-latest, macos-latest, ubuntu-22.04 + clang 15 (oldest glibc → AppImage runs on more distros)
         │
@@ -175,3 +175,9 @@ Known dependency advisories that need a major upgrade, tracked for a follow-up:
 | `vite` 5, `vitest` 2 (`esbuild`, `tinypool`, `@vitest/mocker`) | Dev-server / test-runner only, not shipped | vite ≥ 6.4.3, vitest ≥ 3.2.6 |
 | `zod` 3 | Memory exhaustion on oversized collections (e.g. a crafted import) | zod ≥ 4.6.6 |
 | `postcss-selector-parser` 6 (via Tailwind 3) | Build-time CSS parsing only | Tailwind 4 |
+
+---
+
+## Dependency age gate
+
+Pull requests into `develop` that change `package.json` or `pnpm-lock.yaml` run `.github/workflows/check-dependency-age.yml`. It diffs the `packages:` section of `pnpm-lock.yaml` against the base branch and fails if any new or updated package was published to npm less than 7 days ago. Locally, pnpm's own release-age setting applies; packages that must be installed sooner are listed in `minimumReleaseAgeExclude` in `pnpm-workspace.yaml`.

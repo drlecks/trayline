@@ -222,7 +222,7 @@ Password stored in keytar as `account='password'`.
 }
 ```
 
-Source steps are **channel-based**. The runner calls the channel directly (HTTP GET, IMAP, or file watch) and creates cards. Optionally, an AI prompt can shape the card data before it is written (see `prompt` field below).
+Source steps are **channel-based**. The runner calls the channel directly (HTTP GET, IMAP, file watch, or AI prompt) and creates cards. Optionally, an AI prompt can shape the card data before it is written (see `prompt` field below).
 
 `channel` is **required**. When `null`, the source cannot run and will fail with a configuration error.
 
@@ -274,20 +274,41 @@ In addition to the cron schedule, a chokidar watcher fires immediately when a ne
 
 **Card data shape for `file_watch`:** `{ file_path, filename, extension, content, size_bytes, modified_at, created_at }`
 
+**AI prompt channel variant (with dedup):**
+```json
+{
+  "schedule_cron": "0 9 * * *",
+  "channel": {
+    "type": "ai_prompt",
+    "prompt": "Find new public tenders for office cleaning in Madrid. For each give id (tender reference), title, buyer, deadline, url.",
+    "timeout_seconds": 300
+  },
+  "dedup": {
+    "key": "id",
+    "max_memory": 10000,
+    "first_run": "process_all"
+  }
+}
+```
+
+`ai_prompt` has no external system — the AI adapter *is* the channel. On each run the runner wraps `channel.prompt` with a fixed output contract (return only a JSON array, give each item a unique `dedup.key` field, return `[]` when nothing is new) plus run context (current time, previous run time, and up to 50 most recently delivered IDs so the AI can avoid repeats). The AI's answer is normalised into items: a bare array, an object with an `items` array, a single object (→ one item), or plain text (→ one item `{ ai_output }`). Primitive array elements become `{ value }`. Each new item becomes one card and is stored verbatim as `card.data`.
+
+Items are deduplicated by `dedup.key` (default `id`). An item without that field is identified by a SHA-256 hash of its content (key order ignored), stored as `sha256:<hex>`. Duplicates inside the same run collapse to one card. When `dedup` is omitted the defaults are `{ key: "id", max_memory: 10000, first_run: "process_all" }` — unlike IMAP, the first run creates cards, because an AI source has no "pre-existing backlog". No credential is needed; if the prompt requires browsing, the project's permissions must allow network access. The step-level `prompt` field is ignored for `ai_prompt` sources (the channel prompt already runs through the AI). `timeout_seconds` defaults to 300. If the AI step fails, the run fails, no cards are created and `seen-ids.json` is left untouched.
+
 `{{last_run_at}}` is a built-in token resolved to the ISO timestamp of the last successful run (from `state/counters.json`), or empty string on first run.
 
 | Field | Meaning |
 |---|---|
 | `kind` | Always `"source"` |
-| `channel` | Required data-source channel (`http_get`, `imap`, or `file_watch`). `null` means not yet configured. |
-| `channel.type` | `"http_get"`: fetches the URL, creates 1 card with `data.body` = full response text. `"imap"`: fetches emails, one card per email. `"file_watch"`: scans a directory, one card per new file. |
+| `channel` | Required data-source channel (`http_get`, `imap`, `file_watch`, or `ai_prompt`). `null` means not yet configured. |
+| `channel.type` | `"http_get"`: fetches the URL, creates 1 card with `data.body` = full response text. `"imap"`: fetches emails, one card per email. `"file_watch"`: scans a directory, one card per new file. `"ai_prompt"`: runs `channel.prompt` through the AI adapter, one card per returned item. |
 | `schedule_cron` | Standard cron expression for how often the source runs |
-| `dedup.key` | **IMAP / file_watch only.** The field used as the unique identifier (`message_id` for IMAP, `file_path` for file_watch). |
-| `dedup.max_memory` | **IMAP / file_watch only.** Maximum number of IDs stored in `seen-ids.json`; oldest entries pruned when exceeded. |
-| `dedup.first_run` | **IMAP / file_watch only.** What to do on the very first run: `skip_existing` (default), `process_all`, `process_last_n`. |
-| `dedup.first_run_n` | **IMAP only.** Number of most-recent emails to process when `first_run` is `"process_last_n"`. |
+| `dedup.key` | **IMAP / file_watch / ai_prompt only.** The field used as the unique identifier (`message_id` for IMAP, `file_path` for file_watch, `id` by default for ai_prompt). |
+| `dedup.max_memory` | **IMAP / file_watch / ai_prompt only.** Maximum number of IDs stored in `seen-ids.json`; oldest entries pruned when exceeded. |
+| `dedup.first_run` | **IMAP / file_watch / ai_prompt only.** What to do on the very first run: `skip_existing` (default; `process_all` for ai_prompt), `process_all`, `process_last_n`. |
+| `dedup.first_run_n` | **IMAP / ai_prompt only.** Number of most-recent emails (or last returned items) to process when `first_run` is `"process_last_n"`. |
 | `paused` | When `true`, the cron job is not registered at launch and `source:pause` / `source:resume` toggle it |
-| `prompt` | **Optional.** If set, the AI adapter processes the raw fetched data using these instructions before `card.data` is written. For HTTP GET: `prefetchedData` = response body. For IMAP: called once per email item. If the AI returns a JSON object it becomes `card.data`; a string is stored as `{ ai_output: "..." }`. Run fails if the AI step fails. |
+| `prompt` | **Optional.** If set, the AI adapter processes the raw fetched data using these instructions before `card.data` is written. For HTTP GET: `prefetchedData` = response body. For IMAP: called once per email item. Ignored for `ai_prompt` sources. If the AI returns a JSON object it becomes `card.data`; a string is stored as `{ ai_output: "..." }`. Run fails if the AI step fails. |
 
 **Source step folder structure:**
 ```
@@ -472,25 +493,26 @@ The renderer writes `lastOpenedProject` whenever the active project changes (ope
 00-source/
 ├── step.json                  # Config (includes channel)
 ├── state/
-│   ├── seen-ids.json          # IMAP / file_watch: [{id: "...", seen_at: "ISO"}], capped at dedup.max_memory
+│   ├── seen-ids.json          # IMAP / file_watch / ai_prompt: [{id: "...", seen_at: "ISO"}], capped at dedup.max_memory
 │   └── counters.json          # {runs_total, items_found, items_new, last_run_at}
 ├── runs/
 │   └── run_YYYY-MM-DD_NNN/
 │       ├── meta.json          # Run metadata (status, times, counts, error)
 │       ├── output.txt         # http_get: full response text
-│       └── output.json        # imap / file_watch: fetched items array
+│       └── output.json        # imap / file_watch / ai_prompt: fetched (or AI-returned) items array
 └── cards/
     ├── ready/                 # Cards created by this source run, consumed by the next step
     └── archived/              # Cards already processed downstream
 ```
 
-The source fetches data directly via its `channel` — no AI involved. A **Worker** step immediately after processes the cards with AI.
+The source fetches data directly via its `channel` — no AI involved, except for `ai_prompt` sources where the AI is the channel. A **Worker** step immediately after processes the cards with AI.
 
 - **`http_get`**: one run → one card. `card.data.body` holds the full response text verbatim.
 - **`imap`**: one run → one card per new email (deduplicated). `card.data` holds the email fields.
 - **`file_watch`**: one run → one card per new file (deduplicated by `file_path`). `card.data` holds `{ file_path, filename, extension, content, size_bytes, modified_at, created_at }`.
+- **`ai_prompt`**: one run → one AI call → one card per new returned item (deduplicated by `dedup.key`, or content hash). `card.data` is the item object as returned.
 
-#### `seen-ids.json` (IMAP and file_watch)
+#### `seen-ids.json` (IMAP, file_watch and ai_prompt)
 
 ```json
 [

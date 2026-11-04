@@ -2,6 +2,8 @@
 //
 // HTTP GET: one fetch per scheduled run → one card (data.body = full response text).
 // IMAP:     one card per email, deduplicated via seen-ids.json.
+// AI prompt: the AI is the channel — one card per returned item, deduplicated
+//           via seen-ids.json (same protocol as IMAP).
 //
 // Atomic protocol for IMAP:
 //   1. Read seen-ids.json (or empty on first run).
@@ -22,6 +24,7 @@ import { notificationService } from './notification-service'
 import { auditDb } from './audit-db'
 import { IPC } from '../../shared/ipc-channels'
 import { runAIStep } from './ai-step-helper'
+import { buildAiSourcePrompt, parseAiSourceItems, aiItemDedupId, AI_SOURCE_DEFAULT_DEDUP_KEY, AI_SOURCE_DEFAULT_TIMEOUT_SECONDS } from './ai-source-channel'
 import { outputLog } from './output-log'
 import type { SourceStepConfig, SourceCounters, SeenIdsEntry, SourceRunMeta, SourceState, SourceRunEvent, HttpCredential, ImapCredential, HttpErrorDetail, FileWatchChannel } from '../../shared/types'
 import type { Card, CardHistoryEntry } from '../../shared/card'
@@ -492,6 +495,109 @@ async function runSourceInner({ project, workflow, stepId, stepConfig }: RunSour
     const endedAt = new Date().toISOString()
     const elapsedMs = Date.parse(endedAt) - Date.parse(startedAt)
     const counters = await readCounters(stateDir)
+    await fsService.writeJsonAtomic(join(stateDir, 'counters.json'), {
+      runs_total: counters.runs_total + 1,
+      items_found: counters.items_found + items.length,
+      items_new: counters.items_new + cardsToCreate.length,
+      last_run_at: endedAt,
+    })
+    if (cardsToCreate.length === 0) {
+      await fs.rm(runDir, { recursive: true, force: true })
+      emit({ type: 'completed', project, workflow, stepId, runId, itemsFound: items.length, itemsNew: 0 })
+      return
+    }
+    await fsService.writeJsonAtomic(join(runDir, 'meta.json'), {
+      ...meta, ended_at: endedAt, elapsed_ms: elapsedMs, status: 'completed',
+      items_found: items.length, items_new: cardsToCreate.length,
+    })
+    auditDb.insert({
+      project_id: project, workflow_id: workflow, step_id: stepId, card_id: '',
+      event: 'source_run_completed', actor: 'system',
+      details_json: JSON.stringify({ run_id: runId, items_found: items.length, items_new: cardsToCreate.length, duration_ms: elapsedMs }),
+    })
+    emit({ type: 'completed', project, workflow, stepId, runId, itemsFound: items.length, itemsNew: cardsToCreate.length })
+    return
+  }
+
+  // ── AI prompt: the AI is the channel; one card per returned item ──────────
+  // The step-level `prompt` is not applied here — the channel prompt already
+  // runs through the AI, so a second pass would only double the cost.
+  if (channel.type === 'ai_prompt') {
+    if (!channel.prompt?.trim()) {
+      await failRun({ project, workflow, stepId, runId, stateDir, runDir, startedAt, meta, error: 'No AI prompt configured — open source settings and describe what the AI should find.' })
+      return
+    }
+    const seenEntries = await readSeenIds(stateDir)
+    const seenSet = new Set(seenEntries.map((e) => e.id))
+    const counters = await readCounters(stateDir)
+    const isFirstRun = counters.runs_total === 0 && seenEntries.length === 0
+
+    // AI sources default to process_all: skipping the first batch would make
+    // the first run look broken, since the AI has nothing "pre-existing".
+    const dedup = stepConfig.dedup ?? { key: AI_SOURCE_DEFAULT_DEDUP_KEY, max_memory: 10000, first_run: 'process_all' as const }
+    const dedupKey = dedup.key || AI_SOURCE_DEFAULT_DEDUP_KEY
+    const maxMemory = dedup.max_memory ?? 10000
+
+    let items: Record<string, unknown>[]
+    try {
+      const projectMeta = await projectService.getProject(project)
+      const permissions = projectService.getPermissions(projectMeta)
+      const prompt = buildAiSourcePrompt(channel.prompt, {
+        now, lastRunAt: counters.last_run_at, dedupKey, recentSeenIds: seenEntries.map((e) => e.id),
+      })
+      const timeoutMs = (channel.timeout_seconds ?? AI_SOURCE_DEFAULT_TIMEOUT_SECONDS) * 1000
+      const aiResult = await runAIStep({ runDir, prompt, permissions, timeoutMs })
+      items = parseAiSourceItems(aiResult.output)
+    } catch (err) {
+      await failRun({ project, workflow, stepId, runId, stateDir, runDir, startedAt, meta, error: `AI step failed: ${err instanceof Error ? err.message : String(err)}` })
+      return
+    }
+
+    await fs.writeFile(join(runDir, 'output.json'), JSON.stringify(items, null, 2), 'utf-8')
+
+    const newItems: { item: Record<string, unknown>; itemId: string }[] = []
+    const allIds: string[] = []
+    for (const item of items) {
+      const itemId = aiItemDedupId(item, dedupKey)
+      if (allIds.includes(itemId)) continue
+      allIds.push(itemId)
+      if (!seenSet.has(itemId)) newItems.push({ item, itemId })
+    }
+
+    let cardsToCreate = newItems
+    if (isFirstRun) {
+      if (dedup.first_run === 'skip_existing') cardsToCreate = []
+      else if (dedup.first_run === 'process_last_n') cardsToCreate = newItems.slice(-(dedup.first_run_n ?? 10))
+    }
+
+    for (let i = 0; i < cardsToCreate.length; i++) {
+      const { item, itemId } = cardsToCreate[i]
+      const cardId = await nextCardId(project, workflow, autoForwarded && forwardedToStepId ? forwardedToStepId : stepId, i + 1)
+      auditDb.insert({
+        project_id: project, workflow_id: workflow, step_id: stepId, card_id: cardId,
+        event: 'source_item_new', actor: 'system',
+        details_json: JSON.stringify({ item_id: itemId, card_id: cardId, run_id: runId }),
+      })
+      const cardHistory: CardHistoryEntry[] = [{ at: now, step: stepId, event: 'created', by: 'system' }]
+      if (autoForwarded && forwardedToStepId) {
+        cardHistory.push({ at: now, step: forwardedToStepId, event: 'marked_ready', by: 'system' })
+      }
+      const card: Card = {
+        id: cardId, created_at: now, created_by: 'source', source_step: stepId,
+        data: item,
+        history: cardHistory,
+      }
+      await fsService.writeJsonAtomic(join(cardOutputDir, `${cardId}.json`), card)
+    }
+
+    const nextSeen: SeenIdsEntry[] = [
+      ...seenEntries.filter((e) => !allIds.includes(e.id)),
+      ...allIds.map((id) => ({ id, seen_at: now })),
+    ]
+    await writeSeenIdsAtomic(stateDir, pruneSeenIds(nextSeen, maxMemory))
+
+    const endedAt = new Date().toISOString()
+    const elapsedMs = Date.parse(endedAt) - Date.parse(startedAt)
     await fsService.writeJsonAtomic(join(stateDir, 'counters.json'), {
       runs_total: counters.runs_total + 1,
       items_found: counters.items_found + items.length,

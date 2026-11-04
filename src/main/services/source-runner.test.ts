@@ -657,3 +657,145 @@ describe('sourceRunner — skip empty successful runs', () => {
     expect((await fs.readdir(readyDir)).filter((f) => f.endsWith('.json'))).toHaveLength(1)
   })
 })
+
+describe('sourceRunner — AI prompt channel', () => {
+  function makeAiConfig(overrides: Partial<SourceStepConfig> = {}): SourceStepConfig {
+    return {
+      id: '00-source', kind: 'source', name: 'Test Source', description: '',
+      color: '#4CB87E', icon: 'rss', schedule_cron: '0 9 * * *', paused: false,
+      channel: { type: 'ai_prompt', prompt: 'Find new tenders.', timeout_seconds: 120 },
+      ...overrides,
+    }
+  }
+
+  function readyDirFor(project: string) {
+    return join(Paths.projects, project, 'workflows', 'wf', 'steps', '00-source', 'cards', 'ready')
+  }
+
+  async function readyCards(project: string) {
+    const dir = readyDirFor(project)
+    const files = (await fs.readdir(dir)).filter((f) => f.endsWith('.json')).sort()
+    return Promise.all(files.map((f) => readJson<{ data: Record<string, unknown> }>(join(dir, f))))
+  }
+
+  it('creates one card per returned item on the first run (process_all by default)', async () => {
+    const project = `sr-ai-basic-${Date.now()}`
+    await setAIOutput([{ id: 'T-1', title: 'One' }, { id: 'T-2', title: 'Two' }] as unknown as object)
+    const cfg = makeAiConfig()
+    await setupSourceStep(project, 'wf', '00-source', cfg)
+
+    await sourceRunner.runSource({ project, workflow: 'wf', stepId: '00-source', stepConfig: cfg })
+
+    const cards = await readyCards(project)
+    expect(cards.map((c) => c.data)).toEqual([{ id: 'T-1', title: 'One' }, { id: 'T-2', title: 'Two' }])
+  })
+
+  it('passes the wrapped prompt and the configured timeout to the AI', async () => {
+    const project = `sr-ai-prompt-${Date.now()}`
+    await setAIOutput([] as unknown as object)
+    const cfg = makeAiConfig()
+    await setupSourceStep(project, 'wf', '00-source', cfg)
+
+    await sourceRunner.runSource({ project, workflow: 'wf', stepId: '00-source', stepConfig: cfg })
+
+    const mod = await import('./ai-step-helper')
+    const call = vi.mocked(mod.runAIStep).mock.calls.at(-1)![0]
+    expect(call.prompt.startsWith('Find new tenders.')).toBe(true)
+    expect(call.prompt).toContain('JSON array')
+    expect(call.timeoutMs).toBe(120_000)
+  })
+
+  it('does not create cards for items already delivered on a previous run', async () => {
+    const project = `sr-ai-dedup-${Date.now()}`
+    const cfg = makeAiConfig()
+    await setupSourceStep(project, 'wf', '00-source', cfg)
+
+    await setAIOutput([{ id: 'T-1' }] as unknown as object)
+    await sourceRunner.runSource({ project, workflow: 'wf', stepId: '00-source', stepConfig: cfg })
+    await setAIOutput([{ id: 'T-1' }, { id: 'T-2' }] as unknown as object)
+    await sourceRunner.runSource({ project, workflow: 'wf', stepId: '00-source', stepConfig: cfg })
+
+    const cards = await readyCards(project)
+    expect(cards.map((c) => c.data.id)).toEqual(['T-1', 'T-2'])
+  })
+
+  it('dedups items without an id by content', async () => {
+    const project = `sr-ai-hash-${Date.now()}`
+    const cfg = makeAiConfig()
+    await setupSourceStep(project, 'wf', '00-source', cfg)
+
+    await setAIOutput([{ title: 'Same' }] as unknown as object)
+    await sourceRunner.runSource({ project, workflow: 'wf', stepId: '00-source', stepConfig: cfg })
+    await sourceRunner.runSource({ project, workflow: 'wf', stepId: '00-source', stepConfig: cfg })
+
+    expect(await readyCards(project)).toHaveLength(1)
+  })
+
+  it('collapses duplicate items within a single run', async () => {
+    const project = `sr-ai-samerun-${Date.now()}`
+    await setAIOutput([{ id: 'T-1' }, { id: 'T-1' }] as unknown as object)
+    const cfg = makeAiConfig()
+    await setupSourceStep(project, 'wf', '00-source', cfg)
+
+    await sourceRunner.runSource({ project, workflow: 'wf', stepId: '00-source', stepConfig: cfg })
+
+    expect(await readyCards(project)).toHaveLength(1)
+  })
+
+  it('honours skip_existing on the first run', async () => {
+    const project = `sr-ai-skip-${Date.now()}`
+    await setAIOutput([{ id: 'T-1' }] as unknown as object)
+    const cfg = makeAiConfig({ dedup: { key: 'id', max_memory: 10000, first_run: 'skip_existing' } })
+    await setupSourceStep(project, 'wf', '00-source', cfg)
+
+    await sourceRunner.runSource({ project, workflow: 'wf', stepId: '00-source', stepConfig: cfg })
+
+    expect(await readyCards(project)).toHaveLength(0)
+    const seen = await readJson<SeenIdsEntry[]>(join(Paths.projects, project, 'workflows', 'wf', 'steps', '00-source', 'state', 'seen-ids.json'))
+    expect(seen.map((e) => e.id)).toEqual(['T-1'])
+  })
+
+  it('does not apply the step-level prompt as a second AI pass', async () => {
+    const project = `sr-ai-noprompt2-${Date.now()}`
+    await setAIOutput([{ id: 'T-1' }] as unknown as object)
+    const cfg = makeAiConfig({ prompt: 'Reformat this.' })
+    await setupSourceStep(project, 'wf', '00-source', cfg)
+    const mod = await import('./ai-step-helper')
+    vi.mocked(mod.runAIStep).mockClear()
+
+    await sourceRunner.runSource({ project, workflow: 'wf', stepId: '00-source', stepConfig: cfg })
+
+    expect(vi.mocked(mod.runAIStep)).toHaveBeenCalledTimes(1)
+  })
+
+  it('fails the run without calling the AI when the prompt is empty', async () => {
+    const project = `sr-ai-empty-${Date.now()}`
+    const cfg = makeAiConfig({ channel: { type: 'ai_prompt', prompt: '  ' } })
+    await setupSourceStep(project, 'wf', '00-source', cfg)
+    const mod = await import('./ai-step-helper')
+    vi.mocked(mod.runAIStep).mockClear()
+
+    await sourceRunner.runSource({ project, workflow: 'wf', stepId: '00-source', stepConfig: cfg })
+
+    expect(vi.mocked(mod.runAIStep)).not.toHaveBeenCalled()
+    const runs = await sourceRunner.listRuns(project, 'wf', '00-source')
+    expect(runs[0].status).toBe('failed')
+    expect(runs[0].error).toContain('No AI prompt configured')
+  })
+
+  it('fails the run, leaves seen-ids untouched and creates no cards when the AI errors', async () => {
+    const project = `sr-ai-error-${Date.now()}`
+    await setAIError('Claude Code is not installed.')
+    const cfg = makeAiConfig()
+    await setupSourceStep(project, 'wf', '00-source', cfg)
+
+    await sourceRunner.runSource({ project, workflow: 'wf', stepId: '00-source', stepConfig: cfg })
+
+    expect(await readyCards(project)).toHaveLength(0)
+    const seenPath = join(Paths.projects, project, 'workflows', 'wf', 'steps', '00-source', 'state', 'seen-ids.json')
+    expect(await pathExists(seenPath)).toBe(false)
+    const runs = await sourceRunner.listRuns(project, 'wf', '00-source')
+    expect(runs[0].status).toBe('failed')
+    expect(runs[0].error).toContain('AI step failed')
+  })
+})

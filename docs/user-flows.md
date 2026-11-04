@@ -232,8 +232,9 @@ Triggered automatically by the cron scheduler, or manually via **Run now**:
 3. **Fetch via channel** — source runner calls the channel directly (no AI):
    - `http_get`: fetches the URL (base + `url_path`); the entire response text (any content type) becomes `card.data.body` in a single new card — one run, one card, no parsing, no dedup
    - `imap`: reads `state/seen-ids.json` into memory (empty on first run), fetches emails matching the folder/filter settings, deduplicates by `dedup.key`
+   - `ai_prompt` (the one channel that *is* AI): sends `channel.prompt` plus an output contract and run context to the AI adapter, splits the returned JSON list into items, and deduplicates them by `dedup.key` (or a content hash when an item has no key) against `state/seen-ids.json`. First run defaults to `process_all`
 4. **Create cards** — each new item is written to `cards/ready/` with an audit entry before the file is created (replayable on crash)
-5. **Persist dedup index (IMAP only)** — write the updated seen set to `state/seen-ids.json.tmp`, then rename to `state/seen-ids.json` (atomic); prune oldest entries if length exceeds `max_memory`
+5. **Persist dedup index (IMAP, file watch, AI prompt)** — write the updated seen set to `state/seen-ids.json.tmp`, then rename to `state/seen-ids.json` (atomic); prune oldest entries if length exceeds `max_memory`
 6. **Update counters** — write `state/counters.json` with updated `runs_total`, `items_found`, `items_new`, `last_run_at`
 7. **Emit completion event** — IPC event fires to the renderer
 8. **Next step picks up cards** — the Worker step following the Source has a chokidar watcher on `<source-step>/cards/ready/` (resolved from `workflow.json:step_ids[i-1]`); new card files trigger the worker automatically, with no user action required

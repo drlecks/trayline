@@ -260,7 +260,7 @@ Status states on the left rail card:
 
 Two tabs: **Config** and **Runs**.
 
-Source steps are **channel-based**. The runner calls the configured channel directly (HTTP GET, IMAP, or file watch) and creates cards from the raw response. An optional **Instructions** field allows the AI adapter to shape `card.data` before the card is written — useful when you want structured fields extracted directly from the raw response rather than passing the raw text to a downstream worker.
+Source steps are **channel-based**. The runner calls the configured channel directly (HTTP GET, IMAP, file watch, or AI prompt) and creates cards from the raw response. An optional **Instructions** field allows the AI adapter to shape `card.data` before the card is written — useful when you want structured fields extracted directly from the raw response rather than passing the raw text to a downstream worker.
 
 **Config tab:**
 
@@ -271,6 +271,7 @@ Source steps are **channel-based**. The runner calls the configured channel dire
 │                  HTTP GET                                    │
 │                  IMAP inbox                                  │
 │                  File watch                                  │
+│                  AI prompt                                   │
 │                                                              │
 │  [HTTP GET selected]                                         │
 │  Credential   [GitHub API ▼]  (HTTP credentials only)        │
@@ -293,6 +294,16 @@ Source steps are **channel-based**. The runner calls the configured channel dire
 │  Cards contain: file_path, filename, extension, content,     │
 │  size_bytes, modified_at, created_at                         │
 │  No credential needed — reads the local filesystem.          │
+│                                                              │
+│  [AI prompt selected]                                        │
+│  What should the AI find?                                    │
+│  [Find new public tenders for office cleaning in Madrid... ] │
+│  Time limit (seconds) [300]                                  │
+│  Each item the AI returns becomes one card. Every run uses   │
+│  AI credits. Browsing needs network access in permissions.   │
+│  (Instructions field is hidden — the prompt is already AI.)  │
+│  Selecting AI prompt sets dedup key "id", first run          │
+│  "process all", and swaps an hourly schedule for daily 9:00. │
 ├──────────────────────────────────────────────────────────────┤
 │  Name          [GitHub Issues                    ]           │
 │  Description   [Polls for new issues every hour  ]           │

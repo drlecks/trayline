@@ -115,6 +115,12 @@ Each task corresponds to a phase file in this folder. Check off tasks as they ar
 
 ---
 
+## N13 Phases (AI Prompt Source)
+
+- [x] [Phase N13 — AI Prompt Source](./phase-n13-ai-source.md)
+
+---
+
 ## Estimates
 
 | Block | Estimate |

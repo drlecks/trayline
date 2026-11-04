@@ -1,0 +1,116 @@
+name: Check Dependency Age
+
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'pnpm-lock.yaml'
+      - 'package.json'
+
+permissions:
+  contents: read
+
+jobs:
+  check-age:
+    name: Verify packages are ≥7 days old
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+
+      - name: Find updated packages
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git fetch origin "$BASE_REF" --depth=1
+          node --input-type=module <<'SCRIPT'
+          import { execSync } from 'child_process';
+          import { readFileSync, writeFileSync } from 'fs';
+
+          const baseRef = process.env.BASE_REF;
+          // Collects "name@version" keys from the `packages:` section of a
+          // pnpm-lock.yaml (lockfileVersion 9) without needing a YAML parser.
+          function lockedPackages(text) {
+            const out = new Set();
+            let inPackages = false;
+            for (const line of text.split('\n')) {
+              if (/^\S/.test(line)) { inPackages = line.startsWith('packages:'); continue; }
+              if (!inPackages) continue;
+              const m = line.match(/^  '?((?:@[^/]+\/)?[^@'\s]+)@([^'(\s]+)[^']*'?:\s*$/);
+              if (m) out.add(`${m[1]}@${m[2]}`);
+            }
+            return out;
+          }
+
+          const current = lockedPackages(readFileSync('pnpm-lock.yaml', 'utf8'));
+
+          let base = new Set();
+          try {
+            base = lockedPackages(execSync(`git show origin/${baseRef}:pnpm-lock.yaml`, { encoding: 'utf8' }));
+          } catch {
+            // No lockfile on base branch — treat everything as new
+          }
+
+          const updated = [];
+          for (const key of current) {
+            if (base.has(key)) continue;
+            const at = key.lastIndexOf('@');
+            updated.push({ name: key.slice(0, at), version: key.slice(at + 1) });
+          }
+
+          writeFileSync('updated-packages.json', JSON.stringify(updated));
+          console.log(`Detected ${updated.length} new or updated package(s).`);
+          SCRIPT
+
+      - name: Check package ages against npm registry
+        run: |
+          node --input-type=module <<'SCRIPT'
+          import { readFileSync } from 'fs';
+
+          const MIN_DAYS = 7;
+          const packages = JSON.parse(readFileSync('updated-packages.json', 'utf8'));
+
+          if (packages.length === 0) {
+            console.log('No dependency changes — skipping age check.');
+            process.exit(0);
+          }
+
+          let failed = false;
+          const now = Date.now();
+
+          for (const { name, version } of packages) {
+            try {
+              const res = await fetch(`https://registry.npmjs.org/${encodeURIComponent(name)}`);
+              if (!res.ok) {
+                console.warn(`SKIP  ${name}@${version} — registry returned ${res.status}`);
+                continue;
+              }
+              const data = await res.json();
+              const publishedAt = data.time?.[version];
+              if (!publishedAt) {
+                console.warn(`SKIP  ${name}@${version} — publish time not in registry`);
+                continue;
+              }
+              const ageDays = (now - new Date(publishedAt).getTime()) / 86_400_000;
+              if (ageDays < MIN_DAYS) {
+                console.log(`::error::FAIL  ${name}@${version} is only ${ageDays.toFixed(1)} days old (minimum: ${MIN_DAYS})`);
+                failed = true;
+              } else {
+                console.log(`OK    ${name}@${version} — ${Math.floor(ageDays)} days old`);
+              }
+            } catch (e) {
+              console.warn(`SKIP  ${name}@${version} — ${e.message}`);
+            }
+          }
+
+          if (failed) {
+            console.log('\nSome packages are too new. Wait until they are at least 7 days old before merging.');
+            process.exit(1);
+          }
+          console.log('\nAll packages pass the age check.');
+          SCRIPT
