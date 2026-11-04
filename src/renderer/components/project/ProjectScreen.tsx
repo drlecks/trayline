@@ -334,8 +334,9 @@ function ErrorTraySection({
 
 function stepConfigWarning(step: StepMeta): string | null {
   if (step.kind === 'source') {
-    const ch = (step.raw as { channel?: { type?: string; credential_id?: string } }).channel
+    const ch = (step.raw as { channel?: { type?: string; credential_id?: string; prompt?: string } }).channel
     if (ch?.type === 'imap' && !ch.credential_id) return 'IMAP credential not configured'
+    if (ch?.type === 'ai_prompt' && !ch.prompt?.trim()) return 'AI prompt not written yet'
   }
   if (step.kind === 'outlet') {
     const ch = (step.raw as { channel?: { type?: string; credential_id?: string; to?: string } }).channel

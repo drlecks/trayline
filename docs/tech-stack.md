@@ -65,9 +65,12 @@ Five channel service files implement the I/O:
 | `src/main/services/imap-channel.ts` | IMAP fetch (`fetchEmails`) via imapflow with seen-flag handling |
 | `src/main/services/smtp-channel.ts` | SMTP send (`sendEmail`) via nodemailer; auto-detects HTML vs plain text |
 | `src/main/services/file-source-channel.ts` | Directory scan (`scanFiles`) — returns one `FileItem` per readable file; chokidar watcher triggers runs in real time |
+| `src/main/services/ai-source-channel.ts` | AI prompt source helpers — `buildAiSourcePrompt` (output contract + run context), `parseAiSourceItems` (normalise AI output to items), `aiItemDedupId` (dedup key or content hash) |
 | `src/main/services/file-export-channel.ts` | File write (`exportFile`) — supports TXT, CSV, PDF (pdfkit), DOCX (docx), XLSX (exceljs); CSV/TXT/XLSX support append mode |
 
 Source steps use `fetchHttp` / `fetchEmails` / `scanFiles` to pre-fetch data before spawning the AI. Outlet steps use `postHttp` / `sendEmail` / `exportFile` to dispatch card data after token resolution, with no AI involved.
+
+**AI prompt source behavior:** An `ai_prompt` source has no external fetch — the runner calls `runAIStep` once per run with the wrapped prompt (timeout `channel.timeout_seconds`, default 300 s) and the project's permissions, then turns each returned item into a card through the same dedup protocol as IMAP. The step-level `prompt` post-processing pass is skipped.
 
 **File-watch source behavior:** When a `file_watch` source is mounted, the source scheduler registers both a chokidar watcher (real-time trigger on `add` events) and a cron backup scan. The dedup system (`seen-ids.json`, keyed on `file_path`) ensures each file creates exactly one card regardless of which trigger fires first. Files larger than 10 MB and binary files are silently skipped.
 

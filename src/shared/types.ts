@@ -207,7 +207,15 @@ export interface FileWatchChannel {
   include_subdirs?: boolean
 }
 
-export type SourceChannel = HttpGetChannel | ImapChannel | FileWatchChannel
+export interface AiPromptChannel {
+  type: 'ai_prompt'
+  /** What the AI should find or produce on each run. Each returned item becomes one card. */
+  prompt: string
+  /** Maximum run time for the AI call, in seconds. Default: 300. */
+  timeout_seconds?: number
+}
+
+export type SourceChannel = HttpGetChannel | ImapChannel | FileWatchChannel | AiPromptChannel
 
 // ── Outlet types ──────────────────────────────────────────────────────────────
 
