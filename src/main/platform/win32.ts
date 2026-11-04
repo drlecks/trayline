@@ -41,7 +41,7 @@ export class Win32Adapter implements PlatformAdapter {
   }
 
   setLaunchAtLogin(enabled: boolean): void {
-    app.setLoginItemSettings({ openAtLogin: enabled, openAsHidden: true, name: 'Trayline' })
+    app.setLoginItemSettings({ openAtLogin: enabled, name: 'Trayline' })
   }
 
   private buildMenu(): Electron.Menu {

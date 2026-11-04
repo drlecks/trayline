@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [develop]
     paths:
-      - 'package-lock.json'
+      - 'pnpm-lock.yaml'
       - 'package.json'
 
 permissions:
@@ -21,7 +21,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version-file: '.nvmrc'
 
       - name: Find updated packages
         env:
@@ -33,28 +33,34 @@ jobs:
           import { readFileSync, writeFileSync } from 'fs';
 
           const baseRef = process.env.BASE_REF;
-          const current = JSON.parse(readFileSync('package-lock.json', 'utf8'));
+          // Collects "name@version" keys from the `packages:` section of a
+          // pnpm-lock.yaml (lockfileVersion 9) without needing a YAML parser.
+          function lockedPackages(text) {
+            const out = new Set();
+            let inPackages = false;
+            for (const line of text.split('\n')) {
+              if (/^\S/.test(line)) { inPackages = line.startsWith('packages:'); continue; }
+              if (!inPackages) continue;
+              const m = line.match(/^  '?((?:@[^/]+\/)?[^@'\s]+)@([^'(\s]+)[^']*'?:\s*$/);
+              if (m) out.add(`${m[1]}@${m[2]}`);
+            }
+            return out;
+          }
 
-          let base = { packages: {} };
+          const current = lockedPackages(readFileSync('pnpm-lock.yaml', 'utf8'));
+
+          let base = new Set();
           try {
-            const raw = execSync(`git show origin/${baseRef}:package-lock.json`, { encoding: 'utf8' });
-            base = JSON.parse(raw);
+            base = lockedPackages(execSync(`git show origin/${baseRef}:pnpm-lock.yaml`, { encoding: 'utf8' }));
           } catch {
             // No lockfile on base branch — treat everything as new
           }
 
-          const seen = new Set();
           const updated = [];
-          for (const [path, pkg] of Object.entries(current.packages ?? {})) {
-            if (!path || !pkg.version) continue;
-            const name = path.replace(/^node_modules\//, '');
-            const key = `${name}@${pkg.version}`;
-            if (seen.has(key)) continue;
-            seen.add(key);
-            const basePkg = base.packages?.[path];
-            if (!basePkg || basePkg.version !== pkg.version) {
-              updated.push({ name, version: pkg.version });
-            }
+          for (const key of current) {
+            if (base.has(key)) continue;
+            const at = key.lastIndexOf('@');
+            updated.push({ name: key.slice(0, at), version: key.slice(at + 1) });
           }
 
           writeFileSync('updated-packages.json', JSON.stringify(updated));

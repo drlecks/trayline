@@ -28,7 +28,7 @@ function buildZodSchema(fields: PlanFieldDef[]) {
     let s: z.ZodTypeAny
     switch (f.type) {
       case 'number':
-        s = z.coerce.number({ invalid_type_error: 'Must be a number' })
+        s = z.coerce.number({ error: 'Must be a number' })
         if (!f.required) s = (s as z.ZodNumber).optional().or(z.literal('').transform(() => undefined))
         break
       case 'checkbox':

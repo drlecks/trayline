@@ -39,6 +39,7 @@ vi.mock('electron', () => ({
       return process.env.__TRAYLINE_TEST_DOCS__!
     },
     isPackaged: false,
+    getVersion: () => '0.0.0-test',
     getAppPath: () => process.cwd(),
   },
   Notification: class {

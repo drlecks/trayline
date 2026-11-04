@@ -42,7 +42,7 @@ export class DarwinAdapter implements PlatformAdapter {
   }
 
   setLaunchAtLogin(enabled: boolean): void {
-    app.setLoginItemSettings({ openAtLogin: enabled, openAsHidden: true })
+    app.setLoginItemSettings({ openAtLogin: enabled })
   }
 
   private buildMenu(): Electron.Menu {

@@ -17,6 +17,15 @@ async function pathExists(p: string): Promise<boolean> {
   try { await fs.access(p); return true } catch { return false }
 }
 
+/**
+ * An imported project's name becomes a folder under Paths.projects, and it
+ * comes from project.json inside a zip someone else made. Allow only a single
+ * plain folder name so a crafted name like "../x" can't write outside it.
+ */
+function isSafeFolderName(name: string): boolean {
+  return name !== '' && name !== '.' && name !== '..' && !/[/\\\0]/.test(name)
+}
+
 // ── Export ────────────────────────────────────────────────────────────────────
 
 const SKIP_DIRS = new Set(['runs', 'state', '.history'])
@@ -120,6 +129,10 @@ async function extractAndValidate(zipPath: string): Promise<{
   }
   const projectJson = JSON.parse(await fs.readFile(projectJsonPath, 'utf-8')) as { name?: string }
   const projectName = projectJson.name ?? (projectDirEntry.name as string)
+  if (typeof projectName !== 'string' || !isSafeFolderName(projectName)) {
+    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {})
+    throw new Error('Invalid export: project name in project.json is not a valid folder name.')
+  }
 
   const targetPath = join(Paths.projects, projectName)
   if (await pathExists(targetPath)) {
