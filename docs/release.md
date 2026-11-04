@@ -181,3 +181,17 @@ Known dependency advisories that need a major upgrade, tracked for a follow-up:
 ## Dependency age gate
 
 Pull requests into `develop` that change `package.json` or `pnpm-lock.yaml` run `.github/workflows/check-dependency-age.yml`. It diffs the `packages:` section of `pnpm-lock.yaml` against the base branch and fails if any new or updated package was published to npm less than 7 days ago. Locally, pnpm's own release-age setting applies; packages that must be installed sooner are listed in `minimumReleaseAgeExclude` in `pnpm-workspace.yaml`.
+
+The workflow's actions are pinned to commit hashes and its checkout does not persist the GitHub token. Dependabot uses a matching 7-day `cooldown` so it never proposes versions the gate would reject.
+
+---
+
+## Only develop into main
+
+`.github/workflows/main-source-branch.yml` runs on every pull request into `main` and fails unless the source is this repository's `develop` branch. Its job, **Only develop into main**, is a required status check in the `main-protection` ruleset. The repository owner keeps a ruleset bypass for emergencies.
+
+---
+
+## Accepted security findings
+
+Advisories verified not to apply are listed under `suppressions` in `.centurion-cloud.yml`, each with a reason and an expiry date. Revisit them when they expire or when the parent package ships a fix on a supported major version.
