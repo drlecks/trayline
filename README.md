@@ -158,14 +158,14 @@ The full architectural context is in [`docs/`](docs/) and [`CLAUDE.md`](CLAUDE.m
 
 ## License
 
-Trayline is released under the **GNU General Public License v3.0 (GPLv3)**.
+Trayline is released under the **MIT License**.
 
 In plain English:
 
 - You can **use** Trayline for anything, including at a company, for free.
 - You can **modify** it however you want.
-- You can **redistribute** it — original or modified.
-- If you redistribute a modified version, it **must also be GPLv3** and you must make the source available.
-- There is **no warranty** — use it at your own risk.
+- You can **redistribute** it, original or modified, including in closed-source products.
+- You must **keep the copyright and license notice** in copies of it.
+- There is **no warranty**: use it at your own risk.
 
-See the [full license text](https://www.gnu.org/licenses/gpl-3.0.txt) for the legal version.
+See the [full license text](LICENSE) for the legal version.
