@@ -14,3 +14,9 @@ suppressions:
   - rule: GHSA-jmr9-qjv8-65gv
     reason: extract-zip only unpacks Electron's checksum-verified release zip at install time; not shipped.
     expires: 2027-04-30
+  - rule: GHSA-g3hv-75wg-m249
+    reason: minimatch (v3/5/9/10) is only reached via electron-builder, eslint and archiver internals; Trayline never passes patterns to it (export uses archive.file/append, never archive.glob). Fix exists only in v11, which those packages do not support.
+    expires: 2027-04-30
+  - rule: GHSA-3g3m-2fjr-6pw4
+    reason: glob@10 is only reached via archiver-utils; Trayline never calls archive.glob or passes an AbortSignal. Fix exists only in v14, which archiver does not support.
+    expires: 2027-04-30

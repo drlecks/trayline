@@ -6,3 +6,7 @@ updates:
       interval: "daily"
     target-branch: "develop"
     open-pull-requests-limit: 10
+    # Match the 7-day package age gate (check-dependency-age.yml) so Dependabot
+    # never proposes versions that the gate would reject.
+    cooldown:
+      default-days: 7
