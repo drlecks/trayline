@@ -76,6 +76,10 @@ Source steps use `fetchHttp` / `fetchEmails` / `scanFiles` to pre-fetch data bef
 
 ---
 
+## External Links
+
+A window asking to open a URL (a link in card content, a provider's guide) never opens inside the app: `setWindowOpenHandler` denies it and hands it to the operating system with `shell.openExternal`, but only for `https:`, `http:` and `mailto:` (`src/main/util/external-url.ts`). Anything else, such as `file:` or a custom protocol that would start another program, is dropped.
+
 ## No External Dependencies at Runtime
 
 - No cloud services
