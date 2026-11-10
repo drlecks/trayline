@@ -10,3 +10,7 @@ updates:
     # never proposes versions that the gate would reject.
     cooldown:
       default-days: 7
+    # Types follow the Node line in .nvmrc and package.json "engines", not the newest Node.
+    ignore:
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]

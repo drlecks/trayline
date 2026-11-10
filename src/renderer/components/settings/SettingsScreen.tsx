@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Bell, BellOff, Check, ExternalLink, Github, RefreshCw, Wrench, X } from 'lucide-react'
+import { ArrowLeft, Bell, BellOff, Check, ExternalLink, RefreshCw, Wrench, X } from 'lucide-react'
 import { useThemeStore } from '@/stores/theme-store'
 import { useProjectStore } from '@/stores/project-store'
 import AdapterSetupWizard from '@/components/adapter/AdapterSetupWizard'
@@ -438,7 +438,7 @@ export default function SettingsScreen() {
             rel="noreferrer"
             className="inline-flex items-center gap-1.5 text-xs text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200 w-fit"
           >
-            <Github size={13} strokeWidth={1.75} />
+            <ExternalLink size={13} strokeWidth={1.75} />
             github.com/drlecks/trayline
           </a>
         </div>
