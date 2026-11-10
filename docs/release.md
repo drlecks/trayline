@@ -182,7 +182,7 @@ Known dependency advisories that need a major upgrade, tracked for a follow-up:
 
 Pull requests into `develop` that change `package.json` or `pnpm-lock.yaml` run `.github/workflows/check-dependency-age.yml`. It diffs the `packages:` section of `pnpm-lock.yaml` against the base branch and fails if any new or updated package was published to npm less than 7 days ago. Locally, pnpm's own release-age setting applies; packages that must be installed sooner are listed in `minimumReleaseAgeExclude` in `pnpm-workspace.yaml`.
 
-The workflow's actions are pinned to commit hashes and its checkout does not persist the GitHub token. Dependabot uses a matching 7-day `cooldown` so it never proposes versions the gate would reject.
+The workflow's actions are pinned to commit hashes and its checkout does not persist the GitHub token. It needs no pnpm install, so `setup-node` runs with `package-manager-cache: false` (v5 would otherwise look for the `packageManager` pnpm and fail). Dependabot uses a matching 7-day `cooldown` so it never proposes versions the gate would reject.
 
 ---
 
