@@ -14,6 +14,7 @@ import { registerIpcHandlers } from './ipc/handlers'
 import { notificationService } from './services/notification-service'
 import { dirnameFromMeta } from './util/paths'
 import { resolveAppIcon } from './util/app-icon'
+import { isSafeExternalUrl } from './util/external-url'
 import { getPlatformAdapter } from './platform/registry'
 import type { TrayState } from './platform/adapter'
 
@@ -156,7 +157,7 @@ function createWindow() {
   })
 
   win.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url)
+    if (isSafeExternalUrl(url)) void shell.openExternal(url)
     return { action: 'deny' }
   })
 
