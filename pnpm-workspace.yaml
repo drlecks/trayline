@@ -7,6 +7,10 @@ engineStrict: true
 # and packaged builds crashed on launch. A flat, npm-style layout fixes that.
 nodeLinker: hoisted
 
+# Same 7 days (in minutes) as the CI age gate (check-dependency-age.yml), so local
+# installs never resolve a version the gate would reject.
+minimumReleaseAge: 10080
+
 # Same-major patch releases of transitive deps flagged by Centurion Cloud
 # Security (osv.dev advisories). Drop an entry once its parent ships the fix.
 overrides:
@@ -26,6 +30,9 @@ overrides:
   tar@^7: 7.5.22
   undici@^6: 6.29.1
   uuid@^8: 11.1.1
+  # Held back for the 7-day age gate: vite 8 accepts rolldown ~1.2.14. Drop once newer ones are a week old.
+  rolldown: 1.2.16
+  '@rolldown/pluginutils@^1': 1.0.1
 
 allowBuilds:
   better-sqlite3: true
