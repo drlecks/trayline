@@ -140,6 +140,7 @@ Consistent set per concept:
 - `alert-triangle` — errors
 - `clock` — scheduled
 - `user` — human review
+- `external-link` — links that open in the browser (lucide-react 1.x has no brand logos, so no GitHub mark)
 
 ---
 

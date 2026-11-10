@@ -4,7 +4,7 @@ import type { Settings } from '../../shared/types'
 
 export type { Settings }
 
-const defaults: Settings = {
+const defaults = {
   theme: 'system',
   defaultCliCommand: 'claude',
   defaultAdapterId: 'claude-code',
@@ -15,7 +15,7 @@ const defaults: Settings = {
   lastOpenedProject: null,
   onboardingComplete: false,
   launchAtLogin: true,
-}
+} satisfies Settings
 
 // Settings live alongside the rest of Trayline's data under
 // `~/Documents/Trayline/app-data/settings.json`, not in the OS userData dir.

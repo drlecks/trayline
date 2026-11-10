@@ -40,7 +40,8 @@ export function registerIpcHandlers(
   ipcMain.handle('settings:get', () => settingsStore.store)
 
   ipcMain.handle('settings:set', <K extends keyof Settings>(_: unknown, key: K, value: Settings[K]) => {
-    settingsStore.set(key, value)
+    // electron-store rejects undefined; settings values never are.
+    settingsStore.set(key, value as Exclude<Settings[K], undefined>)
 
     if (key === 'theme') {
       const t = value as Settings['theme']
